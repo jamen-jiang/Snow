@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <RootNamespace>Mediator</RootNamespace>
-    <Description>Mediator:基于 MediatR v15.0.0 源码移植(命名空间 MediatR 重命名为 Mediator,移除 License)</Description>
-  </PropertyGroup>
-</Project>

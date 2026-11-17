@@ -1,4 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Rongia.BaseData.Application/Rongia.BaseData.Application.csproj" />
     <ProjectReference Include="../Rongia.BaseData.Infrastructure/Rongia.BaseData.Infrastructure.csproj" />
