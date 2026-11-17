@@ -1,0 +1,38 @@
+# 默认:按文本处理并规范化换行(仓库内 LF,检出时 Windows 下 CRLF)
+* text=auto
+
+# 源码与工程文件
+*.cs          text diff=csharp
+*.csproj      text
+*.props       text
+*.targets     text
+*.slnx        text
+*.sln         text
+*.json        text
+*.md          text
+*.xml         text
+*.config      text
+*.yml         text
+*.yaml        text
+
+# Windows 脚本保持 CRLF
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+*.ps1         text eol=crlf
+
+# Unix 脚本保持 LF
+*.sh          text eol=lf
+
+# 二进制文件不做换行转换
+*.dll         binary
+*.exe         binary
+*.pdb         binary
+*.snk         binary
+*.ico         binary
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.woff        binary
+*.woff2       binary
+*.ttf         binary

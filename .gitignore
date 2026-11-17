@@ -360,3 +360,12 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# 本地工具目录
+.cli-home/
+.nuget-packages/
+
+# 本地辅助文件(不入库)
+CONVERSION.md
+Directory.Build.props
+Directory.Packages.props

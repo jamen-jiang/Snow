@@ -1,0 +1,838 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Threading;
+using Mediator.Pipeline;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+
+namespace Mediator.Registration;
+
+public static class ServiceRegistrar
+{
+    private static int MaxGenericTypeParameters;
+    private static int MaxTypesClosing;
+    private static int MaxGenericTypeRegistrations;
+    private static int RegistrationTimeout; 
+
+    public static void SetGenericRequestHandlerRegistrationLimitations(MediatorServiceConfiguration configuration)
+    {
+        MaxGenericTypeParameters = configuration.MaxGenericTypeParameters;
+        MaxTypesClosing = configuration.MaxTypesClosing;
+        MaxGenericTypeRegistrations = configuration.MaxGenericTypeRegistrations;
+        RegistrationTimeout = configuration.RegistrationTimeout;
+    }
+
+    public static void AddMediatorClassesWithTimeout(IServiceCollection services, MediatorServiceConfiguration configuration)
+    {
+        // A timeout of 0 or less disables it. CancellationTokenSource would otherwise cancel immediately for 0
+        using(var cts = new CancellationTokenSource(RegistrationTimeout > 0 ? RegistrationTimeout : Timeout.Infinite))
+        {
+            try
+            {
+                AddMediatorClasses(services, configuration, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("The generic handler registration process timed out.");
+            }
+        }
+    }
+
+    public static void AddMediatorClasses(IServiceCollection services, MediatorServiceConfiguration configuration, CancellationToken cancellationToken = default)
+    {   
+
+        var assembliesToScan = configuration.AssembliesToRegister.Distinct().ToArray();
+
+        ConnectImplementationsToTypesClosing(typeof(ICommandHandler<,>), services, assembliesToScan, false, configuration, cancellationToken);
+        ConnectImplementationsToTypesClosing(typeof(ICommandHandler<>), services, assembliesToScan, false, configuration, cancellationToken);
+        ConnectImplementationsToTypesClosing(typeof(IQueryHandler<,>), services, assembliesToScan, false, configuration, cancellationToken);
+        ConnectImplementationsToTypesClosing(typeof(IStreamRequestHandler<,>), services, assembliesToScan, false, configuration);
+        ConnectImplementationsToTypesClosing(typeof(IRequestExceptionHandler<,,>), services, assembliesToScan, true, configuration);
+        ConnectImplementationsToTypesClosing(typeof(IRequestExceptionAction<,>), services, assembliesToScan, true, configuration);
+
+        if (configuration.AutoRegisterRequestProcessors)
+        {
+            ConnectImplementationsToTypesClosing(typeof(IRequestPreProcessor<>), services, assembliesToScan, true, configuration);
+            ConnectImplementationsToTypesClosing(typeof(IRequestPostProcessor<,>), services, assembliesToScan, true, configuration);
+        }
+
+        var multiOpenInterfaces = new List<Type>
+        {
+            typeof(IRequestExceptionHandler<,,>),
+            typeof(IRequestExceptionAction<,>)
+        };
+
+        if (configuration.AutoRegisterRequestProcessors)
+        {
+            multiOpenInterfaces.Add(typeof(IRequestPreProcessor<>));
+            multiOpenInterfaces.Add(typeof(IRequestPostProcessor<,>));
+        }
+
+        foreach (var multiOpenInterface in multiOpenInterfaces)
+        {
+            var arity = multiOpenInterface.GetGenericArguments().Length;
+
+            var concretions = assembliesToScan
+                .SelectMany(a => a.GetLoadableDefinedTypes())
+                .Where(type => type.FindInterfacesThatClose(multiOpenInterface).Any())
+                .Where(type => type.IsConcrete() && type.IsOpenGeneric())
+                .Where(type => type.GetGenericArguments().Length == arity)
+                .Where(configuration.TypeEvaluator)
+                .ToList();
+
+            foreach (var type in concretions)
+            {
+                services.AddTransient(multiOpenInterface, type);
+            }
+        }
+    }
+
+    private static void ConnectImplementationsToTypesClosing(Type openRequestInterface,
+        IServiceCollection services,
+        IEnumerable<Assembly> assembliesToScan,
+        bool addIfAlreadyExists,
+        MediatorServiceConfiguration configuration,
+        CancellationToken cancellationToken = default)
+    {
+        var concretions = new List<Type>();
+        var interfaces = new List<Type>();
+        var genericConcretions = new List<Type>();
+        var genericInterfaces = new List<Type>();
+
+        var types = assembliesToScan
+            .SelectMany(a => a.GetLoadableDefinedTypes())
+            .Where(t => !t.ContainsGenericParameters || configuration.RegisterGenericHandlers)
+            .Where(t => t.IsConcrete() && t.FindInterfacesThatClose(openRequestInterface).Any())
+            .Where(configuration.TypeEvaluator)
+            .ToList();
+
+        foreach (var type in types)
+        {
+            var interfaceTypes = type.FindInterfacesThatClose(openRequestInterface).ToArray();
+
+            if (!type.IsOpenGeneric())
+            {
+                concretions.Add(type);
+
+                foreach (var interfaceType in interfaceTypes)
+                {
+                    interfaces.Fill(interfaceType);
+                }
+            }
+            else
+            {
+                genericConcretions.Add(type);
+                foreach (var interfaceType in interfaceTypes)
+                {
+                    genericInterfaces.Fill(interfaceType);
+                }
+            }
+        }
+
+        foreach (var @interface in interfaces)
+        {
+            var exactMatches = concretions.Where(x => x.CanBeCastTo(@interface)).ToList();
+            if (addIfAlreadyExists)
+            {
+                foreach (var type in exactMatches)
+                {
+                    services.AddTransient(@interface, type);
+                }
+            }
+            else
+            {
+                if (exactMatches.Count > 1)
+                {
+                    exactMatches.RemoveAll(m => !IsMatchingWithInterface(m, @interface));
+                }
+
+                foreach (var type in exactMatches)
+                {
+                    services.TryAddTransient(@interface, type);
+                }
+            }
+
+            if (!@interface.IsOpenGeneric())
+            {
+                AddConcretionsThatCouldBeClosed(@interface, concretions, services);
+            }
+        }
+
+        foreach (var @interface in genericInterfaces)
+        {
+            var exactMatches = genericConcretions.Where(x => x.CanBeCastTo(@interface)).ToList();
+            AddAllConcretionsThatClose(@interface, exactMatches, services, assembliesToScan, cancellationToken);
+        }
+    }
+
+    private static bool IsMatchingWithInterface(Type? handlerType, Type handlerInterface)
+    {
+        if (handlerType == null || handlerInterface == null)
+        {
+            return false;
+        }
+
+        if (handlerType.IsInterface)
+        {
+            if (handlerType.GenericTypeArguments.SequenceEqual(handlerInterface.GenericTypeArguments))
+            {
+                return true;
+            }
+        }
+        else
+        {
+            return IsMatchingWithInterface(handlerType.GetInterface(handlerInterface.Name), handlerInterface);
+        }
+
+        return false;
+    }
+
+    private static void AddConcretionsThatCouldBeClosed(Type @interface, List<Type> concretions, IServiceCollection services)
+    {
+        foreach (var type in concretions
+                     .Where(x => x.IsOpenGeneric() && x.CouldCloseTo(@interface)))
+        {
+            try
+            {
+                services.TryAddTransient(@interface, type.MakeGenericType(@interface.GenericTypeArguments));
+            }
+            catch (Exception)
+            {
+            }
+        }
+    }
+
+    private static (Type Service, Type Implementation) GetConcreteRegistrationTypes(Type openRequestHandlerInterface, Type concreteGenericTRequest, Type openRequestHandlerImplementation)
+    {
+        var closingTypes = concreteGenericTRequest.GetGenericArguments();
+
+        var concreteInterfaces = concreteGenericTRequest.GetInterfaces();
+        var concreteTResponse = (concreteInterfaces
+            .FirstOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(ICommand<>))
+            ?? concreteInterfaces.FirstOrDefault(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IQuery<>)))
+            ?.GetGenericArguments()
+            .FirstOrDefault();
+
+        var typeDefinition = openRequestHandlerInterface.GetGenericTypeDefinition();
+
+        var serviceType = concreteTResponse != null ?
+            typeDefinition.MakeGenericType(concreteGenericTRequest, concreteTResponse) :
+            typeDefinition.MakeGenericType(concreteGenericTRequest);
+
+        return (serviceType, openRequestHandlerImplementation.MakeGenericType(closingTypes));
+    }
+
+    private static List<Type>? GetConcreteRequestTypes(Type openRequestHandlerInterface, Type openRequestHandlerImplementation, IEnumerable<Assembly> assembliesToScan, CancellationToken cancellationToken)
+    {
+        //request generic type constraints       
+        var constraintsForEachParameter = openRequestHandlerImplementation
+            .GetGenericArguments()
+            .Select(x => x.GetGenericParameterConstraints())
+            .ToList();
+
+        var typesThatCanCloseForEachParameter = constraintsForEachParameter
+            .Select(constraints => assembliesToScan
+                .SelectMany(assembly => assembly.GetLoadableDefinedTypes())
+                .Where(type => type.IsClass && !type.IsAbstract && constraints.All(constraint => constraint.IsAssignableFrom(type))).ToList()
+            ).ToList();
+
+        var requestType = openRequestHandlerInterface.GenericTypeArguments.First();
+
+        if (requestType.IsGenericParameter)
+            return null;
+
+        var requestGenericTypeDefinition = requestType.GetGenericTypeDefinition();
+              
+        var combinations = GenerateCombinations(requestType, typesThatCanCloseForEachParameter, 0, cancellationToken);
+
+        return combinations.Select(types => requestGenericTypeDefinition.MakeGenericType(types.ToArray())).ToList();
+    }
+
+    // Method to generate combinations recursively
+    public static List<List<Type>> GenerateCombinations(Type requestType, List<List<Type>> lists, int depth = 0, CancellationToken cancellationToken = default)
+    {
+        if (depth == 0)
+        {
+            // Initial checks
+            if (MaxGenericTypeParameters > 0 && lists.Count > MaxGenericTypeParameters)
+                throw new ArgumentException($"Error registering the generic type: {requestType.FullName}. The number of generic type parameters exceeds the maximum allowed ({MaxGenericTypeParameters}).");
+
+            foreach (var list in lists)
+            {
+                if (MaxTypesClosing > 0 && list.Count > MaxTypesClosing)
+                    throw new ArgumentException($"Error registering the generic type: {requestType.FullName}. One of the generic type parameter's count of types that can close exceeds the maximum length allowed ({MaxTypesClosing}).");
+            }
+
+            // Calculate the total number of combinations
+            long totalCombinations = 1;
+            foreach (var list in lists)
+            {
+                totalCombinations *= list.Count;
+                if (MaxGenericTypeRegistrations > 0 && totalCombinations > MaxGenericTypeRegistrations)
+                    throw new ArgumentException($"Error registering the generic type: {requestType.FullName}. The total number of generic type registrations exceeds the maximum allowed ({MaxGenericTypeRegistrations}).");
+            }
+        }
+
+        if (depth >= lists.Count)
+            return new List<List<Type>> { new List<Type>() };
+       
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var currentList = lists[depth];
+        var childCombinations = GenerateCombinations(requestType, lists, depth + 1, cancellationToken);
+        var combinations = new List<List<Type>>();
+
+        foreach (var item in currentList)
+        {
+            foreach (var childCombination in childCombinations)
+            {
+                var currentCombination = new List<Type> { item };
+                currentCombination.AddRange(childCombination);
+                combinations.Add(currentCombination);
+            }
+        }
+
+        return combinations;
+    }
+
+    private static void AddAllConcretionsThatClose(Type openRequestInterface, List<Type> concretions, IServiceCollection services, IEnumerable<Assembly> assembliesToScan, CancellationToken cancellationToken)
+    {
+        foreach (var concretion in concretions)
+        {   
+            var concreteRequests = GetConcreteRequestTypes(openRequestInterface, concretion, assembliesToScan, cancellationToken);
+
+            if (concreteRequests is null)
+                continue;
+
+            var registrationTypes = concreteRequests
+                .Select(concreteRequest => GetConcreteRegistrationTypes(openRequestInterface, concreteRequest, concretion));
+
+            foreach (var (Service, Implementation) in registrationTypes)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                services.AddTransient(Service, Implementation);
+            }
+        }
+    }
+
+    internal static bool CouldCloseTo(this Type openConcretion, Type closedInterface)
+    {
+        var openInterface = closedInterface.GetGenericTypeDefinition();
+        var arguments = closedInterface.GenericTypeArguments;
+
+        var concreteArguments = openConcretion.GenericTypeArguments;
+        return arguments.Length == concreteArguments.Length && openConcretion.CanBeCastTo(openInterface);
+    }
+
+    private static bool CanBeCastTo(this Type pluggedType, Type pluginType)
+    {
+        if (pluggedType == null) return false;
+
+        if (pluggedType == pluginType) return true;
+
+        return pluginType.IsAssignableFrom(pluggedType);
+    }
+
+    private static bool IsOpenGeneric(this Type type)
+    {
+        return type.IsGenericTypeDefinition || type.ContainsGenericParameters;
+    }
+
+    internal static IEnumerable<Type> FindInterfacesThatClose(this Type pluggedType, Type templateType)
+    {
+        return FindInterfacesThatClosesCore(pluggedType, templateType).Distinct();
+    }
+
+    private static IEnumerable<Type> FindInterfacesThatClosesCore(Type pluggedType, Type templateType)
+    {
+        if (pluggedType == null) yield break;
+
+        if (!pluggedType.IsConcrete()) yield break;
+
+        if (templateType.IsInterface)
+        {
+            foreach (
+                var interfaceType in
+                pluggedType.GetInterfaces()
+                    .Where(type => type.IsGenericType && (type.GetGenericTypeDefinition() == templateType)))
+            {
+                yield return interfaceType;
+            }
+        }
+        else if (pluggedType.BaseType!.IsGenericType &&
+                 (pluggedType.BaseType!.GetGenericTypeDefinition() == templateType))
+        {
+            yield return pluggedType.BaseType!;
+        }
+
+        if (pluggedType.BaseType == typeof(object)) yield break;
+
+        foreach (var interfaceType in FindInterfacesThatClosesCore(pluggedType.BaseType!, templateType))
+        {
+            yield return interfaceType;
+        }
+    }
+
+    private static bool IsConcrete(this Type type)
+    {
+        return !type.IsAbstract && !type.IsInterface;
+    }
+
+    private static void Fill<T>(this IList<T> list, T value)
+    {
+        if (list.Contains(value)) return;
+        list.Add(value);
+    }
+
+    private static IEnumerable<Type> GetLoadableDefinedTypes(this Assembly assembly)
+    {
+        try
+        {
+            return assembly.DefinedTypes;
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types.OfType<Type>();
+        }
+    }
+
+    // An implementation can close the same service interface more than once,
+    // e.g. DualBehavior<TResponse> : IPipelineBehavior<FooRequest, TResponse>, IPipelineBehavior<BarRequest, TResponse>
+    private static Type[] GetOpenServiceInterfaces(Type openImplementationType, Type openServiceType) =>
+        openImplementationType.GetInterfaces()
+            .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == openServiceType)
+            .ToArray();
+
+    // The DI container closes open generics positionally, which only works when the implementation's
+    // type parameters map one-to-one, in order, onto the service interface (e.g. IPipelineBehavior<TRequest, TResponse>).
+    // Anything else (nested generics like List<T>, extra type parameters, reordering, or implementing
+    // the service interface more than once) must be closed explicitly.
+    private static bool RequiresExplicitClosing(Type openImplementationType, Type openServiceType)
+    {
+        var interfaces = GetOpenServiceInterfaces(openImplementationType, openServiceType);
+        if (interfaces.Length == 0) return false;
+        return interfaces.Length > 1
+            || !interfaces[0].GetGenericArguments().SequenceEqual(openImplementationType.GetGenericArguments());
+    }
+
+    // A container that closes open generics by matching the service type can only do so when every implementation
+    // type parameter appears in the service interface's arguments; parameters that only appear in constraints
+    // have to be inferred from scanned requests.
+    private static bool CanBeClosedFromServiceType(Type openImplementationType, Type openServiceType)
+    {
+        var interfaces = GetOpenServiceInterfaces(openImplementationType, openServiceType);
+        if (interfaces.Length != 1) return false;
+        var covered = new HashSet<Type>(interfaces[0].GetGenericArguments().SelectMany(GetGenericParametersIn));
+        return openImplementationType.GetGenericArguments().All(covered.Contains);
+    }
+
+    // Binds the generic parameters in a service type argument by matching it structurally against the concrete type.
+    // Everything other than the parameters must be identical.
+    private static bool TryMatchType(Type pattern, Type concrete, Dictionary<Type, Type> bindings)
+    {
+        if (pattern.IsGenericParameter)
+        {
+            if (bindings.TryGetValue(pattern, out var existing)) return existing == concrete;
+            bindings[pattern] = concrete;
+            return true;
+        }
+        if (pattern.IsArray)
+        {
+            return IsSameArrayShape(pattern, concrete)
+                && TryMatchType(pattern.GetElementType()!, concrete.GetElementType()!, bindings);
+        }
+        if (pattern.IsGenericType && concrete.IsGenericType)
+        {
+            if (pattern.GetGenericTypeDefinition() != concrete.GetGenericTypeDefinition()) return false;
+            var pArgs = pattern.GetGenericArguments();
+            var cArgs = concrete.GetGenericArguments();
+            if (pArgs.Length != cArgs.Length) return false;
+            return pArgs.Zip(cArgs, (p, c) => TryMatchType(p, c, bindings)).All(x => x);
+        }
+        return pattern == concrete;
+    }
+
+    // Matches a constraint structurally against a type the bound parameter implements, collecting every type
+    // each still-unknown parameter lines up with. Known parameters and fixed arguments are accepted as they are,
+    // since MakeGenericType re-checks every constraint afterwards, including variance
+    // (e.g. a request implementing IMarker<AppDbContext> satisfies where TRequest : IMarker<IDbContext> when IMarker is covariant).
+    // A parameter can line up with different types when it occurs more than once under variance
+    // (IPair<TItem, TItem> against IPair<Derived, Base>), so all of them are kept as candidates.
+    // Nested arguments are also matched through the types the concrete argument implements, since variance lets
+    // ICovariant<List<int>> satisfy ICovariant<IEnumerable<TItem>>.
+    private static bool TryCollectConstraintCandidates(
+        Type pattern, Type concrete, IReadOnlyDictionary<Type, Type> known, Dictionary<Type, HashSet<Type>> candidates)
+    {
+        if (pattern.IsGenericParameter)
+        {
+            if (known.ContainsKey(pattern)) return true;
+            if (!candidates.TryGetValue(pattern, out var types)) candidates[pattern] = types = new HashSet<Type>();
+            types.Add(concrete);
+            return true;
+        }
+        if (!pattern.ContainsGenericParameters) return true;
+        if (pattern.IsArray)
+        {
+            return IsSameArrayShape(pattern, concrete)
+                && TryCollectConstraintCandidates(pattern.GetElementType()!, concrete.GetElementType()!, known, candidates);
+        }
+        if (pattern.IsGenericType)
+        {
+            var definition = pattern.GetGenericTypeDefinition();
+            var matched = false;
+            foreach (var compatible in GetSelfBaseTypesAndInterfaces(concrete)
+                         .Where(t => t.IsGenericType && t.GetGenericTypeDefinition() == definition))
+            {
+                var found = new Dictionary<Type, HashSet<Type>>();
+                if (!pattern.GetGenericArguments().Zip(compatible.GetGenericArguments(),
+                        (p, c) => TryCollectConstraintCandidates(p, c, known, found)).All(x => x)) continue;
+
+                matched = true;
+                MergeCandidates(candidates, found);
+            }
+            return matched;
+        }
+        return false;
+    }
+
+    private static void MergeCandidates(Dictionary<Type, HashSet<Type>> into, Dictionary<Type, HashSet<Type>> from)
+    {
+        foreach (var pair in from)
+        {
+            if (!into.TryGetValue(pair.Key, out var types)) into[pair.Key] = types = new HashSet<Type>();
+            types.UnionWith(pair.Value);
+        }
+    }
+
+    private static bool IsSameArrayShape(Type pattern, Type concrete) =>
+        concrete.IsArray
+        && pattern.GetArrayRank() == concrete.GetArrayRank()
+        && IsSzArray(pattern) == IsSzArray(concrete);
+
+    // T[] and T[*] both have rank 1; only the single-dimensional zero-based one round-trips through MakeArrayType()
+    private static bool IsSzArray(Type arrayType) => arrayType == arrayType.GetElementType()!.MakeArrayType();
+
+    private static IEnumerable<Type> GetGenericParametersIn(Type type)
+    {
+        if (type.IsGenericParameter) return new[] { type };
+        if (type.IsArray) return GetGenericParametersIn(type.GetElementType()!);
+        if (!type.IsGenericType) return Enumerable.Empty<Type>();
+        return type.GetGenericArguments().SelectMany(GetGenericParametersIn);
+    }
+
+    private static IEnumerable<Type> GetSelfBaseTypesAndInterfaces(Type type)
+    {
+        for (var current = type; current != null && current != typeof(object); current = current.BaseType)
+        {
+            yield return current;
+        }
+        foreach (var @interface in type.GetInterfaces())
+        {
+            yield return @interface;
+        }
+    }
+
+    // Behavior type parameters that appear in neither TRequest nor TResponse can still be inferred
+    // when a constraint links them to a parameter that is already known, e.g.
+    // TransactionBehavior<TRequest, TResponse, TDbContext> where TRequest : ITransactionalCommand<TDbContext>.
+    // Candidates are collected for every inferred parameter from the constraints on every parameter with candidates,
+    // until no new candidates turn up, and then each combination is tried. Candidates keep flowing through
+    // constraint chains (TDbContext : IDbContext<TKey>) to parameters that already have candidates, so a chain
+    // can offer a type the direct route doesn't, as when variance lets the direct route find only a derived type.
+    // Collecting per parameter rather than per binding keeps independent constraints from multiplying the work,
+    // and the result doesn't depend on declaration order. A pass extends every chain by one link, so the passes
+    // are capped at the number of type parameters, which also stops expansive constraint cycles.
+    // Every combination is returned, since a request may implement a constraint more than once;
+    // MakeGenericType rejects the combinations that don't satisfy every constraint.
+    private static IEnumerable<Dictionary<Type, Type>> ExpandBindingsFromConstraints(
+        Type[] behaviorParams, Dictionary<Type, Type> bindings)
+    {
+        var candidates = new Dictionary<Type, HashSet<Type>>();
+        var pending = bindings.ToDictionary(pair => pair.Key, pair => new HashSet<Type> { pair.Value });
+
+        for (var pass = 0; pass < behaviorParams.Length && pending.Count > 0; pass++)
+        {
+            var found = new Dictionary<Type, HashSet<Type>>();
+            foreach (var pair in pending)
+            {
+                foreach (var constraint in pair.Key.GetGenericParameterConstraints()
+                             .Where(c => GetGenericParametersIn(c).Any(p => !bindings.ContainsKey(p))))
+                {
+                    foreach (var candidate in pair.Value.SelectMany(GetSelfBaseTypesAndInterfaces))
+                    {
+                        var collected = new Dictionary<Type, HashSet<Type>>();
+                        if (TryCollectConstraintCandidates(constraint, candidate, bindings, collected))
+                        {
+                            MergeCandidates(found, collected);
+                        }
+                    }
+                }
+            }
+
+            pending = new Dictionary<Type, HashSet<Type>>();
+            foreach (var pair in found)
+            {
+                if (!candidates.TryGetValue(pair.Key, out var types)) candidates[pair.Key] = types = new HashSet<Type>();
+                var added = pair.Value.Where(types.Add).ToList();
+                if (added.Count > 0) pending[pair.Key] = new HashSet<Type>(added);
+            }
+        }
+
+        if (!behaviorParams.All(p => bindings.ContainsKey(p) || candidates.ContainsKey(p))) return Enumerable.Empty<Dictionary<Type, Type>>();
+
+        return CombineCandidates(behaviorParams, bindings, candidates);
+    }
+
+    // Every combination of one candidate type per inferred parameter. Candidates are pooled per parameter, so they
+    // no longer say which chain they came from (two roots each leading down an invariant chain would give 2^n
+    // combinations); a partial binding is dropped as soon as a constraint whose parameters are all bound rejects it.
+    // Parameters are assigned in the order they were inferred, so each link is checked right after it's bound.
+    private static IEnumerable<Dictionary<Type, Type>> CombineCandidates(
+        Type[] behaviorParams, Dictionary<Type, Type> bindings, Dictionary<Type, HashSet<Type>> candidates)
+    {
+        var order = candidates.Keys.ToList();
+        var notYetCheckable = behaviorParams.Where(p => !IsCheckable(p, bindings)).ToList();
+        return Assign(0, bindings, notYetCheckable);
+
+        IEnumerable<Dictionary<Type, Type>> Assign(int index, Dictionary<Type, Type> partial, List<Type> uncheckedParams)
+        {
+            if (index == order.Count)
+            {
+                yield return partial;
+                yield break;
+            }
+
+            foreach (var type in candidates[order[index]])
+            {
+                var extended = new Dictionary<Type, Type>(partial) { [order[index]] = type };
+                var nowCheckable = uncheckedParams.Where(p => IsCheckable(p, extended)).ToList();
+                if (!nowCheckable.All(p => SatisfiesTypeConstraints(p, extended))) continue;
+
+                foreach (var result in Assign(index + 1, extended, uncheckedParams.Except(nowCheckable).ToList()))
+                {
+                    yield return result;
+                }
+            }
+        }
+    }
+
+    private static bool IsCheckable(Type param, IReadOnlyDictionary<Type, Type> bindings) =>
+        bindings.ContainsKey(param)
+        && param.GetGenericParameterConstraints().SelectMany(GetGenericParametersIn).All(bindings.ContainsKey);
+
+    // Only rejects what MakeGenericType would reject too; special constraints (class, struct, new())
+    // and constraint types that can't be closed are left to MakeGenericType
+    private static bool SatisfiesTypeConstraints(Type param, IReadOnlyDictionary<Type, Type> bindings)
+    {
+        foreach (var constraint in param.GetGenericParameterConstraints())
+        {
+            Type closedConstraint;
+            try
+            {
+                closedConstraint = Substitute(constraint, bindings);
+            }
+            catch (ArgumentException)
+            {
+                continue;
+            }
+            if (!closedConstraint.IsAssignableFrom(bindings[param])) return false;
+        }
+        return true;
+    }
+
+    private static Type Substitute(Type type, IReadOnlyDictionary<Type, Type> bindings)
+    {
+        if (type.IsGenericParameter) return bindings[type];
+        if (!type.ContainsGenericParameters) return type;
+        if (type.IsArray)
+        {
+            var element = Substitute(type.GetElementType()!, bindings);
+            return IsSzArray(type) ? element.MakeArrayType() : element.MakeArrayType(type.GetArrayRank());
+        }
+        return type.GetGenericTypeDefinition().MakeGenericType(type.GetGenericArguments().Select(a => Substitute(a, bindings)).ToArray());
+    }
+
+    private static void ValidateTypeParametersCanBeInferred(Type openImplementationType, Type iface)
+    {
+        var reachable = new HashSet<Type>(iface.GetGenericArguments().SelectMany(GetGenericParametersIn));
+        var added = true;
+        while (added)
+        {
+            added = false;
+            foreach (var tp in reachable.ToList())
+            {
+                foreach (var p in tp.GetGenericParameterConstraints().SelectMany(GetGenericParametersIn))
+                {
+                    added |= reachable.Add(p);
+                }
+            }
+        }
+
+        var unreachable = openImplementationType.GetGenericArguments().Where(tp => !reachable.Contains(tp)).ToList();
+        if (unreachable.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot register {openImplementationType.Name}: type parameter(s) {string.Join(", ", unreachable.Select(t => t.Name))} " +
+                $"do not appear in the {iface.Name} arguments or in a constraint linked to them, so they cannot be inferred.");
+        }
+    }
+
+    private static IEnumerable<(Type RequestType, Type ResponseType)> FindRequestTypes(IEnumerable<Assembly> assemblies, bool streamRequests) =>
+        assemblies
+            .SelectMany(a => a.GetLoadableDefinedTypes())
+            .Where(t => t.IsConcrete() && !t.ContainsGenericParameters)
+            .SelectMany(t => t.GetInterfaces()
+                .Where(i => streamRequests
+                    ? i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IStreamRequest<>)
+                    : i == typeof(ICommand) || (i.IsGenericType && (i.GetGenericTypeDefinition() == typeof(ICommand<>) || i.GetGenericTypeDefinition() == typeof(IQuery<>))))
+                .Select(i => (RequestType: t, ResponseType: i == typeof(ICommand) ? typeof(Unit) : i.GetGenericArguments()[0])))
+            .ToList();
+
+    private static void RegisterClosedImplementations(
+        Type openImplementationType, Type iface, IServiceCollection services,
+        IEnumerable<(Type RequestType, Type ResponseType)> requests, ServiceLifetime lifetime)
+    {
+        // Single-argument services (IRequestPreProcessor<TRequest>) only match on the request type
+        var patterns   = iface.GetGenericArguments();
+        var implParams = openImplementationType.GetGenericArguments();
+        var openServiceType = iface.GetGenericTypeDefinition();
+
+        foreach (var (requestType, responseType) in requests)
+        {
+            var serviceArgs = patterns.Length == 1 ? new[] { requestType } : new[] { requestType, responseType };
+            var bindings = new Dictionary<Type, Type>();
+            if (!patterns.Zip(serviceArgs, (p, c) => TryMatchType(p, c, bindings)).All(x => x)) continue;
+
+            var closedService = openServiceType.MakeGenericType(serviceArgs);
+            var closedImplementations = new HashSet<Type>();
+            foreach (var complete in ExpandBindingsFromConstraints(implParams, bindings))
+            {
+                try
+                {
+                    var closedImplementation = openImplementationType.MakeGenericType(implParams.Select(tp => complete[tp]).ToArray());
+                    if (closedImplementations.Add(closedImplementation))
+                    {
+                        services.TryAddEnumerable(new ServiceDescriptor(closedService, closedImplementation, lifetime));
+                    }
+                }
+                catch (ArgumentException) { /* generic constraints not satisfied for this request */ }
+            }
+        }
+    }
+
+    private static bool RequiresExplicitClosing(ServiceDescriptor serviceDescriptor, Type openServiceType, OpenBehaviorClosingStrategy closingStrategy) =>
+        // Keyed registrations are the caller's own and are left as they are
+        !serviceDescriptor.IsKeyedService
+        && serviceDescriptor.ImplementationType != null
+        && serviceDescriptor.ServiceType == openServiceType
+        && serviceDescriptor.ImplementationType.IsOpenGeneric()
+        && RequiresExplicitClosing(serviceDescriptor.ImplementationType, openServiceType)
+        && !(closingStrategy == OpenBehaviorClosingStrategy.CloseInContainer
+             && CanBeClosedFromServiceType(serviceDescriptor.ImplementationType, openServiceType));
+
+    private static List<ServiceDescriptor> TakeOpenRegistrationsRequiringExplicitClosing(
+        IServiceCollection services, Type openServiceType, OpenBehaviorClosingStrategy closingStrategy)
+    {
+        var taken = services.Where(d => RequiresExplicitClosing(d, openServiceType, closingStrategy)).ToList();
+        foreach (var descriptor in taken)
+        {
+            services.Remove(descriptor);
+        }
+        return taken;
+    }
+
+    // Open implementations the DI container can't close positionally (nested generics such as List<T>,
+    // or extra type parameters inferred from constraints) are closed explicitly by scanning
+    // the registered assemblies for matching requests. The open registration is skipped for these,
+    // since the Microsoft container would either close it incorrectly or reject it for mismatched arity,
+    // and containers that can close it would apply it a second time for scanned requests.
+    // With CloseInContainer, implementations whose parameters all appear in the service interface are left open
+    // for the container to close instead.
+    private static void RegisterOpenGenericServices(
+        IServiceCollection services, IEnumerable<ServiceDescriptor> serviceDescriptors, Type openServiceType,
+        Lazy<IEnumerable<(Type RequestType, Type ResponseType)>> requests, OpenBehaviorClosingStrategy closingStrategy)
+    {
+        foreach (var serviceDescriptor in serviceDescriptors)
+        {
+            if (RequiresExplicitClosing(serviceDescriptor, openServiceType, closingStrategy))
+            {
+                foreach (var iface in GetOpenServiceInterfaces(serviceDescriptor.ImplementationType!, openServiceType))
+                {
+                    ValidateTypeParametersCanBeInferred(serviceDescriptor.ImplementationType!, iface);
+                    RegisterClosedImplementations(serviceDescriptor.ImplementationType!, iface, services, requests.Value, serviceDescriptor.Lifetime);
+                }
+                continue;
+            }
+
+            services.TryAddEnumerable(serviceDescriptor);
+        }
+    }
+
+    public static void AddRequiredServices(IServiceCollection services, MediatorServiceConfiguration serviceConfiguration)
+    {
+        // Use TryAdd, so any existing ServiceFactory/IMediator registration doesn't get overridden
+        services.TryAdd(new ServiceDescriptor(typeof(IMediator), serviceConfiguration.MediatorImplementationType, serviceConfiguration.Lifetime));
+        services.TryAdd(new ServiceDescriptor(typeof(ISender), sp => sp.GetRequiredService<IMediator>(), serviceConfiguration.Lifetime));
+
+        services.TryAddSingleton(serviceConfiguration);
+
+        // Register pre processors, then post processors, then behaviors
+        if (serviceConfiguration.RequestExceptionActionProcessorStrategy == RequestExceptionActionProcessorStrategy.ApplyForUnhandledExceptions)
+        {
+            RegisterBehaviorIfImplementationsExist(services, typeof(RequestExceptionActionProcessorBehavior<,>), typeof(IRequestExceptionAction<,>));
+            RegisterBehaviorIfImplementationsExist(services, typeof(RequestExceptionProcessorBehavior<,>), typeof(IRequestExceptionHandler<,,>));
+        }
+        else
+        {
+            RegisterBehaviorIfImplementationsExist(services, typeof(RequestExceptionProcessorBehavior<,>), typeof(IRequestExceptionHandler<,,>));
+            RegisterBehaviorIfImplementationsExist(services, typeof(RequestExceptionActionProcessorBehavior<,>), typeof(IRequestExceptionAction<,>));
+        }
+
+        var requests = new Lazy<IEnumerable<(Type, Type)>>(() => FindRequestTypes(serviceConfiguration.AssembliesToRegister, streamRequests: false));
+        var streamRequests = new Lazy<IEnumerable<(Type, Type)>>(() => FindRequestTypes(serviceConfiguration.AssembliesToRegister, streamRequests: true));
+
+        // Open processors found by AutoRegisterRequestProcessors were added to services directly during scanning;
+        // the ones the container can't close positionally go through the same closing strategy as explicitly added ones,
+        // so they aren't registered both open and closed
+        var autoRegisteredPreProcessors = TakeOpenRegistrationsRequiringExplicitClosing(services, typeof(IRequestPreProcessor<>), serviceConfiguration.OpenBehaviorClosingStrategy);
+        var autoRegisteredPostProcessors = TakeOpenRegistrationsRequiringExplicitClosing(services, typeof(IRequestPostProcessor<,>), serviceConfiguration.OpenBehaviorClosingStrategy);
+
+        RegisterOpenGenericServices(services, autoRegisteredPreProcessors, typeof(IRequestPreProcessor<>), requests, serviceConfiguration.OpenBehaviorClosingStrategy);
+        RegisterOpenGenericServices(services, autoRegisteredPostProcessors, typeof(IRequestPostProcessor<,>), requests, serviceConfiguration.OpenBehaviorClosingStrategy);
+
+        if (serviceConfiguration.RequestPreProcessorsToRegister.Any())
+        {
+            services.TryAddEnumerable(new ServiceDescriptor(typeof(IPipelineBehavior<,>), typeof(RequestPreProcessorBehavior<,>), ServiceLifetime.Transient));
+            RegisterOpenGenericServices(services, serviceConfiguration.RequestPreProcessorsToRegister, typeof(IRequestPreProcessor<>), requests, serviceConfiguration.OpenBehaviorClosingStrategy);
+        }
+
+        if (serviceConfiguration.RequestPostProcessorsToRegister.Any())
+        {
+            services.TryAddEnumerable(new ServiceDescriptor(typeof(IPipelineBehavior<,>), typeof(RequestPostProcessorBehavior<,>), ServiceLifetime.Transient));
+            RegisterOpenGenericServices(services, serviceConfiguration.RequestPostProcessorsToRegister, typeof(IRequestPostProcessor<,>), requests, serviceConfiguration.OpenBehaviorClosingStrategy);
+        }
+
+        RegisterOpenGenericServices(services, serviceConfiguration.BehaviorsToRegister, typeof(IPipelineBehavior<,>), requests, serviceConfiguration.OpenBehaviorClosingStrategy);
+        RegisterOpenGenericServices(services, serviceConfiguration.StreamBehaviorsToRegister, typeof(IStreamPipelineBehavior<,>), streamRequests, serviceConfiguration.OpenBehaviorClosingStrategy);
+    }
+
+    private static void RegisterBehaviorIfImplementationsExist(IServiceCollection services, Type behaviorType, Type subBehaviorType)
+    {
+        var hasAnyRegistrationsOfSubBehaviorType = services
+            .Where(service => !service.IsKeyedService)
+            .Select(service => service.ImplementationType)
+            .OfType<Type>()
+            .SelectMany(type => type.GetInterfaces())
+            .Where(type => type.IsGenericType)
+            .Select(type => type.GetGenericTypeDefinition())
+            .Any(type => type == subBehaviorType);
+
+        if (hasAnyRegistrationsOfSubBehaviorType)
+        {
+            services.TryAddEnumerable(new ServiceDescriptor(typeof(IPipelineBehavior<,>), behaviorType, ServiceLifetime.Transient));
+        }
+    }
+}

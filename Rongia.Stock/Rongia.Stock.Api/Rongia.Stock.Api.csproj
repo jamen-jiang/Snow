@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Rongia.Stock.Application/Rongia.Stock.Application.csproj" />
+    <ProjectReference Include="../Rongia.Stock.Infrastructure/Rongia.Stock.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
