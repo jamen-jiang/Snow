@@ -1,12 +1,12 @@
 namespace Rongia.Domain.Entities;
 
 /// <summary>
-/// 实体接口(对应 Java com.rongia.kernel.domain.entity.Entity)
+/// 实体接口
 /// </summary>
 public interface IEntity
 {
     /// <summary>
-    /// 主键,未持久化时为 0(对应 Java getId() 的 0 出口约定)
+    /// 实体的唯一标识
     /// </summary>
     long Id { get; }
 }

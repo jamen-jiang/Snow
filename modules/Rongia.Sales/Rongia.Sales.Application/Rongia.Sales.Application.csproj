@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Rongia.Sales.Domain/Rongia.Sales.Domain.csproj" />
+    <ProjectReference Include="../../../framework/Rongia.Application/Rongia.Application.csproj" />
+  </ItemGroup>
+</Project>

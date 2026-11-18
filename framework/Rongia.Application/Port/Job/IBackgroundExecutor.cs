@@ -10,5 +10,5 @@ public interface IBackgroundExecutor
     /// 提交命令到后台执行
     /// </summary>
     /// <param name="command">待执行的命令,需可被序列化</param>
-    void Dispatch(Rongia.Mediator.ICommand command);
+    void Dispatch(Rongia.Messaging.ICommand command);
 }

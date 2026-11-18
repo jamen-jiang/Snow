@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Rongia.Messaging</RootNamespace>
+    <Description>消息契约层: 命令/查询标记接口、处理器签名、管道行为接口、两条总线入口; 命名空间为 Rongia.Messaging, 无运行时实现, 无第三方依赖</Description>
+  </PropertyGroup>
+</Project>

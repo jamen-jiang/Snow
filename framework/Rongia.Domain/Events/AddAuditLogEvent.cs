@@ -1,4 +1,4 @@
-using Rongia.Domain.Aggregates;
+using Rongia.Domain.Entities;
 
 namespace Rongia.Domain.Events;
 
@@ -20,7 +20,8 @@ public class AddAuditLogEvent : DomainEvent
     /// <summary>
     /// 构造审计日志事件(带备注)
     /// </summary>
-    public AddAuditLogEvent(IAggregateRoot aggregateRoot, string action, string? remark) : base(aggregateRoot)
+    public AddAuditLogEvent(IAggregateRoot aggregateRoot, string action, string? remark)
+        : base(aggregateRoot)
     {
         Action = action;
         Remark = remark;
@@ -29,7 +30,6 @@ public class AddAuditLogEvent : DomainEvent
     /// <summary>
     /// 构造审计日志事件(备注为空)
     /// </summary>
-    public AddAuditLogEvent(IAggregateRoot aggregateRoot, string action) : this(aggregateRoot, action, null)
-    {
-    }
+    public AddAuditLogEvent(IAggregateRoot aggregateRoot, string action)
+        : this(aggregateRoot, action, null) { }
 }

@@ -1,4 +1,4 @@
-using Rongia.Domain.Aggregates;
+using Rongia.Domain.Entities;
 
 namespace Rongia.Domain.Events;
 

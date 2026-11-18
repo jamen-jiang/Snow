@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Rongia.EventBus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rongia.Core\Rongia.Core.csproj" />
+    <ProjectReference Include="..\Rongia.EventBus.Abstractions\Rongia.EventBus.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -5,4 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Rongia.Core\Rongia.Core.csproj" />
+    <ProjectReference Include="..\Rongia.EventBus.Abstractions\Rongia.EventBus.Abstractions.csproj" />
+  </ItemGroup>
 </Project>
