@@ -21,67 +21,35 @@ public abstract class EventHandlerWrapper
 }
 
 /// <summary>
-/// 指定事件类型的处理器包装器实现: 为每个处理器实现类型创建独立作用域后再执行
+/// 指定事件类型的处理器包装器实现: 从容器取 <c>IEventHandler&lt;TEvent&gt;</c> 的全部实现,
+/// 为每个处理器创建独立作用域后再执行
 /// </summary>
 /// <typeparam name="TEvent">事件类型</typeparam>
 public sealed class EventHandlerWrapperImpl<TEvent> : EventHandlerWrapper where TEvent : IEvent
 {
-    private readonly Type[] _handlerTypes;
-
-    /// <summary>
-    /// 构造器
-    /// </summary>
-    /// <param name="handlerTypes">该事件的全部处理器实现类型</param>
-    public EventHandlerWrapperImpl(Type[] handlerTypes)
-    {
-        _handlerTypes = handlerTypes ?? Type.EmptyTypes;
-    }
-
     /// <inheritdoc />
     public override Task HandleAsync(IEvent @event, IServiceProvider serviceProvider,
         Func<IEnumerable<EventHandlerExecutor>, IEvent, CancellationToken, Task> publishAsync,
         CancellationToken cancellationToken)
     {
-        if (_handlerTypes.Length == 0)
+        IServiceScopeFactory scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+
+        List<EventHandlerExecutor> executors = new();
+
+        // 作用域必须在解析时就建立: 处理器可能是 Scoped, 解析出来就要保证作用域生命周期覆盖调用
+        foreach (IEventHandler<TEvent> handler in serviceProvider.GetServices<IEventHandler<TEvent>>())
+        {
+            executors.Add(new EventHandlerExecutor(handler, async (theEvent, theToken) =>
+            {
+                await handler.HandleAsync((TEvent)theEvent, theToken).ConfigureAwait(false);
+            }));
+        }
+
+        if (executors.Count == 0)
         {
             return Task.CompletedTask;
         }
 
-        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-
-        IEnumerable<EventHandlerExecutor> executors = _handlerTypes.Select(handlerType => CreateExecutor(scopeFactory, handlerType));
-
         return publishAsync(executors, @event, cancellationToken);
-    }
-
-    /// <summary>
-    /// 为单个处理器创建独立作用域与执行单元
-    /// </summary>
-    /// <param name="scopeFactory">作用域工厂</param>
-    /// <param name="handlerType">处理器实现类型</param>
-    /// <returns>执行单元</returns>
-    private static EventHandlerExecutor CreateExecutor(IServiceScopeFactory scopeFactory, Type handlerType)
-    {
-        var scope = scopeFactory.CreateScope();
-
-        IEventHandler<TEvent> handler;
-
-        try
-        {
-            handler = (IEventHandler<TEvent>)scope.ServiceProvider.GetRequiredService(handlerType);
-        }
-        catch
-        {
-            scope.Dispose();
-            throw;
-        }
-
-        return new EventHandlerExecutor(handler, async (theEvent, theToken) =>
-        {
-            using (scope)
-            {
-                await handler.HandleAsync((TEvent)theEvent, theToken).ConfigureAwait(false);
-            }
-        });
     }
 }

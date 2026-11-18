@@ -1,120 +1,172 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Rongia.Modularity;
 
 /// <summary>
-/// 模块加载器:从启动模块出发递归解析 DependsOn 声明的依赖,
-/// 做去重与循环检测,最后按"被依赖者在前"的顺序返回模块列表
+/// 模块加载器的默认实现(对应 ABP 的 ModuleLoader):
+/// 从启动模块出发收集全部模块类型,建立依赖图后按"被依赖者在前"排序
 /// </summary>
-public sealed class ModuleLoader
+public class ModuleLoader : IModuleLoader
 {
-    /// <summary>
-    /// 加载启动模块及其全部依赖
-    /// </summary>
-    /// <param name="startupModuleType">启动模块类型,必须继承 Module</param>
-    /// <returns>按加载顺序排列的模块描述信息</returns>
-    /// <exception cref="ModuleLoadException">类型非法、模块抽象或依赖成环时抛出</exception>
-    public IReadOnlyList<ModuleDescriptor> LoadModules(Type startupModuleType)
+    /// <inheritdoc />
+    public IModuleDescriptor[] LoadModules(IServiceCollection services, Type startupModuleType)
     {
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(startupModuleType);
 
-        ValidateModuleType(startupModuleType, "启动模块");
+        List<ModuleDescriptor> modules = GetDescriptors(services, startupModuleType);
 
-        List<Type> ordered = new List<Type>();
-        Dictionary<Type, int> states = new Dictionary<Type, int>();
-        List<Type> path = new List<Type>();
+        List<IModuleDescriptor> sortedModules = SortByDependency(modules, startupModuleType);
 
-        Visit(startupModuleType, ordered, states, path);
+        return sortedModules.ToArray();
+    }
 
-        List<ModuleDescriptor> modules = new List<ModuleDescriptor>(ordered.Count);
-        foreach (Type moduleType in ordered)
-        {
-            Module instance = CreateInstance(moduleType);
-            modules.Add(new ModuleDescriptor(moduleType, instance, GetDependedModuleTypes(moduleType)));
-        }
+    private List<ModuleDescriptor> GetDescriptors(IServiceCollection services, Type startupModuleType)
+    {
+        List<ModuleDescriptor> modules = new List<ModuleDescriptor>();
+
+        FillModules(modules, services, startupModuleType);
+        SetDependencies(modules);
 
         return modules;
     }
 
-    private static void Visit(Type moduleType, List<Type> ordered, Dictionary<Type, int> states, List<Type> path)
+    /// <summary>
+    /// 从启动模块出发收集全部模块类型,逐个创建描述信息
+    /// </summary>
+    /// <param name="modules">收集结果</param>
+    /// <param name="services">服务集合</param>
+    /// <param name="startupModuleType">启动模块类型</param>
+    protected virtual void FillModules(List<ModuleDescriptor> modules, IServiceCollection services, Type startupModuleType)
     {
-        if (states.TryGetValue(moduleType, out int state))
+        foreach (Type moduleType in ModuleHelper.FindAllModuleTypes(startupModuleType, null))
+        {
+            modules.Add(CreateModuleDescriptor(services, moduleType));
+        }
+    }
+
+    /// <summary>
+    /// 为每个模块解析出直接依赖的描述信息
+    /// </summary>
+    /// <param name="modules">全部模块描述信息</param>
+    protected virtual void SetDependencies(List<ModuleDescriptor> modules)
+    {
+        foreach (ModuleDescriptor module in modules)
+        {
+            SetDependencies(modules, module);
+        }
+    }
+
+    /// <summary>
+    /// 为单个模块解析出直接依赖的描述信息
+    /// </summary>
+    /// <param name="modules">全部模块描述信息</param>
+    /// <param name="module">待处理的模块</param>
+    /// <exception cref="ModuleLoadException">依赖的模块不在已加载的模块列表里</exception>
+    protected virtual void SetDependencies(List<ModuleDescriptor> modules, ModuleDescriptor module)
+    {
+        foreach (Type dependedModuleType in ModuleHelper.FindDependedModuleTypes(module.Type))
+        {
+            ModuleDescriptor? dependedModule = modules.FirstOrDefault(candidate => candidate.Type == dependedModuleType);
+
+            if (dependedModule == null)
+            {
+                throw new ModuleLoadException(
+                    "找不到模块 " + module.Type.AssemblyQualifiedName + " 依赖的模块 " + dependedModuleType.AssemblyQualifiedName);
+            }
+
+            module.AddDependency(dependedModule);
+        }
+    }
+
+    /// <summary>
+    /// 创建模块描述信息,同时把模块实例注册到服务集合
+    /// </summary>
+    /// <param name="services">服务集合</param>
+    /// <param name="moduleType">模块类型</param>
+    /// <param name="isLoadedAsPlugIn">是否以插件方式加载</param>
+    /// <returns>模块描述信息</returns>
+    protected virtual ModuleDescriptor CreateModuleDescriptor(IServiceCollection services, Type moduleType, bool isLoadedAsPlugIn = false)
+    {
+        return new ModuleDescriptor(moduleType, CreateAndRegisterModule(services, moduleType), isLoadedAsPlugIn);
+    }
+
+    /// <summary>
+    /// 实例化模块并以自身类型注册为单例
+    /// </summary>
+    /// <param name="services">服务集合</param>
+    /// <param name="moduleType">模块类型</param>
+    /// <returns>模块实例</returns>
+    protected virtual IModule CreateAndRegisterModule(IServiceCollection services, Type moduleType)
+    {
+        IModule module = ModuleHelper.CreateInstance(moduleType);
+
+        services.AddSingleton(moduleType, module);
+
+        return module;
+    }
+
+    /// <summary>
+    /// 按依赖关系拓扑排序,被依赖的模块排在前,启动模块固定排最后
+    /// </summary>
+    /// <param name="modules">全部模块描述信息</param>
+    /// <param name="startupModuleType">启动模块类型</param>
+    /// <returns>排好序的模块描述信息</returns>
+    /// <exception cref="ModuleLoadException">依赖成环时抛出</exception>
+    protected virtual List<IModuleDescriptor> SortByDependency(List<ModuleDescriptor> modules, Type startupModuleType)
+    {
+        List<IModuleDescriptor> sortedModules = new List<IModuleDescriptor>(modules.Count);
+        Dictionary<Type, int> states = new Dictionary<Type, int>();
+        List<Type> path = new List<Type>();
+
+        foreach (ModuleDescriptor module in modules)
+        {
+            Visit(module, sortedModules, states, path);
+        }
+
+        ModuleDescriptor startupModule = modules.First(module => module.Type == startupModuleType);
+
+        sortedModules.Remove(startupModule);
+        sortedModules.Add(startupModule);
+
+        return sortedModules;
+    }
+
+    private static void Visit(IModuleDescriptor module, List<IModuleDescriptor> sortedModules, Dictionary<Type, int> states, List<Type> path)
+    {
+        if (states.TryGetValue(module.Type, out int state))
         {
             if (state == 1)
             {
                 List<string> cycle = new List<string>(path.Count + 1);
+
                 foreach (Type item in path)
                 {
                     cycle.Add(item.Name);
                 }
 
-                cycle.Add(moduleType.Name);
+                cycle.Add(module.Type.Name);
+
                 throw new ModuleLoadException("模块依赖出现循环: " + string.Join(" → ", cycle));
             }
 
             return;
         }
 
-        ValidateModuleType(moduleType, "依赖模块");
+        states[module.Type] = 1;
+        path.Add(module.Type);
 
-        states[moduleType] = 1;
-        path.Add(moduleType);
-
-        foreach (Type dependency in GetDependedModuleTypes(moduleType))
+        foreach (IModuleDescriptor dependency in module.Dependencies)
         {
-            Visit(dependency, ordered, states, path);
+            Visit(dependency, sortedModules, states, path);
         }
 
         path.RemoveAt(path.Count - 1);
-        states[moduleType] = 2;
-        ordered.Add(moduleType);
-    }
+        states[module.Type] = 2;
 
-    private static Type[] GetDependedModuleTypes(Type moduleType)
-    {
-        object[] attributes = moduleType.GetCustomAttributes(typeof(DependsOnAttribute), true);
-
-        if (attributes.Length == 0)
+        if (!sortedModules.Contains(module))
         {
-            return Type.EmptyTypes;
-        }
-
-        List<Type> dependencies = new List<Type>();
-
-        foreach (object attribute in attributes)
-        {
-            foreach (Type dependency in ((DependsOnAttribute)attribute).DependedModuleTypes)
-            {
-                if (dependency != null && !dependencies.Contains(dependency))
-                {
-                    dependencies.Add(dependency);
-                }
-            }
-        }
-
-        return dependencies.ToArray();
-    }
-
-    private static void ValidateModuleType(Type moduleType, string role)
-    {
-        if (!typeof(Module).IsAssignableFrom(moduleType))
-        {
-            throw new ModuleLoadException(role + " " + moduleType.FullName + " 未继承 Module");
-        }
-
-        if (moduleType.IsAbstract)
-        {
-            throw new ModuleLoadException(role + " " + moduleType.FullName + " 是抽象类型,无法实例化");
-        }
-    }
-
-    private static Module CreateInstance(Type moduleType)
-    {
-        try
-        {
-            return (Module)Activator.CreateInstance(moduleType)!;
-        }
-        catch (Exception exception)
-        {
-            throw new ModuleLoadException("模块 " + moduleType.FullName + " 实例化失败,需要提供公共无参构造器", exception);
+            sortedModules.Add(module);
         }
     }
 }

@@ -8,12 +8,12 @@ using Rongia.Messaging.Wrappers;
 namespace Rongia.Messaging;
 
 /// <summary>
-/// <see cref="ICommandBus"/> 的默认实现:按命令类型缓存闭式包装器,避免每次发送都做反射
+/// <see cref="ICommandBus"/> 的默认实现:按命令类型缓存包装器的调用委托,避免每次发送都做反射
 /// </summary>
 [ExposeServices(typeof(ICommandBus))]
 public class CommandBus : ICommandBus, ITransientDependency
 {
-    private static readonly ConcurrentDictionary<Type, RequestHandlerBase> _requestHandlers = new();
+    private static readonly ConcurrentDictionary<Type, object> _requestHandlers = new();
 
     private readonly IServiceProvider _serviceProvider;
 
@@ -34,14 +34,16 @@ public class CommandBus : ICommandBus, ITransientDependency
             throw new ArgumentNullException(nameof(command));
         }
 
-        var handler = (RequestHandlerWrapper<TResponse>)_requestHandlers.GetOrAdd(command.GetType(), static commandType =>
-        {
-            var wrapperType = typeof(RequestHandlerWrapperImpl<,>).MakeGenericType(commandType, typeof(TResponse));
-            var wrapper = Activator.CreateInstance(wrapperType) ?? throw new InvalidOperationException($"Could not create wrapper type for {commandType}");
-            return (RequestHandlerBase)wrapper;
-        });
+        var handler = (Func<ICommand<TResponse>, IServiceProvider, CancellationToken, Task<TResponse>>)_requestHandlers.GetOrAdd(
+            command.GetType(), static commandType =>
+            {
+                var wrapperType = typeof(CommandHandlerWrapper<,>).MakeGenericType(commandType, typeof(TResponse));
+                object wrapper = Activator.CreateInstance(wrapperType) ?? throw new InvalidOperationException($"Could not create wrapper type for {commandType}");
+                return wrapperType.GetMethod(nameof(CommandHandlerWrapper<ICommand<TResponse>, TResponse>.Handle))!
+                    .CreateDelegate(typeof(Func<ICommand<TResponse>, IServiceProvider, CancellationToken, Task<TResponse>>), wrapper);
+            });
 
-        return handler.Handle(command, _serviceProvider, cancellationToken);
+        return handler(command, _serviceProvider, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -53,13 +55,15 @@ public class CommandBus : ICommandBus, ITransientDependency
             throw new ArgumentNullException(nameof(command));
         }
 
-        var handler = (RequestHandlerWrapper)_requestHandlers.GetOrAdd(command.GetType(), static commandType =>
-        {
-            var wrapperType = typeof(RequestHandlerWrapperImpl<>).MakeGenericType(commandType);
-            var wrapper = Activator.CreateInstance(wrapperType) ?? throw new InvalidOperationException($"Could not create wrapper type for {commandType}");
-            return (RequestHandlerBase)wrapper;
-        });
+        var handler = (Func<ICommand, IServiceProvider, CancellationToken, Task<Unit>>)_requestHandlers.GetOrAdd(
+            command.GetType(), static commandType =>
+            {
+                var wrapperType = typeof(CommandHandlerWrapper<>).MakeGenericType(commandType);
+                object wrapper = Activator.CreateInstance(wrapperType) ?? throw new InvalidOperationException($"Could not create wrapper type for {commandType}");
+                return wrapperType.GetMethod(nameof(CommandHandlerWrapper<ICommand>.Handle))!
+                    .CreateDelegate(typeof(Func<ICommand, IServiceProvider, CancellationToken, Task<Unit>>), wrapper);
+            });
 
-        return handler.Handle(command, _serviceProvider, cancellationToken);
+        return handler(command, _serviceProvider, cancellationToken);
     }
 }

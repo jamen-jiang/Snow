@@ -5,19 +5,25 @@ namespace Rongia.Modularity;
 /// 可多次标注,每次传入若干被依赖的模块类型。
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
-public sealed class DependsOnAttribute : Attribute
+public class DependsOnAttribute : Attribute, IDependedTypesProvider
 {
     /// <summary>
     /// 被依赖的模块类型集合
     /// </summary>
-    public Type[] DependedModuleTypes { get; }
+    public Type[] DependedTypes { get; }
 
     /// <summary>
     /// 构造器
     /// </summary>
-    /// <param name="dependedModuleTypes">被依赖的模块类型,必须继承 Module</param>
-    public DependsOnAttribute(params Type[] dependedModuleTypes)
+    /// <param name="dependedTypes">被依赖的模块类型,必须继承 Module</param>
+    public DependsOnAttribute(params Type[]? dependedTypes)
     {
-        DependedModuleTypes = dependedModuleTypes ?? Type.EmptyTypes;
+        DependedTypes = dependedTypes ?? Type.EmptyTypes;
+    }
+
+    /// <inheritdoc />
+    public virtual Type[] GetDependedTypes()
+    {
+        return DependedTypes;
     }
 }

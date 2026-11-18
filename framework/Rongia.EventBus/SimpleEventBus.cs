@@ -1,23 +1,21 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Rongia.DependencyInjection;
 
 namespace Rongia.EventBus;
 
 /// <summary>
-/// 进程内事件总线: 按处理器实现类型解析实例, 每个处理器独占一个作用域
+/// 进程内事件总线: 按 <c>IEventHandler&lt;TEvent&gt;</c> 从容器解析全部实现, 每个处理器独占一个作用域
 /// </summary>
 /// <remarks>
-/// 处理器清单在构造时经 <see cref="IOptions{T}"/> 求值一次,
-/// 此刻所有 Configure 回调都已执行完毕, 不存在读到半份清单的可能
+/// 处理器清单由容器维护, 不另存类型清单,
+/// 因此订阅方只要被登记成 <c>IEventHandler&lt;TEvent&gt;</c> 就能被发布到
 /// </remarks>
 [ExposeServices(typeof(IEventBus))]
 public sealed class SimpleEventBus : IEventBus, ISingletonDependency
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IEventHandlerPublisher _publisher;
-    private readonly EventBusOptions _options;
     private readonly ConcurrentDictionary<Type, EventHandlerWrapper> _wrappers = new();
 
     /// <summary>
@@ -25,12 +23,10 @@ public sealed class SimpleEventBus : IEventBus, ISingletonDependency
     /// </summary>
     /// <param name="serviceProvider">服务提供器</param>
     /// <param name="publisher">处理器发布策略</param>
-    /// <param name="options">事件总线配置</param>
-    public SimpleEventBus(IServiceProvider serviceProvider, IEventHandlerPublisher publisher, IOptions<EventBusOptions> options)
+    public SimpleEventBus(IServiceProvider serviceProvider, IEventHandlerPublisher publisher)
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
     }
 
     /// <inheritdoc />
@@ -44,19 +40,15 @@ public sealed class SimpleEventBus : IEventBus, ISingletonDependency
     }
 
     /// <summary>
-    /// 为运行期事件类型创建包装器, 并挑出订阅了它的事件处理器
+    /// 为运行期事件类型创建包装器
     /// </summary>
     /// <param name="eventType">运行期事件类型</param>
     /// <returns>包装器</returns>
-    private EventHandlerWrapper CreateWrapper(Type eventType)
+    private static EventHandlerWrapper CreateWrapper(Type eventType)
     {
-        Type handlerInterface = typeof(IEventHandler<>).MakeGenericType(eventType);
-
-        Type[] handlerTypes = _options.Handlers.Where(handlerInterface.IsAssignableFrom).ToArray();
-
         Type wrapperType = typeof(EventHandlerWrapperImpl<>).MakeGenericType(eventType);
 
-        object? instance = Activator.CreateInstance(wrapperType, new object[] { handlerTypes });
+        object? instance = Activator.CreateInstance(wrapperType);
 
         if (instance is not EventHandlerWrapper wrapper)
         {

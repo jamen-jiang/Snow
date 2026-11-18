@@ -7,56 +7,30 @@ using Rongia.Modularity;
 namespace Rongia.EventBus;
 
 /// <summary>
-/// 事件总线模块: 在 Pre 阶段登记发布策略, 并用 OnRegistered 旁听约定注册来收集处理器类型。
-/// 放在 Pre 是因为约定扫描发生在各模块的 ConfigureServices 之前, 钩子必须先就位;
-/// 收集到的类型通过 Configure 延迟写入配置, 由事件总线构造时统一求值
+/// 事件总线模块: 登记默认发布策略与事件处理器约定注册器,
+/// 处理器由 <see cref="EventBusConventionalRegistrar"/> 按 <see cref="IEventHandler{TEvent}"/> 自动登记
 /// </summary>
 public sealed class EventBusModule : Module
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// 登记约定注册器: 必须早于任何程序集扫描, 所以放在前置阶段
+    /// </summary>
+    /// <param name="context">服务配置上下文</param>
     public override void PreConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        IServiceCollection services = context.Services;
-
-        // 发布策略有多个实现, 生命周期与生效实现都显式登记, 不依赖约定扫描
-        services.TryAddSingleton<IEventHandlerPublisher, ForeachAwaitEventHandlerPublisher>();
-
-        var handlerTypes = new List<Type>();
-
-        services.OnRegistered(registration =>
-        {
-            if (IsEventHandler(registration.ImplementationType))
-            {
-                handlerTypes.Add(registration.ImplementationType);
-            }
-        });
-
-        services.Configure<EventBusOptions>(options =>
-        {
-            options.Handlers.AddIfNotContains(handlerTypes);
-        });
+        context.Services.AddConventionalRegistrar<EventBusConventionalRegistrar>();
     }
 
     /// <summary>
-    /// 判断实现类型是否为事件处理器
+    /// 指定默认发布策略: 有多个实现, 生命周期与生效实现都显式登记, 不依赖约定扫描
     /// </summary>
-    /// <param name="implementationType">实现类型</param>
-    /// <returns>是事件处理器时为 true</returns>
-    private static bool IsEventHandler(Type implementationType)
+    /// <param name="context">服务配置上下文</param>
+    public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        if (implementationType.IsAbstract || implementationType.IsInterface || implementationType.IsGenericTypeDefinition)
-        {
-            return false;
-        }
+        ArgumentNullException.ThrowIfNull(context);
 
-        if (!typeof(IEventHandler).IsAssignableFrom(implementationType))
-        {
-            return false;
-        }
-
-        return implementationType.GetInterfaces()
-            .Any(@interface => @interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IEventHandler<>));
+        context.Services.TryAddSingleton<IEventHandlerPublisher, ForeachAwaitEventHandlerPublisher>();
     }
 }

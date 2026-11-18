@@ -1,23 +1,26 @@
-using System.Reflection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Rongia.DependencyInjection;
 
 namespace Rongia.Modularity;
 
 /// <summary>
-/// 服务配置上下文:在模块的服务注册钩子之间传递服务集合与模块清单
+/// 服务配置上下文:在模块的服务注册钩子之间传递服务集合与共享状态。
+/// 成员与 ABP 的 ServiceConfigurationContext 对齐(Services / Configuration / Items / 索引器)
 /// </summary>
 public sealed class ServiceConfigurationContext
 {
+    private IConfiguration? _configuration;
+
     /// <summary>
     /// 服务集合,与宿主使用的 IServiceCollection 是同一个实例
     /// </summary>
     public IServiceCollection Services { get; }
 
     /// <summary>
-    /// 本次应用加载的全部模块所在程序集,按模块加载顺序去重。
-    /// 模块需要"扫自己相关的程序集"时直接用它,不必依赖宿主额外传参
+    /// 宿主已注册的配置对象,首次访问时从服务集合中取
     /// </summary>
-    public IReadOnlyList<Assembly> ModuleAssemblies { get; }
+    public IConfiguration Configuration => _configuration ??= Services.GetConfiguration();
 
     /// <summary>
     /// 跨模块共享的状态袋
@@ -25,14 +28,23 @@ public sealed class ServiceConfigurationContext
     public IDictionary<string, object?> Items { get; }
 
     /// <summary>
+    /// 按名称读写共享状态,等价于 Items 的便捷访问
+    /// </summary>
+    /// <param name="key">键</param>
+    /// <returns>存在时返回对应的值,否则返回 null</returns>
+    public object? this[string key]
+    {
+        get => Items.TryGetValue(key, out object? value) ? value : null;
+        set => Items[key] = value;
+    }
+
+    /// <summary>
     /// 构造器
     /// </summary>
     /// <param name="services">服务集合</param>
-    /// <param name="moduleAssemblies">模块所在程序集清单</param>
-    public ServiceConfigurationContext(IServiceCollection services, IReadOnlyList<Assembly> moduleAssemblies)
+    public ServiceConfigurationContext(IServiceCollection services)
     {
         Services = services ?? throw new ArgumentNullException(nameof(services));
-        ModuleAssemblies = moduleAssemblies ?? Array.Empty<Assembly>();
         Items = new Dictionary<string, object?>();
     }
 }

@@ -18,7 +18,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddConventionalRegistrar<TRegistrar>(this IServiceCollection services)
         where TRegistrar : class, IConventionalRegistrar
     {
-        services.TryAddSingleton<IConventionalRegistrar, TRegistrar>();
+        // 与 ABP 一致: 允许并存多个自定义注册器, 默认注册器始终参与扫描
+        services.AddSingleton<IConventionalRegistrar, TRegistrar>();
         return services;
     }
 
@@ -89,7 +90,8 @@ public static class ServiceCollectionExtensions
 
     private static List<IConventionalRegistrar> ResolveRegistrars(IServiceCollection services)
     {
-        List<IConventionalRegistrar> registrars = new List<IConventionalRegistrar>();
+        // 默认注册器始终排在首位: 标记接口/特性驱动的登记不因自定义注册器存在而失效
+        List<IConventionalRegistrar> registrars = new List<IConventionalRegistrar> { new DefaultConventionalRegistrar() };
 
         foreach (ServiceDescriptor descriptor in services.ToList())
         {
@@ -111,11 +113,6 @@ public static class ServiceCollectionExtensions
                     registrars.Add(created);
                 }
             }
-        }
-
-        if (registrars.Count == 0)
-        {
-            registrars.Add(new DefaultConventionalRegistrar());
         }
 
         return registrars;

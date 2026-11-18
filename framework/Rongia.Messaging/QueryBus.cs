@@ -8,12 +8,12 @@ using Rongia.Messaging.Wrappers;
 namespace Rongia.Messaging;
 
 /// <summary>
-/// <see cref="IQueryBus"/> 的默认实现:按查询类型缓存闭式包装器,避免每次查询都做反射
+/// <see cref="IQueryBus"/> 的默认实现:按查询类型缓存包装器的调用委托,避免每次查询都做反射
 /// </summary>
 [ExposeServices(typeof(IQueryBus))]
 public class QueryBus : IQueryBus, ITransientDependency
 {
-    private static readonly ConcurrentDictionary<Type, RequestHandlerBase> _queryHandlers = new();
+    private static readonly ConcurrentDictionary<Type, object> _queryHandlers = new();
 
     private readonly IServiceProvider _serviceProvider;
 
@@ -34,13 +34,15 @@ public class QueryBus : IQueryBus, ITransientDependency
             throw new ArgumentNullException(nameof(query));
         }
 
-        var handler = (QueryRequestHandlerWrapper<TResponse>)_queryHandlers.GetOrAdd(query.GetType(), static queryType =>
-        {
-            var wrapperType = typeof(QueryRequestHandlerWrapperImpl<,>).MakeGenericType(queryType, typeof(TResponse));
-            var wrapper = Activator.CreateInstance(wrapperType) ?? throw new InvalidOperationException($"Could not create wrapper type for {queryType}");
-            return (RequestHandlerBase)wrapper;
-        });
+        var handler = (Func<IQuery<TResponse>, IServiceProvider, CancellationToken, Task<TResponse>>)_queryHandlers.GetOrAdd(
+            query.GetType(), static queryType =>
+            {
+                var wrapperType = typeof(QueryHandlerWrapper<,>).MakeGenericType(queryType, typeof(TResponse));
+                object wrapper = Activator.CreateInstance(wrapperType) ?? throw new InvalidOperationException($"Could not create wrapper type for {queryType}");
+                return wrapperType.GetMethod(nameof(QueryHandlerWrapper<IQuery<TResponse>, TResponse>.Handle))!
+                    .CreateDelegate(typeof(Func<IQuery<TResponse>, IServiceProvider, CancellationToken, Task<TResponse>>), wrapper);
+            });
 
-        return handler.Handle(query, _serviceProvider, cancellationToken);
+        return handler(query, _serviceProvider, cancellationToken);
     }
 }

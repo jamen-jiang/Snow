@@ -1,35 +1,77 @@
+using System.Reflection;
+
 namespace Rongia.Modularity;
 
 /// <summary>
-/// 模块描述信息:记录模块类型、实例与它直接声明的依赖
+/// 模块描述信息的默认实现(对应 ABP 的 AbpModuleDescriptor)
 /// </summary>
-public sealed class ModuleDescriptor
+public class ModuleDescriptor : IModuleDescriptor
 {
-    /// <summary>
-    /// 模块类型
-    /// </summary>
+    /// <inheritdoc />
     public Type Type { get; }
 
-    /// <summary>
-    /// 模块实例,加载阶段创建一次并复用
-    /// </summary>
-    public Module Instance { get; }
+    /// <inheritdoc />
+    public Assembly Assembly { get; }
 
-    /// <summary>
-    /// 通过 DependsOnAttribute 直接声明的依赖模块类型
-    /// </summary>
-    public IReadOnlyList<Type> Dependencies { get; }
+    /// <inheritdoc />
+    public Assembly[] AllAssemblies { get; }
+
+    /// <inheritdoc />
+    public IModule Instance { get; }
+
+    /// <inheritdoc />
+    public bool IsLoadedAsPlugIn { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<IModuleDescriptor> Dependencies => _dependencies;
+
+    private readonly List<IModuleDescriptor> _dependencies;
 
     /// <summary>
     /// 构造器
     /// </summary>
     /// <param name="type">模块类型</param>
     /// <param name="instance">模块实例</param>
-    /// <param name="dependencies">直接依赖的模块类型</param>
-    public ModuleDescriptor(Type type, Module instance, IReadOnlyList<Type> dependencies)
+    /// <param name="isLoadedAsPlugIn">是否以插件方式加载</param>
+    public ModuleDescriptor(Type type, IModule instance, bool isLoadedAsPlugIn = false)
     {
-        Type = type ?? throw new ArgumentNullException(nameof(type));
-        Instance = instance ?? throw new ArgumentNullException(nameof(instance));
-        Dependencies = dependencies ?? Type.EmptyTypes;
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(instance);
+
+        ModuleHelper.CheckModuleType(type);
+
+        if (!type.IsInstanceOfType(instance))
+        {
+            throw new ArgumentException(
+                "给定的模块实例(" + instance.GetType().AssemblyQualifiedName + ")不是给定模块类型的实例: " + type.AssemblyQualifiedName);
+        }
+
+        Type = type;
+        Assembly = type.Assembly;
+        AllAssemblies = ModuleHelper.GetAllAssemblies(type);
+        Instance = instance;
+        IsLoadedAsPlugIn = isLoadedAsPlugIn;
+
+        _dependencies = new List<IModuleDescriptor>();
+    }
+
+    /// <summary>
+    /// 追加一个直接依赖的模块,已存在时不重复添加
+    /// </summary>
+    /// <param name="descriptor">被依赖模块的描述信息</param>
+    public void AddDependency(IModuleDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+
+        if (!_dependencies.Contains(descriptor))
+        {
+            _dependencies.Add(descriptor);
+        }
+    }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        return "[ModuleDescriptor " + Type.FullName + "]";
     }
 }
