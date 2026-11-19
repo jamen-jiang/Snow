@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Description>事件总线实现: 发布策略、处理器包装与模块</Description>
+    <RootNamespace>Rongia.EventBus</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rongia.Core\Rongia.Core.csproj" />
+    <ProjectReference Include="..\Rongia.EventBus.Abstractions\Rongia.EventBus.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

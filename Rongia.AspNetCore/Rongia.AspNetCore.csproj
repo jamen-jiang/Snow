@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Rongia.AspNetCore</AssemblyName>
+    <PackageId>Rongia.AspNetCore</PackageId>
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <!-- 入口包只聚合引用, 不含静态资源; 关掉 StaticWebAssets 以免 SDK 报 scoped css bundle 缺端点 -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <Description>Web 宿主入口包: 一次引用拿到 ASP.NET Core 场景下的全部框架能力(与 ABP 的 Volo.Abp.AspNetCore 同位)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rongia\Rongia.csproj" />
+    <ProjectReference Include="..\Rongia.AspNetCore.Serilog\Rongia.AspNetCore.Serilog.csproj" />
+    <ProjectReference Include="..\Rongia.Aop.Castle\Rongia.Aop.Castle.csproj" />
+    <ProjectReference Include="..\Rongia.Application\Rongia.Application.csproj" />
+    <ProjectReference Include="..\Rongia.Authorization\Rongia.Authorization.csproj" />
+    <ProjectReference Include="..\Rongia.Caching\Rongia.Caching.csproj" />
+    <ProjectReference Include="..\Rongia.Caching.StackExchangeRedis\Rongia.Caching.StackExchangeRedis.csproj" />
+    <ProjectReference Include="..\Rongia.DistributedLock\Rongia.DistributedLock.csproj" />
+    <ProjectReference Include="..\Rongia.Domain\Rongia.Domain.csproj" />
+    <ProjectReference Include="..\Rongia.Emailing\Rongia.Emailing.csproj" />
+    <ProjectReference Include="..\Rongia.EventBus\Rongia.EventBus.csproj" />
+    <ProjectReference Include="..\Rongia.Ftp\Rongia.Ftp.csproj" />
+    <ProjectReference Include="..\Rongia.HangFire\Rongia.HangFire.csproj" />
+    <ProjectReference Include="..\Rongia.Messaging\Rongia.Messaging.csproj" />
+    <ProjectReference Include="..\Rongia.Security\Rongia.Security.csproj" />
+    <ProjectReference Include="..\Rongia.Security.SaToken\Rongia.Security.SaToken.csproj" />
+    <ProjectReference Include="..\Rongia.Shared\Rongia.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

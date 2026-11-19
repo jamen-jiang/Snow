@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Description>应用层基元: 后台作业与模板渲染端口契约</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Rongia.Application.Contracts/Rongia.Application.Contracts.csproj" />
+    <ProjectReference Include="../Rongia.Core/Rongia.Core.csproj" />
+  </ItemGroup>
+</Project>

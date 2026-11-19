@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Description>领域层基元: 实体、聚合根、审计实体、领域事件、仓储契约与值对象</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Rongia.Core\Rongia.Core.csproj" />
+    <ProjectReference Include="..\Rongia.EventBus.Abstractions\Rongia.EventBus.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

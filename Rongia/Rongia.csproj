@@ -1,45 +1,18 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Rongia</AssemblyName>
+    <PackageId>Rongia</PackageId>
+    <Description>Rongia 名称占位包: 不含任何代码, 只引用 Rongia.Core(与 ABP 的 Volo.Abp 同形)</Description>
   </PropertyGroup>
+
   <ItemGroup>
-    <ProjectReference Include="../framework/Rongia.Core/Rongia.Core.csproj" />
-    <ProjectReference Include="../framework/Rongia.Aop.Castle/Rongia.Aop.Castle.csproj" />
-    <ProjectReference Include="../framework/Rongia.Messaging/Rongia.Messaging.csproj" />
-    <ProjectReference Include="../framework/Rongia.EventBus/Rongia.EventBus.csproj" />
-    <ProjectReference Include="../framework/Rongia.DistributedLock/Rongia.DistributedLock.csproj" />
-    <ProjectReference Include="../framework/Rongia.Security.SaToken/Rongia.Security.SaToken.csproj" />
-    <ProjectReference Include="../framework/Rongia.Authorization/Rongia.Authorization.csproj" />
-    <ProjectReference Include="../framework/Rongia.Caching/Rongia.Caching.csproj" />
-    <ProjectReference Include="../framework/Rongia.Caching.StackExchangeRedis/Rongia.Caching.StackExchangeRedis.csproj" />
-    <ProjectReference Include="../modules/Rongia.Admin/Rongia.Admin.Application/Rongia.Admin.Application.csproj" />
-    <ProjectReference Include="../modules/Rongia.Admin/Rongia.Admin.Api/Rongia.Admin.Api.csproj" />
-    <ProjectReference Include="../modules/Rongia.Admin/Rongia.Admin.Infrastructure/Rongia.Admin.Infrastructure.csproj" />
-    <ProjectReference Include="../modules/Rongia.BaseData/Rongia.BaseData.Application/Rongia.BaseData.Application.csproj" />
-    <ProjectReference Include="../modules/Rongia.BaseData/Rongia.BaseData.Api/Rongia.BaseData.Api.csproj" />
-    <ProjectReference Include="../modules/Rongia.BaseData/Rongia.BaseData.Infrastructure/Rongia.BaseData.Infrastructure.csproj" />
-    <ProjectReference Include="../modules/Rongia.Stock/Rongia.Stock.Application/Rongia.Stock.Application.csproj" />
-    <ProjectReference Include="../modules/Rongia.Stock/Rongia.Stock.Api/Rongia.Stock.Api.csproj" />
-    <ProjectReference Include="../modules/Rongia.Stock/Rongia.Stock.Infrastructure/Rongia.Stock.Infrastructure.csproj" />
-    <ProjectReference Include="../modules/Rongia.Production/Rongia.Production.Application/Rongia.Production.Application.csproj" />
-    <ProjectReference Include="../modules/Rongia.Production/Rongia.Production.Api/Rongia.Production.Api.csproj" />
-    <ProjectReference Include="../modules/Rongia.Production/Rongia.Production.Infrastructure/Rongia.Production.Infrastructure.csproj" />
-    <ProjectReference Include="../modules/Rongia.Sales/Rongia.Sales.Application/Rongia.Sales.Application.csproj" />
-    <ProjectReference Include="../modules/Rongia.Sales/Rongia.Sales.Api/Rongia.Sales.Api.csproj" />
-    <ProjectReference Include="../modules/Rongia.Sales/Rongia.Sales.Infrastructure/Rongia.Sales.Infrastructure.csproj" />
-    <ProjectReference Include="../modules/Rongia.Purchase/Rongia.Purchase.Application/Rongia.Purchase.Application.csproj" />
-    <ProjectReference Include="../modules/Rongia.Purchase/Rongia.Purchase.Api/Rongia.Purchase.Api.csproj" />
-    <ProjectReference Include="../modules/Rongia.Purchase/Rongia.Purchase.Infrastructure/Rongia.Purchase.Infrastructure.csproj" />
-    <ProjectReference Include="../modules/Rongia.Hr/Rongia.Hr.Application/Rongia.Hr.Application.csproj" />
-    <ProjectReference Include="../modules/Rongia.Hr/Rongia.Hr.Api/Rongia.Hr.Api.csproj" />
-    <ProjectReference Include="../modules/Rongia.Hr/Rongia.Hr.Infrastructure/Rongia.Hr.Infrastructure.csproj" />
+    <ProjectReference Include="..\Rongia.Core\Rongia.Core.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="DistributedLock.Redis" />
-    <PackageReference Include="StackExchange.Redis" />
-    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
-  </ItemGroup>
+
 </Project>
