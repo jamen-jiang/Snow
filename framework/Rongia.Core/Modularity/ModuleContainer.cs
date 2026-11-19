@@ -6,14 +6,52 @@ namespace Rongia.Modularity;
 public class ModuleContainer : IModuleContainer
 {
     /// <inheritdoc />
-    public IReadOnlyList<IModuleDescriptor> Modules { get; }
+    public IReadOnlyList<ModuleDescriptor> Modules { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyDictionary<Type, ModuleDescriptor> ModulesByType { get; }
 
     /// <summary>
-    /// 构造器
+    /// 直接复用加载器建好的索引,不重复遍历模块列表
+    /// </summary>
+    /// <param name="loadResult">模块加载结果</param>
+    public ModuleContainer(ModuleLoadResult loadResult)
+    {
+        ArgumentNullException.ThrowIfNull(loadResult);
+
+        Modules = loadResult.Modules;
+        ModulesByType = loadResult.ModulesByType;
+    }
+
+    /// <summary>
+    /// 构造器:只给模块列表时自行建立类型索引
     /// </summary>
     /// <param name="modules">已按加载顺序排好的模块列表</param>
-    public ModuleContainer(IReadOnlyList<IModuleDescriptor> modules)
+    /// <exception cref="ModuleLoadException">同一模块类型出现两次</exception>
+    public ModuleContainer(IReadOnlyList<ModuleDescriptor> modules)
     {
-        Modules = modules ?? throw new ArgumentNullException(nameof(modules));
+        ArgumentNullException.ThrowIfNull(modules);
+
+        Modules = modules;
+
+        Dictionary<Type, ModuleDescriptor> modulesByType = new Dictionary<Type, ModuleDescriptor>(modules.Count);
+
+        foreach (ModuleDescriptor module in modules)
+        {
+            if (!modulesByType.TryAdd(module.Type, module))
+            {
+                throw new ModuleLoadException("同一个模块类型被加载了两次: " + module.Type.AssemblyQualifiedName);
+            }
+        }
+
+        ModulesByType = modulesByType;
+    }
+
+    /// <inheritdoc />
+    public ModuleDescriptor? Find(Type moduleType)
+    {
+        ArgumentNullException.ThrowIfNull(moduleType);
+
+        return ModulesByType.TryGetValue(moduleType, out ModuleDescriptor? module) ? module : null;
     }
 }

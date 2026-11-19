@@ -11,7 +11,6 @@ namespace Rongia.EventBus;
 /// 处理器清单由容器维护, 不另存类型清单,
 /// 因此订阅方只要被登记成 <c>IEventHandler&lt;TEvent&gt;</c> 就能被发布到
 /// </remarks>
-[ExposeServices(typeof(IEventBus))]
 public sealed class SimpleEventBus : IEventBus, ISingletonDependency
 {
     private readonly IServiceProvider _serviceProvider;

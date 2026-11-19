@@ -17,7 +17,7 @@ public static class ModularityApplicationExtensions
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
         Application application = serviceProvider.GetRequiredService<Application>();
-        application.Initialize(serviceProvider);
+        application.InitializeAsync(serviceProvider).GetAwaiter().GetResult();
 
         return application;
     }
@@ -32,7 +32,7 @@ public static class ModularityApplicationExtensions
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
         Application application = serviceProvider.GetRequiredService<Application>();
-        application.Shutdown(serviceProvider);
+        application.ShutdownAsync(serviceProvider).GetAwaiter().GetResult();
 
         return application;
     }

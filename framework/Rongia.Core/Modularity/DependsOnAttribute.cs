@@ -1,3 +1,6 @@
+using System.Reflection;
+using Module = Rongia.Modularity.Module;
+
 namespace Rongia.Modularity;
 
 /// <summary>

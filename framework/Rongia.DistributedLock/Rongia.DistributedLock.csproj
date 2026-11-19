@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Rongia.DistributedLock</RootNamespace>
+    <Description>分布式锁的 Medallion 实现: 把 IDistributedLock 替换为基于 Medallion IDistributedLockProvider 的分布式版本(提供器由宿主注册, 如 Redis)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Rongia.Core/Rongia.Core.csproj" />
+    <ProjectReference Include="../Rongia.DistributedLock.Abstractions/Rongia.DistributedLock.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="DistributedLock.Core" />
+  </ItemGroup>
+</Project>

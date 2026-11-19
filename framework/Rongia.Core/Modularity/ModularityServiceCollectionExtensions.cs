@@ -1,4 +1,3 @@
-using System;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Rongia.Modularity;
@@ -14,8 +13,8 @@ public static class ModularityServiceCollectionExtensions
     /// <typeparam name="TStartupModule">启动模块类型</typeparam>
     /// <param name="services">服务集合</param>
     /// <returns>模块化应用实例,用于后续初始化与关闭</returns>
-    public static IApplication AddApplication<TStartupModule>(this IServiceCollection services)
-        where TStartupModule : IModule
+    public static Application AddApplication<TStartupModule>(this IServiceCollection services)
+        where TStartupModule : Module
     {
         return services.AddApplication(typeof(TStartupModule));
     }
@@ -26,7 +25,7 @@ public static class ModularityServiceCollectionExtensions
     /// <param name="services">服务集合</param>
     /// <param name="startupModuleType">启动模块类型</param>
     /// <returns>模块化应用实例,用于后续初始化与关闭</returns>
-    public static IApplication AddApplication(this IServiceCollection services, Type startupModuleType)
+    public static Application AddApplication(this IServiceCollection services, Type startupModuleType)
     {
         return ApplicationFactory.CreateAsync(services, startupModuleType).GetAwaiter().GetResult();
     }

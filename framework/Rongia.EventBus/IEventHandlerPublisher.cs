@@ -5,9 +5,7 @@ namespace Rongia.EventBus;
 /// <summary>
 /// 事件分发策略: 决定同一事件的多个处理器是顺序执行还是并发执行
 /// </summary>
-/// <remarks>
-/// 默认实现为 <c>ForeachAwaitEventHandlerPublisher</c>(逐个 await, 顺序执行); 需要并发时换成 <c>TaskWhenAllEventHandlerPublisher</c>。
-/// </remarks>
+/// <remarks>默认实现为 <c>ForeachAwaitEventHandlerPublisher</c>(逐个 await, 顺序执行); 需要并发时换成 <c>TaskWhenAllEventHandlerPublisher</c>。</remarks>
 public interface IEventHandlerPublisher
 {
     /// <summary>

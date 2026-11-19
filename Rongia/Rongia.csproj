@@ -7,8 +7,14 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../framework/Rongia.Core/Rongia.Core.csproj" />
+    <ProjectReference Include="../framework/Rongia.Aop.Castle/Rongia.Aop.Castle.csproj" />
     <ProjectReference Include="../framework/Rongia.Messaging/Rongia.Messaging.csproj" />
     <ProjectReference Include="../framework/Rongia.EventBus/Rongia.EventBus.csproj" />
+    <ProjectReference Include="../framework/Rongia.DistributedLock/Rongia.DistributedLock.csproj" />
+    <ProjectReference Include="../framework/Rongia.Security.SaToken/Rongia.Security.SaToken.csproj" />
+    <ProjectReference Include="../framework/Rongia.Authorization/Rongia.Authorization.csproj" />
+    <ProjectReference Include="../framework/Rongia.Caching/Rongia.Caching.csproj" />
+    <ProjectReference Include="../framework/Rongia.Caching.StackExchangeRedis/Rongia.Caching.StackExchangeRedis.csproj" />
     <ProjectReference Include="../modules/Rongia.Admin/Rongia.Admin.Application/Rongia.Admin.Application.csproj" />
     <ProjectReference Include="../modules/Rongia.Admin/Rongia.Admin.Api/Rongia.Admin.Api.csproj" />
     <ProjectReference Include="../modules/Rongia.Admin/Rongia.Admin.Infrastructure/Rongia.Admin.Infrastructure.csproj" />
@@ -30,5 +36,10 @@
     <ProjectReference Include="../modules/Rongia.Hr/Rongia.Hr.Application/Rongia.Hr.Application.csproj" />
     <ProjectReference Include="../modules/Rongia.Hr/Rongia.Hr.Api/Rongia.Hr.Api.csproj" />
     <ProjectReference Include="../modules/Rongia.Hr/Rongia.Hr.Infrastructure/Rongia.Hr.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="DistributedLock.Redis" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
   </ItemGroup>
 </Project>

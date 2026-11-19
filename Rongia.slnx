@@ -1,65 +1,68 @@
 <Solution>
-  <Folder Name="/Solution Items/">
-    <File Path=".editorconfig" />
-  </Folder>
-  <Project Path="Rongia/Rongia.csproj" />
   <Folder Name="/framework/">
-    <Project Path="framework/Rongia.Core/Rongia.Core.csproj" />
-    <Project Path="framework/Rongia.Shared/Rongia.Shared.csproj" />
-    <Project Path="framework/Rongia.Messaging.Abstractions/Rongia.Messaging.Abstractions.csproj" />
-    <Project Path="framework/Rongia.Messaging/Rongia.Messaging.csproj" />
-    <Project Path="framework/Rongia.EventBus.Abstractions/Rongia.EventBus.Abstractions.csproj" />
-    <Project Path="framework/Rongia.EventBus/Rongia.EventBus.csproj" />
-    <Project Path="framework/Rongia.Security/Rongia.Security.csproj" />
-    <Project Path="framework/Rongia.Domain/Rongia.Domain.csproj" />
+    <Project Path="framework/Rongia.Aop.Castle/Rongia.Aop.Castle.csproj" />
     <Project Path="framework/Rongia.Application.Contracts/Rongia.Application.Contracts.csproj" />
     <Project Path="framework/Rongia.Application/Rongia.Application.csproj" />
+    <Project Path="framework/Rongia.Authorization/Rongia.Authorization.csproj" />
+    <Project Path="framework/Rongia.Caching.StackExchangeRedis/Rongia.Caching.StackExchangeRedis.csproj" />
+    <Project Path="framework/Rongia.Caching/Rongia.Caching.csproj" />
+    <Project Path="framework/Rongia.Core/Rongia.Core.csproj" />
+    <Project Path="framework/Rongia.DistributedLock.Abstractions/Rongia.DistributedLock.Abstractions.csproj" />
+    <Project Path="framework/Rongia.DistributedLock/Rongia.DistributedLock.csproj" />
+    <Project Path="framework/Rongia.Domain/Rongia.Domain.csproj" />
     <Project Path="framework/Rongia.Emailing/Rongia.Emailing.csproj" />
+    <Project Path="framework/Rongia.EventBus.Abstractions/Rongia.EventBus.Abstractions.csproj" />
+    <Project Path="framework/Rongia.EventBus/Rongia.EventBus.csproj" />
+    <Project Path="framework/Rongia.Expressions/Rongia.Expressions.csproj" />
     <Project Path="framework/Rongia.Ftp/Rongia.Ftp.csproj" />
-    <Project Path="framework/Rongia.Lock/Rongia.Lock.csproj" />
+    <Project Path="framework/Rongia.Messaging/Rongia.Messaging.csproj" />
+    <Project Path="framework/Rongia.Security.SaToken/Rongia.Security.SaToken.csproj" />
+    <Project Path="framework/Rongia.Security/Rongia.Security.csproj" />
+    <Project Path="framework/Rongia.Shared/Rongia.Shared.csproj" />
   </Folder>
   <Folder Name="/modules/">
   </Folder>
   <Folder Name="/modules/Rongia.Admin/">
-    <Project Path="modules/Rongia.Admin/Rongia.Admin.Domain/Rongia.Admin.Domain.csproj" />
-    <Project Path="modules/Rongia.Admin/Rongia.Admin.Application/Rongia.Admin.Application.csproj" />
-    <Project Path="modules/Rongia.Admin/Rongia.Admin.Infrastructure/Rongia.Admin.Infrastructure.csproj" />
     <Project Path="modules/Rongia.Admin/Rongia.Admin.Api/Rongia.Admin.Api.csproj" />
+    <Project Path="modules/Rongia.Admin/Rongia.Admin.Application/Rongia.Admin.Application.csproj" />
+    <Project Path="modules/Rongia.Admin/Rongia.Admin.Domain/Rongia.Admin.Domain.csproj" />
+    <Project Path="modules/Rongia.Admin/Rongia.Admin.Infrastructure/Rongia.Admin.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/modules/Rongia.BaseData/">
-    <Project Path="modules/Rongia.BaseData/Rongia.BaseData.Domain/Rongia.BaseData.Domain.csproj" />
-    <Project Path="modules/Rongia.BaseData/Rongia.BaseData.Application/Rongia.BaseData.Application.csproj" />
-    <Project Path="modules/Rongia.BaseData/Rongia.BaseData.Infrastructure/Rongia.BaseData.Infrastructure.csproj" />
     <Project Path="modules/Rongia.BaseData/Rongia.BaseData.Api/Rongia.BaseData.Api.csproj" />
+    <Project Path="modules/Rongia.BaseData/Rongia.BaseData.Application/Rongia.BaseData.Application.csproj" />
+    <Project Path="modules/Rongia.BaseData/Rongia.BaseData.Domain/Rongia.BaseData.Domain.csproj" />
+    <Project Path="modules/Rongia.BaseData/Rongia.BaseData.Infrastructure/Rongia.BaseData.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/modules/Rongia.Stock/">
-    <Project Path="modules/Rongia.Stock/Rongia.Stock.Domain/Rongia.Stock.Domain.csproj" />
-    <Project Path="modules/Rongia.Stock/Rongia.Stock.Application/Rongia.Stock.Application.csproj" />
-    <Project Path="modules/Rongia.Stock/Rongia.Stock.Infrastructure/Rongia.Stock.Infrastructure.csproj" />
     <Project Path="modules/Rongia.Stock/Rongia.Stock.Api/Rongia.Stock.Api.csproj" />
+    <Project Path="modules/Rongia.Stock/Rongia.Stock.Application/Rongia.Stock.Application.csproj" />
+    <Project Path="modules/Rongia.Stock/Rongia.Stock.Domain/Rongia.Stock.Domain.csproj" />
+    <Project Path="modules/Rongia.Stock/Rongia.Stock.Infrastructure/Rongia.Stock.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/modules/Rongia.Production/">
-    <Project Path="modules/Rongia.Production/Rongia.Production.Domain/Rongia.Production.Domain.csproj" />
-    <Project Path="modules/Rongia.Production/Rongia.Production.Application/Rongia.Production.Application.csproj" />
-    <Project Path="modules/Rongia.Production/Rongia.Production.Infrastructure/Rongia.Production.Infrastructure.csproj" />
     <Project Path="modules/Rongia.Production/Rongia.Production.Api/Rongia.Production.Api.csproj" />
+    <Project Path="modules/Rongia.Production/Rongia.Production.Application/Rongia.Production.Application.csproj" />
+    <Project Path="modules/Rongia.Production/Rongia.Production.Domain/Rongia.Production.Domain.csproj" />
+    <Project Path="modules/Rongia.Production/Rongia.Production.Infrastructure/Rongia.Production.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/modules/Rongia.Sales/">
-    <Project Path="modules/Rongia.Sales/Rongia.Sales.Domain/Rongia.Sales.Domain.csproj" />
-    <Project Path="modules/Rongia.Sales/Rongia.Sales.Application/Rongia.Sales.Application.csproj" />
-    <Project Path="modules/Rongia.Sales/Rongia.Sales.Infrastructure/Rongia.Sales.Infrastructure.csproj" />
     <Project Path="modules/Rongia.Sales/Rongia.Sales.Api/Rongia.Sales.Api.csproj" />
+    <Project Path="modules/Rongia.Sales/Rongia.Sales.Application/Rongia.Sales.Application.csproj" />
+    <Project Path="modules/Rongia.Sales/Rongia.Sales.Domain/Rongia.Sales.Domain.csproj" />
+    <Project Path="modules/Rongia.Sales/Rongia.Sales.Infrastructure/Rongia.Sales.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/modules/Rongia.Purchase/">
-    <Project Path="modules/Rongia.Purchase/Rongia.Purchase.Domain/Rongia.Purchase.Domain.csproj" />
-    <Project Path="modules/Rongia.Purchase/Rongia.Purchase.Application/Rongia.Purchase.Application.csproj" />
-    <Project Path="modules/Rongia.Purchase/Rongia.Purchase.Infrastructure/Rongia.Purchase.Infrastructure.csproj" />
     <Project Path="modules/Rongia.Purchase/Rongia.Purchase.Api/Rongia.Purchase.Api.csproj" />
+    <Project Path="modules/Rongia.Purchase/Rongia.Purchase.Application/Rongia.Purchase.Application.csproj" />
+    <Project Path="modules/Rongia.Purchase/Rongia.Purchase.Domain/Rongia.Purchase.Domain.csproj" />
+    <Project Path="modules/Rongia.Purchase/Rongia.Purchase.Infrastructure/Rongia.Purchase.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/modules/Rongia.Hr/">
-    <Project Path="modules/Rongia.Hr/Rongia.Hr.Domain/Rongia.Hr.Domain.csproj" />
-    <Project Path="modules/Rongia.Hr/Rongia.Hr.Application/Rongia.Hr.Application.csproj" />
-    <Project Path="modules/Rongia.Hr/Rongia.Hr.Infrastructure/Rongia.Hr.Infrastructure.csproj" />
     <Project Path="modules/Rongia.Hr/Rongia.Hr.Api/Rongia.Hr.Api.csproj" />
+    <Project Path="modules/Rongia.Hr/Rongia.Hr.Application/Rongia.Hr.Application.csproj" />
+    <Project Path="modules/Rongia.Hr/Rongia.Hr.Domain/Rongia.Hr.Domain.csproj" />
+    <Project Path="modules/Rongia.Hr/Rongia.Hr.Infrastructure/Rongia.Hr.Infrastructure.csproj" />
   </Folder>
+  <Project Path="Rongia/Rongia.csproj" />
 </Solution>

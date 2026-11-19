@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Rongia.Modularity;
@@ -16,10 +14,10 @@ public static class ApplicationFactory
     /// <typeparam name="TStartupModule">启动模块类型</typeparam>
     /// <param name="services">服务集合</param>
     /// <returns>已完成服务注册的应用实例</returns>
-    public static async Task<IApplication> CreateAsync<TStartupModule>(IServiceCollection services)
-        where TStartupModule : IModule
+    public static Task<Application> CreateAsync<TStartupModule>(IServiceCollection services)
+        where TStartupModule : Module
     {
-        return await CreateAsync(services, typeof(TStartupModule));
+        return CreateAsync(services, typeof(TStartupModule));
     }
 
     /// <summary>
@@ -28,20 +26,19 @@ public static class ApplicationFactory
     /// <param name="services">服务集合</param>
     /// <param name="startupModuleType">启动模块类型</param>
     /// <returns>已完成服务注册的应用实例</returns>
-    public static async Task<IApplication> CreateAsync(IServiceCollection services, Type startupModuleType)
+    public static async Task<Application> CreateAsync(IServiceCollection services, Type startupModuleType)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(startupModuleType);
 
-        IModuleLoader loader = new ModuleLoader();
-        IModuleDescriptor[] modules = loader.LoadModules(services, startupModuleType);
+        ModuleLoadResult loadResult = new ModuleLoader().LoadModules(services, startupModuleType);
 
-        ModuleContainer container = new ModuleContainer(modules);
+        // 加载器已建好 Type → 描述信息 的索引,容器直接复用
+        ModuleContainer container = new ModuleContainer(loadResult);
         Application application = new Application(services, container);
 
         services.AddSingleton<IModuleContainer>(container);
         services.AddSingleton(application);
-        services.AddSingleton<IApplication>(application);
 
         await application.ConfigureServicesAsync();
 

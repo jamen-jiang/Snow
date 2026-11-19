@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace Rongia.DependencyInjection;
 
 /// <summary>
@@ -30,8 +28,8 @@ public static class ExposedServiceExplorer
     }
 
     /// <summary>
-    /// 默认推断规则:只暴露与实现类型处于同一程序集、且名称以大写 I 开头的接口(泛型按定义名判断)。
-    /// 同程序集判据把 BCL 与第三方库的接口(IDisposable、IComparable、ILogger 等)排除在外,
+    /// 默认推断规则:接口名去掉开头的 I 之后必须以实现类型名结尾(泛型按定义名判断),对齐 ABP 的命名后缀判据。
+    /// 该判据跨程序集有效,同时把 BCL 与第三方库的接口(IDisposable、IComparable、ILogger 等)排除在外,
     /// 避免实现类因为顺带实现了某个框架接口而被登记成该框架接口的服务
     /// </summary>
     /// <param name="type">实现类型</param>
@@ -39,15 +37,9 @@ public static class ExposedServiceExplorer
     public static List<Type> GetDefaultServices(Type type)
     {
         List<Type> serviceTypes = new List<Type>();
-        Assembly implementationAssembly = type.Assembly;
 
         foreach (Type interfaceType in type.GetInterfaces())
         {
-            if (interfaceType.Assembly != implementationAssembly)
-            {
-                continue;
-            }
-
             Type definition = interfaceType.IsGenericType ? interfaceType.GetGenericTypeDefinition() : interfaceType;
             string name = definition.Name;
 
@@ -58,6 +50,12 @@ public static class ExposedServiceExplorer
             }
 
             if (name.Length <= 1 || !name.StartsWith("I", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // 去掉开头的 I 之后必须是实现类名的后缀, 才认定它是该类对外暴露的默认服务类型
+            if (!type.Name.EndsWith(name.Substring(1), StringComparison.Ordinal))
             {
                 continue;
             }

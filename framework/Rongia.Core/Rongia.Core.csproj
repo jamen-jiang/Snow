@@ -4,5 +4,12 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Description>框架内核: 模块系统、约定式依赖注入、AOP 拦截契约、消息契约(命令/查询/管道行为)</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rongia.Aop.Castle" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Scrutor" />
+  </ItemGroup>
 </Project>

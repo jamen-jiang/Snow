@@ -32,7 +32,7 @@ public class CommandHandlerWrapper<TCommand, TResponse>
             .GetServices<IPipelineBehavior<TCommand, TResponse>>()
             .Reverse()
             .Aggregate((RequestHandlerDelegate<TResponse>) Handler,
-                (next, pipeline) => (t) => pipeline.HandleAsync((TCommand) command, next, t == default ? cancellationToken : t))();
+                (next, pipeline) => (t) => pipeline.HandleAsync((TCommand) command, next, t == default ? cancellationToken : t))(cancellationToken);
     }
 }
 
@@ -65,6 +65,6 @@ public class CommandHandlerWrapper<TCommand>
             .GetServices<IPipelineBehavior<TCommand, Unit>>()
             .Reverse()
             .Aggregate((RequestHandlerDelegate<Unit>) Handler,
-                (next, pipeline) => (t) => pipeline.HandleAsync((TCommand) command, next, t == default ? cancellationToken : t))();
+                (next, pipeline) => (t) => pipeline.HandleAsync((TCommand) command, next, t == default ? cancellationToken : t))(cancellationToken);
     }
 }

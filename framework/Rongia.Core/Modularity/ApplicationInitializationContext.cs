@@ -1,3 +1,7 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Rongia.DependencyInjection;
+
 namespace Rongia.Modularity;
 
 /// <summary>

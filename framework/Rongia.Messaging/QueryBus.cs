@@ -10,7 +10,6 @@ namespace Rongia.Messaging;
 /// <summary>
 /// <see cref="IQueryBus"/> 的默认实现:按查询类型缓存包装器的调用委托,避免每次查询都做反射
 /// </summary>
-[ExposeServices(typeof(IQueryBus))]
 public class QueryBus : IQueryBus, ITransientDependency
 {
     private static readonly ConcurrentDictionary<Type, object> _queryHandlers = new();

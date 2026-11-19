@@ -16,9 +16,7 @@ public sealed class DependencyAttribute : Attribute
     /// <summary>
     /// 保留的 ABP 兼容属性:true 表示用 TryAdd 语义注册
     /// </summary>
-    /// <remarks>
-    /// Rongia 的约定注册本身幂等(同一服务类型加同一实现类型不会重复登记),该属性只表达意图,不改变结果。
-    /// </remarks>
+    /// <remarks>Rongia 的约定注册本身幂等(同一服务类型加同一实现类型不会重复登记),该属性只表达意图,不改变结果。</remarks>
     public bool TryRegister { get; set; }
 
     /// <summary>

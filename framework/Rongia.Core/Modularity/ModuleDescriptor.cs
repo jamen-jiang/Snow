@@ -3,37 +3,39 @@ using System.Reflection;
 namespace Rongia.Modularity;
 
 /// <summary>
-/// 模块描述信息的默认实现(对应 ABP 的 AbpModuleDescriptor)
+/// 模块描述信息(对应 ABP 的 AbpModuleDescriptor)
 /// </summary>
-public class ModuleDescriptor : IModuleDescriptor
+public class ModuleDescriptor
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// 模块类型
+    /// </summary>
     public Type Type { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// 模块类型所在的程序集,也是约定扫描的范围
+    /// </summary>
     public Assembly Assembly { get; }
 
-    /// <inheritdoc />
-    public Assembly[] AllAssemblies { get; }
+    /// <summary>
+    /// 模块实例
+    /// </summary>
+    public Module Instance { get; }
 
-    /// <inheritdoc />
-    public IModule Instance { get; }
+    /// <summary>
+    /// 直接依赖的模块,被依赖者在前
+    /// </summary>
+    public IReadOnlyList<ModuleDescriptor> Dependencies => _dependencies;
 
-    /// <inheritdoc />
-    public bool IsLoadedAsPlugIn { get; }
-
-    /// <inheritdoc />
-    public IReadOnlyList<IModuleDescriptor> Dependencies => _dependencies;
-
-    private readonly List<IModuleDescriptor> _dependencies;
+    private readonly List<ModuleDescriptor> _dependencies;
+    private readonly HashSet<ModuleDescriptor> _dependencySet;
 
     /// <summary>
     /// 构造器
     /// </summary>
     /// <param name="type">模块类型</param>
     /// <param name="instance">模块实例</param>
-    /// <param name="isLoadedAsPlugIn">是否以插件方式加载</param>
-    public ModuleDescriptor(Type type, IModule instance, bool isLoadedAsPlugIn = false)
+    public ModuleDescriptor(Type type, Module instance)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(instance);
@@ -48,22 +50,21 @@ public class ModuleDescriptor : IModuleDescriptor
 
         Type = type;
         Assembly = type.Assembly;
-        AllAssemblies = ModuleHelper.GetAllAssemblies(type);
         Instance = instance;
-        IsLoadedAsPlugIn = isLoadedAsPlugIn;
 
-        _dependencies = new List<IModuleDescriptor>();
+        _dependencies = new List<ModuleDescriptor>();
+        _dependencySet = new HashSet<ModuleDescriptor>();
     }
 
     /// <summary>
     /// 追加一个直接依赖的模块,已存在时不重复添加
     /// </summary>
     /// <param name="descriptor">被依赖模块的描述信息</param>
-    public void AddDependency(IModuleDescriptor descriptor)
+    public void AddDependency(ModuleDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
 
-        if (!_dependencies.Contains(descriptor))
+        if (_dependencySet.Add(descriptor))
         {
             _dependencies.Add(descriptor);
         }

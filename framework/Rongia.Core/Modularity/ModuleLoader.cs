@@ -3,32 +3,37 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Rongia.Modularity;
 
 /// <summary>
-/// 模块加载器的默认实现(对应 ABP 的 ModuleLoader):
-/// 从启动模块出发收集全部模块类型,建立依赖图后按"被依赖者在前"排序
+/// 模块加载器(对应 ABP 的 ModuleLoader):
+/// 从启动模块出发收集全部模块类型,建立依赖图后按"被依赖者在前"排序。
+/// <para>类型索引只建一次:依赖解析、启动模块定位与容器查询共用同一个字典。</para>
 /// </summary>
-public class ModuleLoader : IModuleLoader
+public class ModuleLoader
 {
-    /// <inheritdoc />
-    public IModuleDescriptor[] LoadModules(IServiceCollection services, Type startupModuleType)
+    /// <summary>
+    /// 加载启动模块及其全部依赖,返回按依赖顺序排好的模块
+    /// </summary>
+    /// <param name="services">服务集合,模块实例会以自身类型登记为单例</param>
+    /// <param name="startupModuleType">启动模块类型</param>
+    /// <returns>模块加载结果</returns>
+    public ModuleLoadResult LoadModules(IServiceCollection services, Type startupModuleType)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(startupModuleType);
 
-        List<ModuleDescriptor> modules = GetDescriptors(services, startupModuleType);
-
-        List<IModuleDescriptor> sortedModules = SortByDependency(modules, startupModuleType);
-
-        return sortedModules.ToArray();
-    }
-
-    private List<ModuleDescriptor> GetDescriptors(IServiceCollection services, Type startupModuleType)
-    {
         List<ModuleDescriptor> modules = new List<ModuleDescriptor>();
 
         FillModules(modules, services, startupModuleType);
-        SetDependencies(modules);
 
-        return modules;
+        Dictionary<Type, ModuleDescriptor> modulesByType = IndexModules(modules);
+
+        foreach (ModuleDescriptor module in modules)
+        {
+            SetDependencies(modulesByType, module);
+        }
+
+        IReadOnlyList<ModuleDescriptor> sortedModules = SortByDependency(modules, modulesByType, startupModuleType);
+
+        return new ModuleLoadResult(sortedModules, modulesByType);
     }
 
     /// <summary>
@@ -46,30 +51,37 @@ public class ModuleLoader : IModuleLoader
     }
 
     /// <summary>
-    /// 为每个模块解析出直接依赖的描述信息
+    /// 建立"模块类型 → 模块描述信息"的索引。这是整条链路上唯一一次建表,结果会随加载结果一起交给模块容器。
     /// </summary>
     /// <param name="modules">全部模块描述信息</param>
-    protected virtual void SetDependencies(List<ModuleDescriptor> modules)
+    /// <returns>模块类型索引</returns>
+    /// <exception cref="ModuleLoadException">同一模块类型被加载了两次</exception>
+    protected virtual Dictionary<Type, ModuleDescriptor> IndexModules(List<ModuleDescriptor> modules)
     {
+        Dictionary<Type, ModuleDescriptor> modulesByType = new Dictionary<Type, ModuleDescriptor>(modules.Count);
+
         foreach (ModuleDescriptor module in modules)
         {
-            SetDependencies(modules, module);
+            if (!modulesByType.TryAdd(module.Type, module))
+            {
+                throw new ModuleLoadException("同一个模块类型被加载了两次: " + module.Type.AssemblyQualifiedName);
+            }
         }
+
+        return modulesByType;
     }
 
     /// <summary>
-    /// 为单个模块解析出直接依赖的描述信息
+    /// 为单个模块解析出直接依赖的描述信息,全部走字典查找
     /// </summary>
-    /// <param name="modules">全部模块描述信息</param>
+    /// <param name="modulesByType">模块类型到描述信息的索引</param>
     /// <param name="module">待处理的模块</param>
     /// <exception cref="ModuleLoadException">依赖的模块不在已加载的模块列表里</exception>
-    protected virtual void SetDependencies(List<ModuleDescriptor> modules, ModuleDescriptor module)
+    protected virtual void SetDependencies(IReadOnlyDictionary<Type, ModuleDescriptor> modulesByType, ModuleDescriptor module)
     {
         foreach (Type dependedModuleType in ModuleHelper.FindDependedModuleTypes(module.Type))
         {
-            ModuleDescriptor? dependedModule = modules.FirstOrDefault(candidate => candidate.Type == dependedModuleType);
-
-            if (dependedModule == null)
+            if (!modulesByType.TryGetValue(dependedModuleType, out ModuleDescriptor? dependedModule))
             {
                 throw new ModuleLoadException(
                     "找不到模块 " + module.Type.AssemblyQualifiedName + " 依赖的模块 " + dependedModuleType.AssemblyQualifiedName);
@@ -84,11 +96,10 @@ public class ModuleLoader : IModuleLoader
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="moduleType">模块类型</param>
-    /// <param name="isLoadedAsPlugIn">是否以插件方式加载</param>
     /// <returns>模块描述信息</returns>
-    protected virtual ModuleDescriptor CreateModuleDescriptor(IServiceCollection services, Type moduleType, bool isLoadedAsPlugIn = false)
+    protected virtual ModuleDescriptor CreateModuleDescriptor(IServiceCollection services, Type moduleType)
     {
-        return new ModuleDescriptor(moduleType, CreateAndRegisterModule(services, moduleType), isLoadedAsPlugIn);
+        return new ModuleDescriptor(moduleType, CreateAndRegisterModule(services, moduleType));
     }
 
     /// <summary>
@@ -97,9 +108,9 @@ public class ModuleLoader : IModuleLoader
     /// <param name="services">服务集合</param>
     /// <param name="moduleType">模块类型</param>
     /// <returns>模块实例</returns>
-    protected virtual IModule CreateAndRegisterModule(IServiceCollection services, Type moduleType)
+    protected virtual Module CreateAndRegisterModule(IServiceCollection services, Type moduleType)
     {
-        IModule module = ModuleHelper.CreateInstance(moduleType);
+        Module module = ModuleHelper.CreateInstance(moduleType);
 
         services.AddSingleton(moduleType, module);
 
@@ -110,21 +121,29 @@ public class ModuleLoader : IModuleLoader
     /// 按依赖关系拓扑排序,被依赖的模块排在前,启动模块固定排最后
     /// </summary>
     /// <param name="modules">全部模块描述信息</param>
+    /// <param name="modulesByType">模块类型到描述信息的索引,用于直接定位启动模块</param>
     /// <param name="startupModuleType">启动模块类型</param>
     /// <returns>排好序的模块描述信息</returns>
-    /// <exception cref="ModuleLoadException">依赖成环时抛出</exception>
-    protected virtual List<IModuleDescriptor> SortByDependency(List<ModuleDescriptor> modules, Type startupModuleType)
+    /// <exception cref="ModuleLoadException">依赖成环,或启动模块不在列表里时抛出</exception>
+    protected virtual List<ModuleDescriptor> SortByDependency(
+        List<ModuleDescriptor> modules,
+        IReadOnlyDictionary<Type, ModuleDescriptor> modulesByType,
+        Type startupModuleType)
     {
-        List<IModuleDescriptor> sortedModules = new List<IModuleDescriptor>(modules.Count);
-        Dictionary<Type, int> states = new Dictionary<Type, int>();
+        List<ModuleDescriptor> sortedModules = new List<ModuleDescriptor>(modules.Count);
+        Dictionary<Type, int> states = new Dictionary<Type, int>(modules.Count);
+        HashSet<ModuleDescriptor> addedModules = new HashSet<ModuleDescriptor>(modules.Count);
         List<Type> path = new List<Type>();
 
         foreach (ModuleDescriptor module in modules)
         {
-            Visit(module, sortedModules, states, path);
+            Visit(module, sortedModules, addedModules, states, path);
         }
 
-        ModuleDescriptor startupModule = modules.First(module => module.Type == startupModuleType);
+        if (!modulesByType.TryGetValue(startupModuleType, out ModuleDescriptor? startupModule))
+        {
+            throw new ModuleLoadException("启动模块不在已加载的模块列表里: " + startupModuleType.AssemblyQualifiedName);
+        }
 
         sortedModules.Remove(startupModule);
         sortedModules.Add(startupModule);
@@ -132,8 +151,14 @@ public class ModuleLoader : IModuleLoader
         return sortedModules;
     }
 
-    private static void Visit(IModuleDescriptor module, List<IModuleDescriptor> sortedModules, Dictionary<Type, int> states, List<Type> path)
+    private static void Visit(
+        ModuleDescriptor module,
+        List<ModuleDescriptor> sortedModules,
+        HashSet<ModuleDescriptor> addedModules,
+        Dictionary<Type, int> states,
+        List<Type> path)
     {
+        // 1 = 正在访问(出现在当前路径上), 2 = 已完成
         if (states.TryGetValue(module.Type, out int state))
         {
             if (state == 1)
@@ -156,15 +181,16 @@ public class ModuleLoader : IModuleLoader
         states[module.Type] = 1;
         path.Add(module.Type);
 
-        foreach (IModuleDescriptor dependency in module.Dependencies)
+        foreach (ModuleDescriptor dependency in module.Dependencies)
         {
-            Visit(dependency, sortedModules, states, path);
+            Visit(dependency, sortedModules, addedModules, states, path);
         }
 
         path.RemoveAt(path.Count - 1);
         states[module.Type] = 2;
 
-        if (!sortedModules.Contains(module))
+        // states 已保证每个模块只走一次, 这里用 HashSet 免掉列表线性查找
+        if (addedModules.Add(module))
         {
             sortedModules.Add(module);
         }

@@ -32,6 +32,6 @@ public class QueryHandlerWrapper<TQuery, TResponse>
             .GetServices<IPipelineBehavior<TQuery, TResponse>>()
             .Reverse()
             .Aggregate((RequestHandlerDelegate<TResponse>) Handler,
-                (next, pipeline) => (t) => pipeline.HandleAsync((TQuery) query, next, t == default ? cancellationToken : t))();
+                (next, pipeline) => (t) => pipeline.HandleAsync((TQuery) query, next, t == default ? cancellationToken : t))(cancellationToken);
     }
 }

@@ -10,7 +10,6 @@ namespace Rongia.Messaging;
 /// <summary>
 /// <see cref="ICommandBus"/> 的默认实现:按命令类型缓存包装器的调用委托,避免每次发送都做反射
 /// </summary>
-[ExposeServices(typeof(ICommandBus))]
 public class CommandBus : ICommandBus, ITransientDependency
 {
     private static readonly ConcurrentDictionary<Type, object> _requestHandlers = new();

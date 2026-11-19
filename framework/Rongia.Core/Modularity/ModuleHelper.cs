@@ -20,7 +20,7 @@ public static class ModuleHelper
 
         logger?.Log(LogLevel.Debug, "已加载的模块:");
 
-        AddModuleAndDependenciesRecursively(moduleTypes, startupModuleType, logger);
+        AddModuleAndDependenciesRecursively(moduleTypes, new HashSet<Type>(), startupModuleType, logger);
 
         return moduleTypes;
     }
@@ -35,6 +35,7 @@ public static class ModuleHelper
         CheckModuleType(moduleType);
 
         List<Type> dependencies = new List<Type>();
+        HashSet<Type> seen = new HashSet<Type>();
 
         foreach (object attribute in moduleType.GetCustomAttributes(true))
         {
@@ -45,7 +46,7 @@ public static class ModuleHelper
 
             foreach (Type dependedModuleType in provider.GetDependedTypes())
             {
-                if (dependedModuleType != null && !dependencies.Contains(dependedModuleType))
+                if (dependedModuleType != null && seen.Add(dependedModuleType))
                 {
                     dependencies.Add(dependedModuleType);
                 }
@@ -56,47 +57,17 @@ public static class ModuleHelper
     }
 
     /// <summary>
-    /// 取模块自身程序集以及 AdditionalAssemblyAttribute 声明的附加程序集,按声明顺序去重
-    /// </summary>
-    /// <param name="moduleType">模块类型</param>
-    /// <returns>模块相关的程序集</returns>
-    public static Assembly[] GetAllAssemblies(Type moduleType)
-    {
-        ArgumentNullException.ThrowIfNull(moduleType);
-
-        List<Assembly> assemblies = new List<Assembly>();
-
-        foreach (object attribute in moduleType.GetCustomAttributes(typeof(IAdditionalModuleAssemblyProvider), true))
-        {
-            foreach (Assembly assembly in ((IAdditionalModuleAssemblyProvider)attribute).GetAssemblies())
-            {
-                if (assembly != null && !assemblies.Contains(assembly))
-                {
-                    assemblies.Add(assembly);
-                }
-            }
-        }
-
-        if (!assemblies.Contains(moduleType.Assembly))
-        {
-            assemblies.Add(moduleType.Assembly);
-        }
-
-        return assemblies.ToArray();
-    }
-
-    /// <summary>
     /// 校验类型是可实例化的模块类型
     /// </summary>
     /// <param name="moduleType">模块类型</param>
-    /// <exception cref="ModuleLoadException">类型未实现 IModule 或为抽象类型</exception>
+    /// <exception cref="ModuleLoadException">类型未继承 <see cref="Module"/> 或为抽象类型</exception>
     public static void CheckModuleType(Type moduleType)
     {
         ArgumentNullException.ThrowIfNull(moduleType);
 
-        if (!typeof(IModule).IsAssignableFrom(moduleType))
+        if (!typeof(Module).IsAssignableFrom(moduleType))
         {
-            throw new ModuleLoadException("类型 " + moduleType.FullName + " 未实现 IModule");
+            throw new ModuleLoadException("类型 " + moduleType.FullName + " 未继承 " + nameof(Rongia.Modularity.Module));
         }
 
         if (moduleType.IsAbstract)
@@ -111,13 +82,13 @@ public static class ModuleHelper
     /// <param name="moduleType">模块类型</param>
     /// <returns>模块实例</returns>
     /// <exception cref="ModuleLoadException">类型非法或缺少公共无参构造器</exception>
-    public static IModule CreateInstance(Type moduleType)
+    public static Module CreateInstance(Type moduleType)
     {
         CheckModuleType(moduleType);
 
         try
         {
-            return (IModule)Activator.CreateInstance(moduleType)!;
+            return (Module)Activator.CreateInstance(moduleType)!;
         }
         catch (Exception exception)
         {
@@ -125,11 +96,11 @@ public static class ModuleHelper
         }
     }
 
-    private static void AddModuleAndDependenciesRecursively(List<Type> moduleTypes, Type moduleType, ILogger? logger, int depth = 0)
+    private static void AddModuleAndDependenciesRecursively(List<Type> moduleTypes, HashSet<Type> visited, Type moduleType, ILogger? logger, int depth = 0)
     {
         CheckModuleType(moduleType);
 
-        if (moduleTypes.Contains(moduleType))
+        if (!visited.Add(moduleType))
         {
             return;
         }
@@ -140,7 +111,7 @@ public static class ModuleHelper
 
         foreach (Type dependedModuleType in FindDependedModuleTypes(moduleType))
         {
-            AddModuleAndDependenciesRecursively(moduleTypes, dependedModuleType, logger, depth + 1);
+            AddModuleAndDependenciesRecursively(moduleTypes, visited, dependedModuleType, logger, depth + 1);
         }
     }
 }
