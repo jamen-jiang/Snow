@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.Ftping.FluentFTP</RootNamespace>
+    <Description>FTP 客户端 FluentFTP 实现: 连接/上传/下载/删除/建目录/目录列表, 顶替契约包的 IFtpClient</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentFTP" />
+    <!-- CodePagesEncodingProvider(gb2312/gbk 这类代码页)自 .NET 11 起随共享框架自带, 不需要显式引用 -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Ftping\Snow.Ftping.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,31 +1,53 @@
 <Project>
-  <!-- 所有可发布项目共用的构建与打包元数据, 由各 csproj 显式 Import(与 ABP 的 common.props 同形) -->
+  <!-- 所有可发布项目共用的构建与打包元数据, 由各 csproj 显式 Import(与 ABP 的 common.props 同形)
+       版本号只在这里维护: 发版时改 Version 一处, 全仓 28 个包同步 -->
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <Version>1.0.0</Version>
-    <Authors>Rongia</Authors>
-    <Company>Rongia</Company>
-    <Product>Rongia Framework</Product>
-    <Copyright>Copyright (c) Rongia</Copyright>
+    <Authors>Snow</Authors>
+    <Company>Snow</Company>
+    <Product>Snow Framework</Product>
+    <Copyright>Copyright (c) Snow</Copyright>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://gitee.com/jamen-jiang/Rongia</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/jamen-jiang/Snow</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://gitee.com/jamen-jiang/Rongia.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/jamen-jiang/Snow.git</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageReadmeFile>NuGet.md</PackageReadmeFile>
-    <PackageTags>rongia framework modular dependency-injection aop eventbus messaging caching cqrs</PackageTags>
+    <PackageTags>snow framework modular dependency-injection aop eventbus messaging caching cqrs ddd</PackageTags>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- 把符号文件一并打进 nupkg -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+    <!-- 单独产出 .snupkg 符号包, 调试时可从 nuget.org 符号服务器拉源码 -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)NuGet.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
+  <!-- 源码链接: 把 PDB 里的文件路径映射成 GitHub 上的 raw 地址, 调试时能直接跳到对应 commit 的行。
+       一旦引用任何 Microsoft.SourceLink.* 包, SDK 会关掉自己内置的那套(SuppressImplicitGitSourceLink),
+       改由这里的包接管 —— 所以三个包必须一起引:
+         Microsoft.SourceLink.GitHub 决定 URL 形状,
+         Microsoft.SourceLink.Common  提供 _GenerateSourceLinkFile 目标,
+         Microsoft.Build.Tasks.Git    提供 LocateRepository(读 commit 与仓库根)。
+       后两个是 GitHub 包的传递依赖, 传递依赖的 build 资产不上浮, 只引 GitHub 包会让 SourceLink 整体失效
+       (构建能过, 但 PDB 里一条映射都没有, 也不会报任何警告)。 -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.Gitee" Version="10.0.102">
+    <PackageReference Include="Microsoft.SourceLink.GitHub">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.SourceLink.Common">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Build.Tasks.Git">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Snow.BackgroundJobs</AssemblyName>
+    <PackageId>Snow.BackgroundJobs</PackageId>
+    <RootNamespace>Snow.BackgroundJobs</RootNamespace>
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <Description>后台任务实现: 默认管理器、进程内存储、JSON 序列化、轮询 worker 与模块注册</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.BackgroundJobs.Abstractions\Snow.BackgroundJobs.Abstractions.csproj" />
+    <ProjectReference Include="..\Snow.DistributedLocking\Snow.DistributedLocking.csproj" />
+  </ItemGroup>
+
+</Project>

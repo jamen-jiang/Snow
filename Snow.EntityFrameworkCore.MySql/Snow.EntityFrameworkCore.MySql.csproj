@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.EntityFrameworkCore</RootNamespace>
+    <!-- 依赖的 MySql.EntityFrameworkCore 只有 11.0.0-preview 通道, 稳定版包不允许带预发布依赖(NU5104),
+         所以本包自身也走预发布版本; 等 Oracle 发稳定版后删掉这一行即可。
+         这里必须用 PackageVersion 而不是 Version: 打包脚本传 -p:Version=x.y.z 时,
+         全局属性会顶掉项目里对 Version 的赋值, 只有 PackageVersion 不受影响 -->
+    <PackageVersion>$(Version)-preview.1</PackageVersion>
+    <Description>MySQL 数据库提供程序: UseMySql 配置扩展与模块(基于 Oracle 官方 MySql.EntityFrameworkCore)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MySql.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.EntityFrameworkCore\Snow.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+</Project>

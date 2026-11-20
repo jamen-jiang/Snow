@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Snow.AspNetCore</AssemblyName>
+    <PackageId>Snow.AspNetCore</PackageId>
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <!-- 入口包只聚合引用, 不含静态资源; 关掉 StaticWebAssets 以免 SDK 报 scoped css bundle 缺端点 -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <Description>Web 宿主入口包: 一次引用拿到 ASP.NET Core 场景下的全部框架能力(与 ABP 的 Volo.Abp.AspNetCore 同位)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow\Snow.csproj" />
+    <ProjectReference Include="..\Snow.AspNetCore.Serilog\Snow.AspNetCore.Serilog.csproj" />
+    <ProjectReference Include="..\Snow.Aop.Castle\Snow.Aop.Castle.csproj" />
+    <ProjectReference Include="..\Snow.Application\Snow.Application.csproj" />
+    <ProjectReference Include="..\Snow.Authorization\Snow.Authorization.csproj" />
+    <ProjectReference Include="..\Snow.Caching\Snow.Caching.csproj" />
+    <ProjectReference Include="..\Snow.Caching.StackExchangeRedis\Snow.Caching.StackExchangeRedis.csproj" />
+    <ProjectReference Include="..\Snow.DistributedLocking.Redis\Snow.DistributedLocking.Redis.csproj" />
+    <ProjectReference Include="..\Snow.DistributedLocking\Snow.DistributedLocking.csproj" />
+    <ProjectReference Include="..\Snow.Domain\Snow.Domain.csproj" />
+    <ProjectReference Include="..\Snow.Emailing\Snow.Emailing.csproj" />
+    <ProjectReference Include="..\Snow.EventBus\Snow.EventBus.csproj" />
+    <ProjectReference Include="..\Snow.Ftping\Snow.Ftping.csproj" />
+    <ProjectReference Include="..\Snow.BackgroundJobs.HangFire\Snow.BackgroundJobs.HangFire.csproj" />
+    <ProjectReference Include="..\Snow.Messaging\Snow.Messaging.csproj" />
+    <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />
+    <ProjectReference Include="..\Snow.Security.SaToken\Snow.Security.SaToken.csproj" />
+    <ProjectReference Include="..\Snow.Uow\Snow.Uow.csproj" />
+    <ProjectReference Include="..\Snow.EntityFrameworkCore\Snow.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+</Project>

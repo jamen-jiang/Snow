@@ -6,7 +6,6 @@
 
   <ItemGroup>
     <PackageReference Condition="'$(IsTestProject)' == 'true'" Include="coverlet.collector">
-      <Version>6.0.4</Version>
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Description>FTP 客户端契约: 接口、文件模型与配置(不含实现, 实现见 Snow.Ftping.FluentFTP)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Configure<T>(IConfigurationSection) 与模块基类所在的基础设施 -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 模块基类(SnowModule / ServiceConfigurationContext)与生命周期标记都在 Snow.Core -->
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+  </ItemGroup>
+
+</Project>

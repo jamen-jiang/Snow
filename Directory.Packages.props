@@ -1,0 +1,59 @@
+<Project>
+  <!-- 中央包版本管理(对应 Java 根 pom 的版本统一管理)
+       由本文件顶部的 ManagePackageVersionsCentrally 开启: 全仓 PackageReference 一律不写 Version,
+       版本只在这里维护, 升级依赖只改这一处 -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 程序集扫描与装饰器扩展: 约定注册的扫描引擎 -->
+    <PackageVersion Include="Scrutor" Version="7.0.0" />
+    <!-- 动态 LINQ 排序: System.Linq 扩展里的 OrderByIf(..., string sorting) 依赖它 -->
+    <PackageVersion Include="System.Linq.Dynamic.Core" Version="1.6.7" />
+
+    <!-- AOP 代理引擎: 生成接口代理, 支撑方法拦截 -->
+    <PackageVersion Include="Castle.Core" Version="5.2.1" />
+
+    <!-- Redis 客户端: 自研分布式锁(Snow.DistributedLocking.Redis)与缓存共用 -->
+    <PackageVersion Include="StackExchange.Redis" Version="3.4.35" />
+    <!-- Redis 分布式缓存: 登录态存 Redis(对齐 Java 版 sa-token-redisson), 多实例共享 -->
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="11.0.0" />
+    <!-- 选项绑定: 模块基类 SnowModule 的 Configure<T>(IConfiguration) 便捷方法要用 -->
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0" />
+
+    <!-- 表达式引擎: 缓存/锁注解的 Key/Condition/Unless 求值, MIT -->
+    <PackageVersion Include="DynamicExpresso.Core" Version="2.19.6" />
+
+    <!-- EF Core: 框架持久化基座(提供程序由 Snow.EntityFrameworkCore.SqlServer / .Sqlite / .MySql 引入) -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0" />
+    <!-- MySQL 提供程序: Oracle 官方包, 11.0.0 只有 preview 通道 -->
+    <PackageVersion Include="MySql.EntityFrameworkCore" Version="11.0.0-preview" />
+
+    <!-- 后台任务适配: Hangfire 队列 + 进程内存储(开发期免装数据库) -->
+    <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.25" />
+    <PackageVersion Include="Hangfire.InMemory" Version="1.0.0" />
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+
+    <!-- 日志: Serilog 宿主集成 -->
+    <PackageVersion Include="Serilog.AspNetCore" Version="11.0.0" />
+
+    <!-- 邮件: MailKit 的 SMTP 客户端(MimeKit 随它一并带入), 只被 Snow.Emailing.MailKit 引用 -->
+    <PackageVersion Include="MailKit" Version="5.0.0" />
+
+    <!-- FTP: FluentFTP 客户端, 只被 Snow.Ftping.FluentFTP 引用 -->
+    <PackageVersion Include="FluentFTP" Version="55.1.0" />
+
+    <!-- 源码链接: PDB 里的路径映射成 GitHub 上的 commit 地址, 栈追踪可直接跳到源码行。
+         Common 与 Build.Tasks.Git 必须一并显式引用: 它们是 GitHub 包的传递依赖, 而传递依赖的 build 资产
+         不会上浮(asstes 里是 buildTransitive/_._), 只引 GitHub 包会让整套 SourceLink 目标缺失 -->
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="11.0.100" />
+    <PackageVersion Include="Microsoft.SourceLink.Common" Version="11.0.100" />
+    <PackageVersion Include="Microsoft.Build.Tasks.Git" Version="11.0.100" />
+
+    <!-- 测试: 覆盖率收集 -->
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+  </ItemGroup>
+</Project>

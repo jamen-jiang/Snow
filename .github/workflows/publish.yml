@@ -1,0 +1,92 @@
+# GitHub Actions 工作流: 打 tag 时自动把 Snow 框架打成 NuGet 包并发布到 nuget.org
+#
+# 与本地 build/pack.ps1 + build/push.ps1 等价, 区别只有认证方式:
+#   本地 = 长期 API Key (环境变量 NUGET_API_KEY)
+#   这里 = Trusted Publishing, 用 OIDC 换 1 小时有效的临时 Key, 不存任何密钥
+#
+# nuget.org 侧要配一条策略 (Trusted Publishing → Add policy):
+#   Repository Owner : jamen-jiang
+#   Repository       : Snow
+#   Workflow File    : publish.yml
+#   Environment      : (留空)
+
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # 手动触发: 不建 tag 也能发一版, 版本号自己填
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要发布的版本号, 例如 1.2.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write          # 必须: 没有它就拿不到 OIDC token, NuGet/login 会失败
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 —— SourceLink 要把 PDB 里的行号映射回 commit, 浅克隆拿不到完整历史
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.x'
+
+      # 版本号: tag 触发取 v 后面的部分, 手动触发取输入框
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $version = '${{ inputs.version }}'
+          } else {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw 'version is empty'
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "publishing version $version"
+
+      # 复用仓库里现成的打包脚本, 保证本地与 CI 的产物一致
+      - name: Pack
+        shell: pwsh
+        run: ./build/pack.ps1 -Version '${{ steps.version.outputs.version }}'
+
+      # OIDC token → nuget.org 换取临时 API Key (有效期 1 小时, 一 token 一 key)
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          # nuget.org 的 profile 名(不是邮箱)。仓库 Secrets 里配了 NUGET_USER 就用它, 没配则用默认值
+          user: ${{ secrets.NUGET_USER || 'jamen-jiang' }}
+
+      # 逐个推: 先 nupkg 再 snupkg, 符号包必须跟在自己的包后面; --skip-duplicate 让重跑不报错
+      - name: Push to nuget.org
+        shell: pwsh
+        run: |
+          $key = '${{ steps.login.outputs.NUGET_API_KEY }}'
+          $files = @(Get-ChildItem -Path ".nuget-packages" -Filter "*.nupkg" -File) +
+                   @(Get-ChildItem -Path ".nuget-packages" -Filter "*.snupkg" -File)
+          if ($files.Count -eq 0) {
+            throw ".nuget-packages 目录里没有可发布的包"
+          }
+          foreach ($file in $files) {
+            Write-Host "pushing $($file.Name)"
+            dotnet nuget push $file.FullName `
+              --api-key $key `
+              --source https://api.nuget.org/v3/index.json `
+              --skip-duplicate
+            if ($LASTEXITCODE -ne 0) {
+              throw "push failed: $($file.Name)"
+            }
+          }

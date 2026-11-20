@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.Messaging</RootNamespace>
+    <Description>消息总线: 命令/查询契约(含管道行为接口)与默认派发实现, 通过 DI 自动扫描并注册处理器</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />
+  </ItemGroup>
+</Project>
