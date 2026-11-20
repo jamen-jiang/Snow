@@ -8,16 +8,17 @@ using Snow.DistributedLocking;
 namespace Snow.BackgroundJobs;
 
 /// <summary>
-/// 任务 worker: 定时轮询存储, 取待执行任务交给 <see cref="IBackgroundJobExecuter"/>
-/// <para>成功即删除; 失败按指数退避回写下次执行时间; 超过 <see cref="BackgroundJobWorkerOptions.Timeout"/> 或参数反序列化失败则放弃。</para>
+/// 内置 worker: 定时轮询存储, 取到点任务交给 <see cref="BackgroundJobInvoker"/>
+/// <para>成功即删除; 失败按 <see cref="BackgroundJobOptions.RetryDelay"/> 指数退避回写下次执行时间,
+/// 尝试次数达到 <see cref="BackgroundJobOptions.MaxRetryCount"/> 即放弃并删除。</para>
 /// </summary>
 public sealed class BackgroundJobWorker : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
 
-    private readonly BackgroundJobOptions _jobOptions;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    private readonly BackgroundJobWorkerOptions _workerOptions;
+    private readonly BackgroundJobOptions _options;
 
     private readonly ILogger<BackgroundJobWorker> _logger;
 
@@ -25,20 +26,26 @@ public sealed class BackgroundJobWorker : BackgroundService
     /// 构造器
     /// </summary>
     /// <param name="serviceProvider">根服务提供者</param>
-    /// <param name="jobOptions">任务配置</param>
-    /// <param name="workerOptions">worker 配置</param>
+    /// <param name="options">任务配置</param>
     /// <param name="logger">日志</param>
-    public BackgroundJobWorker(IServiceProvider serviceProvider, IOptions<BackgroundJobOptions> jobOptions, IOptions<BackgroundJobWorkerOptions> workerOptions, ILogger<BackgroundJobWorker>? logger = null)
+    public BackgroundJobWorker(IServiceProvider serviceProvider, IOptions<BackgroundJobOptions> options, ILogger<BackgroundJobWorker>? logger = null)
     {
         _serviceProvider = serviceProvider;
-        _jobOptions = jobOptions.Value;
-        _workerOptions = workerOptions.Value;
+        _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        _options = options.Value;
         _logger = logger ?? NullLogger<BackgroundJobWorker>.Instance;
     }
 
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // 执行交给调度框架时不空转: 任务由那边的服务端消费
+        if (!_options.IsJobExecutionEnabled)
+        {
+            _logger.LogDebug("后台任务执行已关闭, 内置 worker 不启动。");
+            return;
+        }
+
         // 让出线程, 避免阻塞宿主启动
         await Task.Yield();
 
@@ -59,7 +66,7 @@ public sealed class BackgroundJobWorker : BackgroundService
 
             try
             {
-                await Task.Delay(_workerOptions.PollInterval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(_options.PollInterval, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -70,27 +77,18 @@ public sealed class BackgroundJobWorker : BackgroundService
 
     private async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        if (!_jobOptions.IsJobExecutionEnabled)
-        {
-            return;
-        }
+        IDistributedLock? distributedLock = _options.UseDistributedLock
+            ? _serviceProvider.GetService<IDistributedLock>()
+            : null;
 
-        IDistributedLock? distributedLock = _workerOptions.UseDistributedLock ? _serviceProvider.GetService<IDistributedLock>() : null;
+        // 显式零等待: 拿不到说明别的实例正在消费, 本轮直接跳过
+        await using IDistributedLockHandle? handle = distributedLock is null
+            ? null
+            : await distributedLock
+                .TryAcquireAsync(_options.DistributedLockName, TimeSpan.Zero, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
 
-        if (distributedLock is null)
-        {
-            await ExecuteWaitingJobsAsync(cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        // 显式零等待: 拿不到说明别的实例正在消费, 本轮回 Task.Delay 再来。
-        // 不传 timeout 现在是「一直等」, 挂在这儿等会把「跳过本轮」变成「排队轮转」。
-        await using IDistributedLockHandle? handle = await distributedLock
-            .TryAcquireAsync(_workerOptions.DistributedLockName, TimeSpan.Zero, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        // 拿不到锁说明别的实例在消费, 本轮直接跳过
-        if (handle is null)
+        if (distributedLock is not null && handle is null)
         {
             return;
         }
@@ -100,18 +98,10 @@ public sealed class BackgroundJobWorker : BackgroundService
 
     private async Task ExecuteWaitingJobsAsync(CancellationToken cancellationToken)
     {
-        using IServiceScope scope = _serviceProvider.CreateScope();
+        using IServiceScope scope = _scopeFactory.CreateScope();
 
         IBackgroundJobStore store = scope.ServiceProvider.GetRequiredService<IBackgroundJobStore>();
-        List<BackgroundJobInfo> jobs = await store.GetWaitingJobsAsync(_workerOptions.MaxJobFetchCount, cancellationToken).ConfigureAwait(false);
-
-        if (jobs.Count == 0)
-        {
-            return;
-        }
-
-        IBackgroundJobExecuter executer = scope.ServiceProvider.GetRequiredService<IBackgroundJobExecuter>();
-        IBackgroundJobSerializer serializer = scope.ServiceProvider.GetRequiredService<IBackgroundJobSerializer>();
+        List<BackgroundJobInfo> jobs = await store.GetWaitingJobsAsync(_options.MaxJobFetchCount, cancellationToken).ConfigureAwait(false);
 
         foreach (BackgroundJobInfo job in jobs)
         {
@@ -120,52 +110,40 @@ public sealed class BackgroundJobWorker : BackgroundService
                 break;
             }
 
-            await ExecuteJobAsync(scope.ServiceProvider, store, executer, serializer, job, cancellationToken).ConfigureAwait(false);
+            await ExecuteJobAsync(scope.ServiceProvider, store, job, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task ExecuteJobAsync(IServiceProvider serviceProvider, IBackgroundJobStore store, IBackgroundJobExecuter executer, IBackgroundJobSerializer serializer, BackgroundJobInfo job, CancellationToken cancellationToken)
+    private async Task ExecuteJobAsync(IServiceProvider scopedProvider, IBackgroundJobStore store, BackgroundJobInfo job, CancellationToken cancellationToken)
     {
         job.TryCount++;
-        job.LastTryTime = DateTime.UtcNow;
 
         try
         {
-            Type argsType = _jobOptions.GetArgsType(job.JobName);
-            Type jobType = _jobOptions.GetJobType(job.JobName);
-            object? args = serializer.Deserialize(job.JobArgs, argsType);
-
-            await executer.ExecuteAsync(new JobExecutionContext(serviceProvider, jobType, args, cancellationToken)).ConfigureAwait(false);
+            await BackgroundJobInvoker.RunAsync(scopedProvider, _options, job.JobName, job.JobArgs, cancellationToken).ConfigureAwait(false);
             await store.DeleteAsync(job.Id, cancellationToken).ConfigureAwait(false);
-        }
-        catch (BackgroundJobExecutionException exception)
-        {
-            _logger.LogError(exception, "后台任务 {JobName}({JobId}) 第 {TryCount} 次执行失败。", job.JobName, job.Id, job.TryCount);
-            await RescheduleAsync(store, job, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            // 参数反序列化失败、任务名找不到实现等: 重试也不会好, 直接放弃
-            _logger.LogError(exception, "后台任务 {JobName}({JobId}) 无法执行, 已放弃。", job.JobName, job.Id);
-            job.IsAbandoned = true;
+            bool abandoned = job.TryCount >= _options.MaxRetryCount;
+
+            if (abandoned)
+            {
+                _logger.LogError(exception, "后台任务 {JobName}({JobId}) 第 {TryCount} 次执行失败, 已达重试上限, 放弃。", job.JobName, job.Id, job.TryCount);
+                job.IsAbandoned = true;
+            }
+            else
+            {
+                job.NextTryTime = DateTime.UtcNow.Add(GetRetryDelay(job.TryCount));
+                _logger.LogWarning(exception, "后台任务 {JobName}({JobId}) 第 {TryCount} 次执行失败, {Delay} 后重试。", job.JobName, job.Id, job.TryCount, GetRetryDelay(job.TryCount));
+            }
+
             await store.UpdateAsync(job, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task RescheduleAsync(IBackgroundJobStore store, BackgroundJobInfo job, CancellationToken cancellationToken)
+    private TimeSpan GetRetryDelay(int tryCount)
     {
-        double waitSeconds = _workerOptions.FirstWaitDuration.TotalSeconds * Math.Pow(_workerOptions.WaitFactor, job.TryCount - 1);
-        DateTime nextTryTime = (job.LastTryTime ?? DateTime.UtcNow).AddSeconds(waitSeconds);
-
-        if (nextTryTime - job.CreationTime > _workerOptions.Timeout)
-        {
-            job.IsAbandoned = true;
-        }
-        else
-        {
-            job.NextTryTime = nextTryTime;
-        }
-
-        await store.UpdateAsync(job, cancellationToken).ConfigureAwait(false);
+        return TimeSpan.FromSeconds(_options.RetryDelay.TotalSeconds * Math.Pow(2, tryCount - 1));
     }
 }

@@ -51,6 +51,87 @@ public sealed class MyModule : SnowModule
 业务类型通过 `ISingletonDependency` / `IScopedDependency` / `ITransientDependency` 或 `[Dependency]`
 参与约定注册; 接口名与实现类名去掉 `I ` 前缀一致即自动暴露为该接口的实现。
 
+## 后台任务: 两个端口, 各管一件事
+
+- `IBackgroundJobManager` —— **入队**。只有一个方法 `EnqueueAsync<TArgs>(args, delay?)`, 参数类型决定执行哪个作业。
+- `IBackgroundJobScheduler` —— **调度**。周期注册 / 删除 / 立刻跑一次, 参数用表达式, 不写"类名 + 方法名"字符串。
+
+队列用内置存储加 worker 就能跑; 周期调度需要装 `Snow.BackgroundJobs.HangFire`。
+没有实现时注入 `IBackgroundJobScheduler` 会在 DI 阶段直接报错, 而不是静默什么都不做。
+
+### 1. 入队: 一个参数类型 = 一个作业
+
+```csharp
+// 参数: 任务名默认取它的类型全名
+public sealed class SendMailArgs
+{
+    public string To { get; set; } = string.Empty;
+}
+
+// 作业: 实现 IAsyncBackgroundJob<TArgs> 或 IBackgroundJob<TArgs>, 模块扫描自动登记
+public sealed class SendMailJob : IAsyncBackgroundJob<SendMailArgs>
+{
+    public Task ExecuteAsync(SendMailArgs args, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+// 业务代码只认 IBackgroundJobManager
+public sealed class OrderService(IBackgroundJobManager jobs)
+{
+    public Task PaidAsync() => jobs.EnqueueAsync(new SendMailArgs { To = "a@b.c" }, delay: TimeSpan.FromSeconds(5));
+}
+```
+
+同样参数类型登记两个作业、或两个作业算出同一个任务名, 模块启动时就会抛异常 —— 歧义不留到运行时。
+未登记的参数类型入队时也直接抛, 免得任务进库后永远等不到实现。
+
+执行语义: 成功即删记录; 失败按 `RetryDelay * 2^(n-1)` 指数退避回写 `NextTryTime`,
+尝试次数达到 `MaxRetryCount` 即放弃并删记录。重试策略只有两个旋钮, 没有"超时时间 + 倍数 + 起点"三件套。
+
+配置走 `BackgroundJobs` 配置节:
+
+| 配置 | 默认 | 作用 |
+| --- | --- | --- |
+| `IsJobExecutionEnabled` | true | 关掉内置 worker 的执行(装 HangFire 时由那个模块自动关) |
+| `PollInterval` | 5s | 轮询间隔 |
+| `MaxJobFetchCount` | 100 | 单轮最多取多少条任务 |
+| `RetryDelay` | 60s | 首次失败后等多久, 之后每次翻倍 |
+| `MaxRetryCount` | 5 | 最多尝试几次(含第一次) |
+| `UseDistributedLock` / `DistributedLockName` | true / SnowBackgroundJobWorker | 多实例部署时避免重复消费 |
+
+### 2. 调度: 传表达式, 不传字符串
+
+```csharp
+public sealed class ReconService(IBackgroundJobScheduler scheduler)
+{
+    public void Start() => scheduler.ScheduleRecurring<ReconService>("daily-recon", "0 2 * * *", service => service.RunAsync());
+
+    public void Stop() => scheduler.DeleteRecurring("daily-recon");
+
+    public void RunNow() => scheduler.TriggerOnce<ReconService>(service => service.RunAsync());
+
+    public Task RunAsync() => Task.CompletedTask;
+}
+```
+
+表达式由调度框架直接消费, 中间没有"名字 → 类型 → 方法"的运行时查找, 所以不存在"类名写错"这类错误:
+编译期就定死了调的是哪个方法。目标类要能被 DI 解析(HangFire 用 `AspNetCoreJobActivator`)。
+
+### 换成 HangFire
+
+```csharp
+[DependsOn(typeof(SnowHangFireModule))]
+public sealed class MyModule : SnowModule;
+
+// 挂仪表盘, 默认 /hangfire, 路径与标题取自 HangFire 配置节
+app.UseSnowHangFireDashboard();
+```
+
+模块做的事: 两个端口都换成 HangFire 实现; 关掉内置 worker(免得它空轮询进程内存储);
+入队任务交给 HangFire 自己持久化、重试、看板管理。
+配置节 `HangFire`: `EnableServer` / `EnableDashboard` / `DashboardPath` / `DashboardTitle` / `AppPath` / `UseInMemoryStorage` / `WorkerCount` / `PollingIntervalSeconds` / `TimeZoneId`。
+
+两种后端共用同一条执行链 —— 任务名 → 参数类型 → 作业类型 → 反序列化 → 执行( `BackgroundJobInvoker` ),
+所以同一个作业在进程内 worker 与 HangFire 上行为一致。
 ## 本地打包
 
 ```bash
@@ -124,9 +205,8 @@ git tag v1.2.0 && git push origin v1.2.0
 | `Snow.Caching.StackExchangeRedis` | 缓存的 Redis 后端 |
 | `Snow.DistributedLocking` | 分布式锁: 契约 + 进程内默认实现 + Redisson 式看门狗 + `[DistributedLock]` 注解 |
 | `Snow.DistributedLocking.Redis` | 分布式锁的 Redis 后端(SET NX PX + Lua, 无第三方锁库) |
-| `Snow.BackgroundJobs.Abstractions` | 后台任务契约: 任务接口、记录、存储/序列化契约、执行器与调度端口 |
-| `Snow.BackgroundJobs` | 后台任务默认实现: 管理器、进程内存储、JSON 序列化、轮询 worker |
-| `Snow.BackgroundJobs.HangFire` | 后台任务的 Hangfire 适配: 接管管理器/调度器/命令投递三个端口 |
+| `Snow.BackgroundJobs` | 后台任务: 任务接口与记录、选项、管理器与调度器契约、进程内存储、轮询 worker |
+| `Snow.BackgroundJobs.HangFire` | 后台任务的 Hangfire 适配: 接管管理器与调度器两个端口, 带仪表盘 |
 
 ### 安全与其它
 

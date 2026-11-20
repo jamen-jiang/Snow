@@ -5,8 +5,6 @@ namespace Snow.BackgroundJobs.HangFire;
 /// </summary>
 public class SnowHangFireOptions
 {
-
-
     /// <summary>
     /// 是否注册 Hangfire 服务端(后台作业执行器), 默认 true
     /// </summary>
@@ -45,7 +43,7 @@ public class SnowHangFireOptions
 
     /// <summary>
     /// 服务端轮询间隔(秒), 默认 1
-    /// <para>决定延迟任务与重试任务多久被检查一次; 使用数据库存储且任务量很大时可调大到 15。</para>
+    /// <para>使用数据库存储且任务量很大时可调大到 15。</para>
     /// </summary>
     public int PollingIntervalSeconds { get; set; } = 1;
 

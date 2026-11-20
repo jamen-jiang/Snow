@@ -5,7 +5,6 @@
   <Project Path="Snow.AspNetCore.Serilog/Snow.AspNetCore.Serilog.csproj" />
   <Project Path="Snow.AspNetCore/Snow.AspNetCore.csproj" />
   <Project Path="Snow.Authorization/Snow.Authorization.csproj" />
-  <Project Path="Snow.BackgroundJobs.Abstractions/Snow.BackgroundJobs.Abstractions.csproj" />
   <Project Path="Snow.BackgroundJobs.HangFire/Snow.BackgroundJobs.HangFire.csproj" />
   <Project Path="Snow.BackgroundJobs/Snow.BackgroundJobs.csproj" />
   <Project Path="Snow.Caching.StackExchangeRedis/Snow.Caching.StackExchangeRedis.csproj" />

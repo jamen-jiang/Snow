@@ -8,10 +8,9 @@ using Snow.Modularity;
 namespace Snow.BackgroundJobs;
 
 /// <summary>
-/// 后台任务模块: 注册任务存储、序列化、执行器、管理器与轮询 worker, 并扫描本模块程序集内的作业类
-/// <para>调度框架(Hangfire/Quartz)是可插拔适配: 未引入时由 <see cref="NullBackgroundJobScheduler"/> 与 <see cref="NullBackgroundExecutor"/> 兜底。</para>
+/// 后台任务模块: 注册存储、入口实现与内置 worker, 并扫描模块程序集里的作业类
 /// </summary>
-[DependsOn(typeof(BackgroundJobsAbstractionsModule), typeof(SnowDistributedLockModule))]
+[DependsOn(typeof(SnowDistributedLockModule))]
 public sealed class BackgroundJobsModule : SnowModule
 {
     /// <inheritdoc />
@@ -22,20 +21,12 @@ public sealed class BackgroundJobsModule : SnowModule
         IServiceCollection services = context.Services;
 
         services.TryAddSingleton<IBackgroundJobStore, InMemoryBackgroundJobStore>();
-        services.TryAddSingleton<IBackgroundJobSerializer, JsonBackgroundJobSerializer>();
-        services.TryAddTransient<IBackgroundJobExecuter, BackgroundJobExecuter>();
         services.TryAddTransient<IBackgroundJobManager, DefaultBackgroundJobManager>();
-        services.TryAddSingleton<IBackgroundJobScheduler, NullBackgroundJobScheduler>();
-        services.TryAddSingleton<IBackgroundExecutor, NullBackgroundExecutor>();
 
-        IConfiguration configuration = context.Services.GetConfiguration();
-        Configure<BackgroundJobOptions>(configuration.GetSection("BackgroundJobs"));
-        Configure<BackgroundJobWorkerOptions>(configuration.GetSection("BackgroundJobs"));
+        Configure<BackgroundJobOptions>(services.GetConfiguration().GetSection("BackgroundJobs"));
 
-        // 作业类靠扫描自动登记: 约定注册只认带生命周期标记的类, 作业类不该被强制加标记
-        IModuleContainer moduleContainer = services.GetSingletonInstance<IModuleContainer>();
-        Type[] jobTypes = FindJobTypes(moduleContainer);
-
+        // 作业类靠扫描登记: 约定注册只认带生命周期标记的类, 作业类不该被强制加标记
+        Type[] jobTypes = FindJobTypes(services.GetSingletonInstance<IModuleContainer>());
         Configure<BackgroundJobOptions>(options =>
         {
             foreach (Type jobType in jobTypes)
@@ -53,8 +44,24 @@ public sealed class BackgroundJobsModule : SnowModule
             .SelectMany(module => module.AllAssemblies)
             .Distinct()
             .SelectMany(AssemblyTypeCache.GetTypes)
-            .Where(BackgroundJobArgsHelper.IsBackgroundJob)
+            .Where(IsJobType)
             .OrderBy(type => type.FullName, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    /// <summary>
+    /// 作业类判定: 实现 IBackgroundJob&lt;TArgs&gt; 或 IAsyncBackgroundJob&lt;TArgs&gt; 的具体类
+    /// </summary>
+    private static bool IsJobType(Type type)
+    {
+        if (!type.IsClass || type.IsAbstract)
+        {
+            return false;
+        }
+
+        return type.GetInterfaces().Any(interfaceType =>
+            interfaceType.IsGenericType &&
+            (interfaceType.GetGenericTypeDefinition() == typeof(IBackgroundJob<>) ||
+             interfaceType.GetGenericTypeDefinition() == typeof(IAsyncBackgroundJob<>)));
     }
 }

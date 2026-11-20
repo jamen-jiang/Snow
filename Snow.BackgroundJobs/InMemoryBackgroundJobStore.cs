@@ -10,7 +10,7 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
     private readonly ConcurrentDictionary<Guid, BackgroundJobInfo> _jobs = new();
 
     /// <summary>
-    /// 当前任务总数(含已放弃)
+    /// 当前任务数
     /// </summary>
     public int Count => _jobs.Count;
 
@@ -19,7 +19,7 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
     {
         ArgumentNullException.ThrowIfNull(jobInfo);
 
-        _jobs[jobInfo.Id] = jobInfo;
+        _jobs[jobInfo.Id] = jobInfo.Clone();
         return Task.CompletedTask;
     }
 
@@ -30,19 +30,13 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
 
         List<BackgroundJobInfo> jobs = _jobs.Values
             .Where(job => !job.IsAbandoned && job.NextTryTime <= now)
-            .OrderByDescending(job => job.Priority)
-            .ThenBy(job => job.TryCount)
+            .OrderBy(job => job.TryCount)
             .ThenBy(job => job.NextTryTime)
             .Take(maxResultCount <= 0 ? 100 : maxResultCount)
+            .Select(job => job.Clone())
             .ToList();
 
         return Task.FromResult(jobs);
-    }
-
-    /// <inheritdoc />
-    public Task<BackgroundJobInfo?> FindAsync(Guid jobId, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(_jobs.TryGetValue(jobId, out BackgroundJobInfo? job) ? job : null);
     }
 
     /// <inheritdoc />
@@ -50,13 +44,14 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
     {
         ArgumentNullException.ThrowIfNull(jobInfo);
 
+        // 放弃的任务直接移除: 存储里不留失败记录, 排查靠日志
         if (jobInfo.IsAbandoned)
         {
             _jobs.TryRemove(jobInfo.Id, out _);
             return Task.CompletedTask;
         }
 
-        _jobs[jobInfo.Id] = jobInfo;
+        _jobs[jobInfo.Id] = jobInfo.Clone();
         return Task.CompletedTask;
     }
 

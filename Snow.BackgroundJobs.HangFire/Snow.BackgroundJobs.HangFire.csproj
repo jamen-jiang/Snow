@@ -12,7 +12,7 @@
     <OutputType>Library</OutputType>
     <IsPackable>true</IsPackable>
     <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
-    <Description>后台任务: Hangfire 适配(接管 IBackgroundJobManager / IBackgroundJobScheduler / IBackgroundExecutor 端口, 带仪表盘)</Description>
+    <Description>后台任务: Hangfire 适配(用 Hangfire 实现入队与调度两个端口, 带仪表盘)</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,7 +22,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\Snow.BackgroundJobs\Snow.BackgroundJobs.csproj" />
-    <ProjectReference Include="..\Snow.Messaging\Snow.Messaging.csproj" />
   </ItemGroup>
 
   <ItemGroup>
