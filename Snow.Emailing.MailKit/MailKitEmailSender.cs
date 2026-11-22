@@ -18,8 +18,8 @@ namespace Snow.Emailing.MailKit;
 /// <para>一组链式调用对应一封信; 发送后<b>不清空</b>已设置的收件人与内容, 要再发一封请重新注入(Transient)。</para>
 /// <para>连接加密方式只由 <see cref="EmailOptions.UseSsl"/> 决定: true 走 465 直连 SSL, false 走 STARTTLS。</para>
 /// </summary>
-[Dependency(ReplaceServices = true)]
-public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender, ITransientDependency
+[TransientService(ReplaceServices = true)]
+public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
 {
     private readonly EmailOptions _options;
     private readonly ILogger<MailKitEmailSender>? _logger;

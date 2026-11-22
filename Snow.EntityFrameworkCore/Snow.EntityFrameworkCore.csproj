@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Data\Snow.Data.csproj" />
     <ProjectReference Include="..\Snow.Domain\Snow.Domain.csproj" />
     <ProjectReference Include="..\Snow.EventBus\Snow.EventBus.csproj" />
     <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />

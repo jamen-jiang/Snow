@@ -10,7 +10,8 @@ namespace Snow.Messaging;
 /// <summary>
 /// <see cref="IQueryBus"/> 的默认实现:按查询类型缓存包装器的调用委托,避免每次查询都做反射
 /// </summary>
-public class QueryBus : IQueryBus, ITransientDependency
+[TransientService]
+public class QueryBus : IQueryBus
 {
     private static readonly ConcurrentDictionary<Type, object> _queryHandlers = new();
 

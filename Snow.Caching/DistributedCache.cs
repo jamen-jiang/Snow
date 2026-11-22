@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Snow.DependencyInjection;
 using BclDistributedCache = Microsoft.Extensions.Caching.Distributed.IDistributedCache;
 
 namespace Snow.Caching;
@@ -11,6 +12,7 @@ namespace Snow.Caching;
 /// 强类型分布式缓存实现(键为字符串): 转发给双泛型实现
 /// </summary>
 /// <typeparam name="TCacheItem">缓存项类型</typeparam>
+[SingletonService]
 public class DistributedCache<TCacheItem> : IDistributedCache<TCacheItem>
     where TCacheItem : class
 {
@@ -118,6 +120,7 @@ public class DistributedCache<TCacheItem> : IDistributedCache<TCacheItem>
 /// </summary>
 /// <typeparam name="TCacheItem">缓存项类型</typeparam>
 /// <typeparam name="TCacheKey">缓存键类型</typeparam>
+[SingletonService]
 public class DistributedCache<TCacheItem, TCacheKey> : IDistributedCache<TCacheItem, TCacheKey>
     where TCacheItem : class
     where TCacheKey : notnull

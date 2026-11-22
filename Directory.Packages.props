@@ -7,20 +7,25 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 程序集扫描与装饰器扩展: 约定注册的扫描引擎 -->
-    <PackageVersion Include="Scrutor" Version="7.0.0" />
     <!-- 动态 LINQ 排序: System.Linq 扩展里的 OrderByIf(..., string sorting) 依赖它 -->
     <PackageVersion Include="System.Linq.Dynamic.Core" Version="1.6.7" />
 
     <!-- AOP 代理引擎: 生成接口代理, 支撑方法拦截 -->
     <PackageVersion Include="Castle.Core" Version="5.2.1" />
 
+    <!-- JWT 签发与校验: Snow.Authentication 用 JsonWebTokenHandler 做签名/验签, 不引整套 System.IdentityModel.Tokens.Jwt -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
+    <!-- 令牌校验: Snow.Authentication 的 JwtBearer 处理器用它拉元数据、取公钥、验签、验受众 -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="11.0.0" />
+
     <!-- Redis 客户端: 自研分布式锁(Snow.DistributedLocking.Redis)与缓存共用 -->
     <PackageVersion Include="StackExchange.Redis" Version="3.4.35" />
-    <!-- Redis 分布式缓存: 登录态存 Redis(对齐 Java 版 sa-token-redisson), 多实例共享 -->
+    <!-- Redis 分布式缓存: 会话与缓存后端共用, 多实例共享 -->
     <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="11.0.0" />
     <!-- 选项绑定: 模块基类 SnowModule 的 Configure<T>(IConfiguration) 便捷方法要用 -->
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0" />
+    <!-- HTTP 客户端: Snow.Http.Client 用 IHttpClientFactory 登记命名客户端 -->
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0" />
 
     <!-- 表达式引擎: 缓存/锁注解的 Key/Condition/Unless 求值, MIT -->
     <PackageVersion Include="DynamicExpresso.Core" Version="2.19.6" />
@@ -29,6 +34,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="11.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="11.0.0" />
     <!-- MySQL 提供程序: Oracle 官方包, 11.0.0 只有 preview 通道 -->
     <PackageVersion Include="MySql.EntityFrameworkCore" Version="11.0.0-preview" />
 
@@ -46,12 +52,30 @@
     <!-- FTP: FluentFTP 客户端, 只被 Snow.Ftping.FluentFTP 引用 -->
     <PackageVersion Include="FluentFTP" Version="55.1.0" />
 
+    <!-- Excel: ClosedXML 读写 xlsx(OpenXml 由其传递带入), 只被 Snow.Excel.ClosedXML 引用 -->
+    <PackageVersion Include="ClosedXML" Version="0.105.1" />
+
+    <!-- 对象映射: Mapster 编译期映射, 只被 Snow.ObjectMapping.Mapster 引用 -->
+    <PackageVersion Include="Mapster" Version="10.0.12" />
+
+    <!-- 校验: FluentValidation 规则引擎 + DI 扫描扩展, 只被 Snow.Validation.FluentValidation 引用 -->
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+
+    <!-- 工作流: Elsa 3 引擎(核心/HTTP/管理 API/EF Core 持久化 + SQLite 提供程序), 只被 Snow.Workflows.Elsa 引用 -->
+    <PackageVersion Include="Elsa" Version="3.10.2" />
+    <PackageVersion Include="Elsa.Http" Version="3.10.2" />
+    <PackageVersion Include="Elsa.Workflows.Api" Version="3.10.2" />
+    <PackageVersion Include="Elsa.Persistence.EFCore" Version="3.10.2" />
+    <PackageVersion Include="Elsa.Persistence.EFCore.Sqlite" Version="3.10.2" />
+
+    <!-- API 文档: 官方 OpenAPI 生成器出文档, Scalar 出调试界面, 只被 Snow.OpenApi 引用 -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="3.1.1" />
+
     <!-- 源码链接: PDB 里的路径映射成 GitHub 上的 commit 地址, 栈追踪可直接跳到源码行。
-         Common 与 Build.Tasks.Git 必须一并显式引用: 它们是 GitHub 包的传递依赖, 而传递依赖的 build 资产
-         不会上浮(asstes 里是 buildTransitive/_._), 只引 GitHub 包会让整套 SourceLink 目标缺失 -->
+         Common 与 Build.Tasks.Git 是它的传递依赖, 由 NuGet 自动带入, 不用显式声明 -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="11.0.100" />
-    <PackageVersion Include="Microsoft.SourceLink.Common" Version="11.0.100" />
-    <PackageVersion Include="Microsoft.Build.Tasks.Git" Version="11.0.100" />
 
     <!-- 测试: 覆盖率收集 -->
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />

@@ -1,13 +1,14 @@
 using System.Collections.Concurrent;
 using Snow.DependencyInjection;
 
-namespace Snow.PermissionManagement;
+namespace Snow.Authorization.PermissionManagement;
 
 /// <summary>
 /// 权限授予仓储内存实现(进程内单例)
-/// <para>接入 EF Core 后提供数据库实现即可, 通过 [Dependency(ReplaceServices = true)] 覆盖本实现。</para>
+/// <para>接入 EF Core 后提供数据库实现即可, 通过 [SingletonService(ReplaceServices = true)] 覆盖本实现。</para>
 /// </summary>
-public sealed class InMemoryPermissionGrantRepository : IPermissionGrantRepository, ISingletonDependency
+[SingletonService]
+public sealed class InMemoryPermissionGrantRepository : IPermissionGrantRepository
 {
     private readonly ConcurrentDictionary<(string Name, string ProviderName, string ProviderKey), PermissionGrant> _grants = new();
 

@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Snow.Authorization.Permissions;
+using Snow.DependencyInjection;
 
 namespace Snow.Authorization;
 
 /// <summary>
 /// 权限授权处理器: 调用 <see cref="IPermissionChecker"/> 判定是否放行
 /// </summary>
+[ScopedService]
+[ExposeServices(typeof(IAuthorizationHandler))]
 public sealed class PermissionRequirementHandler : AuthorizationHandler<PermissionRequirement>
 {
     private readonly IPermissionChecker _permissionChecker;

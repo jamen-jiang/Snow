@@ -13,8 +13,8 @@ namespace Snow.Ftping.FluentFTP;
 /// <para>所有方法都是同步的(与契约一致); 需要并发时由调用方各自注入(Transient), 本类不共享连接。</para>
 /// <para>连接加密方式只由 <see cref="FtpOptions.UseSsl"/> 决定: true 走显式 FTPS(AUTH TLS), false 走明文 FTP。</para>
 /// </summary>
-[Dependency(ReplaceServices = true)]
-public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient, ITransientDependency
+[TransientService(ReplaceServices = true)]
+public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
 {
     private readonly FtpOptions _options;
     private readonly ILogger<FluentFtpClient>? _logger;

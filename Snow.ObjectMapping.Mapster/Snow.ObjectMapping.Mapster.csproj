@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.ObjectMapping.Mapster</RootNamespace>
+    <Description>对象映射的 Mapster 实现: 约定映射 + IRegister 配置扫描, 顶替契约包的静默实现(对位 ABP 的 Volo.Abp.AutoMapper, 只是把 AutoMapper 换成 Mapster)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.ObjectMapping\Snow.ObjectMapping.csproj" />
+  </ItemGroup>
+
+</Project>

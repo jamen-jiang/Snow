@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Snow.Auditing</AssemblyName>
+    <PackageId>Snow.Auditing</PackageId>
+    <RootNamespace>Snow.Auditing</RootNamespace>
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <Description>审计: 方法级审计日志(拦截器采集调用方、耗时、参数与异常) + 实体审计字段填充(创建/修改/删除的人与时间)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Aop\Snow.Aop.csproj" />
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Domain\Snow.Domain.csproj" />
+    <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />
+    <ProjectReference Include="..\Snow.Timing\Snow.Timing.csproj" />
+  </ItemGroup>
+
+</Project>

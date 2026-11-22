@@ -7,15 +7,12 @@ namespace Snow.Authorization.Permissions;
 /// <summary>
 /// 权限定义管理器默认实现: 首次访问时汇总全部定义提供器, 之后常驻内存
 /// </summary>
-public sealed class PermissionDefinitionManager : IPermissionDefinitionManager, ISingletonDependency
+[SingletonService]
+public sealed class PermissionDefinitionManager : IPermissionDefinitionManager
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly PermissionOptions _options;
-    private readonly object _sync = new();
-
-    private Dictionary<string, PermissionDefinition>? _permissions;
-    private List<PermissionDefinition>? _flattened;
-    private List<PermissionGroupDefinition>? _groups;
+    private readonly Lazy<DefinitionSnapshot> _snapshot;
 
     /// <summary>
     /// 构造器
@@ -29,6 +26,9 @@ public sealed class PermissionDefinitionManager : IPermissionDefinitionManager, 
 
         _serviceProvider = serviceProvider;
         _options = options.Value;
+
+        // Lazy 自带线程安全的"只执行一次", 比手写双检锁少一层判断
+        _snapshot = new Lazy<DefinitionSnapshot>(Build, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <inheritdoc />
@@ -44,66 +44,50 @@ public sealed class PermissionDefinitionManager : IPermissionDefinitionManager, 
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PermissionDefinition>> GetPermissionsAsync()
-    {
-        EnsureInitialized();
-        return Task.FromResult<IReadOnlyList<PermissionDefinition>>(_flattened!);
-    }
+        => Task.FromResult<IReadOnlyList<PermissionDefinition>>(_snapshot.Value.Flattened);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PermissionGroupDefinition>> GetGroupsAsync()
-    {
-        EnsureInitialized();
-        return Task.FromResult<IReadOnlyList<PermissionGroupDefinition>>(_groups!);
-    }
+        => Task.FromResult<IReadOnlyList<PermissionGroupDefinition>>(_snapshot.Value.Groups);
 
     private PermissionDefinition? GetOrNull(string name)
-    {
-        EnsureInitialized();
-        return _permissions!.TryGetValue(name, out PermissionDefinition? permission) ? permission : null;
-    }
+        => _snapshot.Value.Permissions.TryGetValue(name, out PermissionDefinition? permission) ? permission : null;
 
-    private void EnsureInitialized()
+    /// <summary>
+    /// 跑一遍全部定义提供器, 把分组树展平成字典与列表
+    /// </summary>
+    /// <returns>展平后的快照</returns>
+    private DefinitionSnapshot Build()
     {
-        if (_permissions != null)
+        PermissionDefinitionContext context = new(_serviceProvider);
+
+        foreach (Type providerType in _options.DefinitionProviders)
         {
-            return;
+            if (_serviceProvider.GetService(providerType) is not IPermissionDefinitionProvider provider)
+            {
+                throw new InvalidOperationException(
+                    $"权限定义提供器 {providerType.FullName} 没有在容器中注册, 或没有实现 {nameof(IPermissionDefinitionProvider)}。" +
+                    $"让它标 [TransientService], 或用 services.AddTransient({providerType.Name}) 显式登记。");
+            }
+
+            provider.PreDefine(context);
+            provider.Define(context);
+            provider.PostDefine(context);
         }
 
-        lock (_sync)
+        List<PermissionGroupDefinition> groups = [.. context.Groups.Values];
+        List<PermissionDefinition> flattened = [];
+        Dictionary<string, PermissionDefinition> permissions = new(StringComparer.Ordinal);
+
+        foreach (PermissionGroupDefinition group in groups)
         {
-            if (_permissions != null)
+            foreach (PermissionDefinition permission in group.Permissions)
             {
-                return;
+                AddPermission(permissions, flattened, permission);
             }
-
-            PermissionDefinitionContext context = new(_serviceProvider);
-
-            foreach (Type providerType in _options.DefinitionProviders)
-            {
-                IPermissionDefinitionProvider provider =
-                    (IPermissionDefinitionProvider)_serviceProvider.GetRequiredService(providerType);
-
-                provider.PreDefine(context);
-                provider.Define(context);
-                provider.PostDefine(context);
-            }
-
-            List<PermissionGroupDefinition> groups = [.. context.Groups.Values];
-            List<PermissionDefinition> flattened = [];
-            Dictionary<string, PermissionDefinition> permissions = new(StringComparer.Ordinal);
-
-            foreach (PermissionGroupDefinition group in groups)
-            {
-                foreach (PermissionDefinition permission in group.Permissions)
-                {
-                    AddPermission(permissions, flattened, permission);
-                }
-            }
-
-            _groups = groups;
-            _flattened = flattened;
-            _permissions = permissions;
         }
+
+        return new DefinitionSnapshot(groups, flattened, permissions);
     }
 
     private static void AddPermission(
@@ -123,4 +107,15 @@ public sealed class PermissionDefinitionManager : IPermissionDefinitionManager, 
             AddPermission(permissions, flattened, child);
         }
     }
+
+    /// <summary>
+    /// 展平结果: 分组、权限列表与按名索引
+    /// </summary>
+    /// <param name="Groups">分组</param>
+    /// <param name="Flattened">展平后的权限列表</param>
+    /// <param name="Permissions">权限名到定义的索引</param>
+    private sealed record DefinitionSnapshot(
+        List<PermissionGroupDefinition> Groups,
+        List<PermissionDefinition> Flattened,
+        Dictionary<string, PermissionDefinition> Permissions);
 }

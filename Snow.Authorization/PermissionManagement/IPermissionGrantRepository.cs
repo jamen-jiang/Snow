@@ -1,4 +1,4 @@
-namespace Snow.PermissionManagement;
+namespace Snow.Authorization.PermissionManagement;
 
 /// <summary>
 /// 权限授予仓储

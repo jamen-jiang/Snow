@@ -86,8 +86,10 @@ public sealed class SnowApplication : ISnowApplication
             }
         }
 
-        // 2. 注册: 逐模块做约定扫描, 再调用模块的 ConfigureServices
+        // 2. 注册: 逐模块只做约定扫描并记耗时, 显式登记(ConfigureServices)全部落地后再统一写入约定登记,
+        //    这样宿主与模块的显式登记稳定排在约定登记之前, TryAdd / Add / Replace 都能顶掉默认实现
         HashSet<Assembly> scannedAssemblies = new HashSet<Assembly>();
+        List<ServiceCollectionExtensions.ConventionalRegistration> conventionalCandidates = new();
         Stopwatch totalStopwatch = Stopwatch.StartNew();
 
         foreach (SnowModuleDescriptor module in Modules)
@@ -100,7 +102,7 @@ public sealed class SnowApplication : ISnowApplication
                 {
                     if (scannedAssemblies.Add(assembly))
                     {
-                        Services.AddConventionalRegistrars(assembly);
+                        conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(assembly));
                     }
                 }
             }
@@ -114,6 +116,9 @@ public sealed class SnowApplication : ISnowApplication
             _registrationTimings.Add(new ModuleRegistrationTiming(
                 module.Type, scanMilliseconds, moduleStopwatch.Elapsed.TotalMilliseconds));
         }
+
+        // 约定登记统一写入: 此时集合里已经有所有显式登记(宿主与模块的)
+        ServiceCollectionExtensions.ApplyConventionalRegistrations(Services, conventionalCandidates);
 
         totalStopwatch.Stop();
         _configureServicesTotalMilliseconds = totalStopwatch.Elapsed.TotalMilliseconds;
@@ -153,6 +158,7 @@ public sealed class SnowApplication : ISnowApplication
         }
 
         HashSet<Assembly> scannedAssemblies = new HashSet<Assembly>();
+        List<ServiceCollectionExtensions.ConventionalRegistration> conventionalCandidates = new();
         Stopwatch totalStopwatch = Stopwatch.StartNew();
 
         foreach (SnowModuleDescriptor module in Modules)
@@ -165,7 +171,7 @@ public sealed class SnowApplication : ISnowApplication
                 {
                     if (scannedAssemblies.Add(assembly))
                     {
-                        Services.AddConventionalRegistrars(assembly);
+                        conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(assembly));
                     }
                 }
             }
@@ -179,6 +185,9 @@ public sealed class SnowApplication : ISnowApplication
             _registrationTimings.Add(new ModuleRegistrationTiming(
                 module.Type, scanMilliseconds, moduleStopwatch.Elapsed.TotalMilliseconds));
         }
+
+        // 约定登记统一写入: 此时集合里已经有所有显式登记(宿主与模块的)
+        ServiceCollectionExtensions.ApplyConventionalRegistrations(Services, conventionalCandidates);
 
         totalStopwatch.Stop();
         _configureServicesTotalMilliseconds = totalStopwatch.Elapsed.TotalMilliseconds;

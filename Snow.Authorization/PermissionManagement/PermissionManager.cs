@@ -1,12 +1,13 @@
 using Snow.Authorization.Permissions;
 using Snow.DependencyInjection;
 
-namespace Snow.PermissionManagement;
+namespace Snow.Authorization.PermissionManagement;
 
 /// <summary>
 /// 权限管理器默认实现
 /// </summary>
-public sealed class PermissionManager : IPermissionManager, ITransientDependency
+[TransientService]
+public sealed class PermissionManager : IPermissionManager
 {
     private readonly IPermissionGrantRepository _permissionGrantRepository;
 

@@ -10,7 +10,8 @@ namespace Snow.Messaging;
 /// <summary>
 /// <see cref="ICommandBus"/> 的默认实现:按命令类型缓存包装器的调用委托,避免每次发送都做反射
 /// </summary>
-public class CommandBus : ICommandBus, ITransientDependency
+[TransientService]
+public class CommandBus : ICommandBus
 {
     private static readonly ConcurrentDictionary<Type, object> _requestHandlers = new();
 

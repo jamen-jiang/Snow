@@ -30,16 +30,4 @@ public static class CurrentUserExtensions
 
         return currentUser.Id ?? throw new InvalidOperationException("当前用户未认证, 取不到用户Id。");
     }
-
-    /// <summary>
-    /// 取会话Id
-    /// </summary>
-    /// <param name="currentUser">当前用户</param>
-    /// <returns>会话Id, 不存在为 null</returns>
-    public static string? FindSessionId(this ICurrentUser currentUser)
-    {
-        ArgumentNullException.ThrowIfNull(currentUser);
-
-        return currentUser.FindClaimValue(UserClaimTypes.SessionId);
-    }
 }

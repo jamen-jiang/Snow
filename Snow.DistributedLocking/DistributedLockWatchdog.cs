@@ -10,7 +10,8 @@ namespace Snow.DistributedLocking;
 /// <para>没有全局开关(对齐 Redisson: 它只有 <c>Config.lockWatchdogTimeout</c> 一个配置项, 靠不传
 /// <c>leaseTime</c> 决定续不续期)。要「到点自动释放」就在这一次抢锁时传 <c>leaseTime</c>。</para>
 /// </summary>
-public class DistributedLockWatchdog : ISingletonDependency
+[SingletonService]
+public class DistributedLockWatchdog
 {
     /// <summary>
     /// 锁的默认租期, 30 秒(对齐 Redisson 的 <c>lockWatchdogTimeout</c> 默认值)

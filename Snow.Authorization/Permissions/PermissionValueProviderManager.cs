@@ -7,7 +7,8 @@ namespace Snow.Authorization.Permissions;
 /// <summary>
 /// 权限值提供器管理器默认实现: 按 <see cref="PermissionOptions.ValueProviders"/> 惰性实例化并校验重名
 /// </summary>
-public sealed class PermissionValueProviderManager : IPermissionValueProviderManager, ISingletonDependency
+[SingletonService]
+public sealed class PermissionValueProviderManager : IPermissionValueProviderManager
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly PermissionOptions _options;

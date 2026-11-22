@@ -42,9 +42,8 @@ public static class SnowApplicationFactory
         services.AddSingleton<ISnowApplication>(application);
         services.AddSingleton(application);
 
-        // 内核运行时上下文(租户/客户端/链路标识)与业务模块无关, 由框架直接登记
-        services.AddCoreSnowServices();
-
+        // 内核自己不登记任何运行时服务: 时间提供器与链路标识分别由 Snow.Timing / Snow.Tracing 的模块登记,
+        // 内核只负责加载模块与模块生命周期
         RegisterModuleLifecycle(services);
 
         await application.ConfigureServicesAsync();

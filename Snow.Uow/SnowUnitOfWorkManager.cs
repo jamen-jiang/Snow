@@ -1,8 +1,11 @@
+using Snow.DependencyInjection;
+
 namespace Snow.Uow;
 
 /// <summary>
 /// 默认工作单元管理器
 /// </summary>
+[TransientService]
 public sealed class SnowUnitOfWorkManager : IUnitOfWorkManager
 {
     private readonly IServiceProvider _serviceProvider;

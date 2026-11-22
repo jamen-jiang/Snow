@@ -16,6 +16,7 @@ namespace Snow.EntityFrameworkCore;
 /// EF Core 模块: 登记默认选项、DbContext 提供器, 并按模块程序集扫描把上下文与仓储注册进容器
 /// </summary>
 [DependsOn(typeof(SnowUowModule))]
+[DependsOn(typeof(SnowDataModule))]
 public sealed class SnowEntityFrameworkCoreModule : SnowModule
 {
     /// <inheritdoc />
@@ -31,13 +32,6 @@ public sealed class SnowEntityFrameworkCoreModule : SnowModule
                     warnings.Ignore(CoreEventId.LazyLoadOnDisposedContextWarning));
             });
         });
-
-        // 作用域内共享上下文: 与 ABP 的 TryAddTransient(IDbContextProvider<> -> UnitOfWorkDbContextProvider<>) 同位
-        context.Services.TryAddScoped(typeof(IDbContextProvider<>), typeof(SnowDbContextProvider<>));
-
-        // 全局过滤开关(对齐 ABP 的 AbpDataModule 注册): 业务侧用 IDataFilter<ISoftDelete>.Disable() 看已删除数据
-        context.Services.TryAddSingleton(typeof(IDataFilter<>), typeof(DataFilter<>));
-        context.Services.TryAddSingleton<IDataFilter, DataFilter>();
 
         IModuleContainer container = context.Services.GetSingletonInstance<IModuleContainer>();
 

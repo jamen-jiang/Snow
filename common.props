@@ -32,24 +32,16 @@
 
   <!-- 源码链接: 把 PDB 里的文件路径映射成 GitHub 上的 raw 地址, 调试时能直接跳到对应 commit 的行。
        一旦引用任何 Microsoft.SourceLink.* 包, SDK 会关掉自己内置的那套(SuppressImplicitGitSourceLink),
-       改由这里的包接管 —— 所以三个包必须一起引:
-         Microsoft.SourceLink.GitHub 决定 URL 形状,
-         Microsoft.SourceLink.Common  提供 _GenerateSourceLinkFile 目标,
-         Microsoft.Build.Tasks.Git    提供 LocateRepository(读 commit 与仓库根)。
-       后两个是 GitHub 包的传递依赖, 传递依赖的 build 资产不上浮, 只引 GitHub 包会让 SourceLink 整体失效
-       (构建能过, 但 PDB 里一条映射都没有, 也不会报任何警告)。 -->
+       改由这个包接管: GitHub 决定 URL 形状, 它依赖的 Common 提供 _GenerateSourceLinkFile 目标,
+       Build.Tasks.Git 提供 LocateRepository(读 commit 与仓库根)。
+       只引 GitHub 一个就够, 与 ABP 一致 —— 但 IncludeAssets 必须带 buildtransitive:
+       GitHub 的 nuspec 对两个依赖只 exclude="Build,Analyzers", buildTransitive 资产本会流入;
+       若在这里写死 runtime; build; native; contentfiles; analyzers, 两个依赖的 buildTransitive 会被筛掉,
+       Common.targets 不被 Import, 于是构建能过、PDB 里一条映射都没有、也不报任何警告(静默失效)。 -->
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub">
       <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.SourceLink.Common">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.Build.Tasks.Git">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+      <IncludeAssets>runtime; build; buildtransitive; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
   </ItemGroup>
 

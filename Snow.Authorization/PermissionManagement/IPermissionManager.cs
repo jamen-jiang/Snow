@@ -1,6 +1,6 @@
 using Snow.Authorization.Permissions;
 
-namespace Snow.PermissionManagement;
+namespace Snow.Authorization.PermissionManagement;
 
 /// <summary>
 /// 权限管理器: 查询与变更某主体的权限授予

@@ -1,6 +1,7 @@
 using Castle.DynamicProxy;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.Aop;
+using Snow.DependencyInjection;
 
 namespace Snow.Aop.Castle;
 
@@ -8,6 +9,7 @@ namespace Snow.Aop.Castle;
 /// 基于 Castle DynamicProxy 的代理工厂: 以接口代理(target 为真实实现实例)的方式创建代理,
 /// 因此目标类型可以是 sealed, 但只能通过接口服务类型解析。
 /// </summary>
+[SingletonService]
 public sealed class CastleAopProxyFactory : IAopProxyFactory
 {
     private static readonly ProxyGenerator Generator = new();

@@ -1,63 +1,56 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Snow.DependencyInjection;
 
 namespace Snow.BackgroundJobs;
 
 /// <summary>
-/// 执行一条已排队的任务: 任务名 → 参数类型/作业类型 → 反序列化 → 执行
-/// <para>内置 worker 与 Hangfire 回放都走这里, 执行语义只有一份。</para>
+/// 默认任务执行器: 还原服务类型与方法、反序列化参数后调用
+/// <para>任务内部抛出的异常统一包装成 <see cref="BackgroundJobExecutionException"/>(可重试);
+/// 找不到类型、对不上方法、参数反序列化失败这类错误直接抛出(不可重试)。</para>
 /// </summary>
-public static class BackgroundJobInvoker
+[TransientService]
+public sealed class BackgroundJobInvoker : IBackgroundJobInvoker
 {
+    private static readonly BindingFlags MethodFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
+
+    private readonly IServiceProvider _serviceProvider;
+
+    private readonly ILogger<BackgroundJobInvoker> _logger;
+
     /// <summary>
-    /// 按任务名执行一条任务
+    /// 构造器
     /// </summary>
-    /// <param name="serviceProvider">作业实例从这里解析(通常是当前作用域)</param>
-    /// <param name="options">任务配置</param>
-    /// <param name="jobName">任务名</param>
-    /// <param name="jobArgs">序列化后的任务参数</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>表示执行过程的任务</returns>
-    public static Task RunAsync(IServiceProvider serviceProvider, BackgroundJobOptions options, string jobName, string jobArgs, CancellationToken cancellationToken = default)
+    /// <param name="serviceProvider">服务提供器, 用于解析承载方法的服务</param>
+    /// <param name="logger">日志</param>
+    public BackgroundJobInvoker(IServiceProvider serviceProvider, ILogger<BackgroundJobInvoker>? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(serviceProvider);
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentException.ThrowIfNullOrWhiteSpace(jobName);
-        ArgumentNullException.ThrowIfNull(jobArgs);
-
-        Type jobType = options.GetJobType(jobName);
-        Type argsType = options.GetArgsType(jobName);
-        object? args = BackgroundJobSerializer.Deserialize(jobArgs, argsType);
-
-        return ExecuteAsync(serviceProvider, jobType, args, cancellationToken);
+        _serviceProvider = serviceProvider;
+        _logger = logger ?? NullLogger<BackgroundJobInvoker>.Instance;
     }
 
-    /// <summary>
-    /// 执行一个已还原参数的作业
-    /// </summary>
-    /// <param name="serviceProvider">作业实例从这里解析</param>
-    /// <param name="jobType">作业实现类型</param>
-    /// <param name="args">任务参数</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>表示执行过程的任务</returns>
-    public static async Task ExecuteAsync(IServiceProvider serviceProvider, Type jobType, object? args, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public async Task RunAsync(BackgroundJobInfo jobInfo, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(serviceProvider);
-        ArgumentNullException.ThrowIfNull(jobType);
+        ArgumentNullException.ThrowIfNull(jobInfo);
 
-        object instance = ActivatorUtilities.GetServiceOrCreateInstance(serviceProvider, jobType);
+        Type serviceType = BackgroundJobTypeName.Resolve(jobInfo.ServiceTypeName)
+            ?? throw new InvalidOperationException($"找不到后台任务的服务类型 {jobInfo.ServiceTypeName}。");
 
-        MethodInfo? executeMethod =
-            jobType.GetMethod(nameof(IBackgroundJob<object>.Execute), BindingFlags.Public | BindingFlags.Instance) ??
-            jobType.GetMethod(nameof(IAsyncBackgroundJob<object>.ExecuteAsync), BindingFlags.Public | BindingFlags.Instance) ??
-            throw new InvalidOperationException($"作业类型 {jobType.FullName} 既没有 Execute 也没有 ExecuteAsync 方法。");
+        MethodInfo method = ResolveMethod(serviceType, jobInfo);
+        object?[] arguments = DeserializeArguments(method, jobInfo, cancellationToken);
+        object? instance = method.IsStatic ? null : ActivatorUtilities.GetServiceOrCreateInstance(_serviceProvider, serviceType);
 
-        object?[] arguments = executeMethod.GetParameters().Length == 1 ? [args] : [args, cancellationToken];
-
-        // TargetInvocationException 只包一层执行期异常, 直接把内层异常抛给调用方, 别让日志里多一层噪音
         try
         {
-            object? result = executeMethod.Invoke(instance, arguments);
+            object? result = method.Invoke(instance, arguments);
 
             switch (result)
             {
@@ -71,7 +64,108 @@ public static class BackgroundJobInvoker
         }
         catch (TargetInvocationException exception) when (exception.InnerException is not null)
         {
-            throw exception.InnerException;
+            throw WrapExecutionException(serviceType, method, exception.InnerException);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // 停机打断: 原样抛出, 由 worker 判定为"没跑完, 不算失败"
+            throw;
+        }
+        catch (Exception exception) when (exception is not BackgroundJobExecutionException)
+        {
+            // 任务自己取消(比如内部超时)也算执行失败, 该重试就重试
+            throw WrapExecutionException(serviceType, method, exception);
+        }
+    }
+
+    /// <summary>
+    /// 任务内部的失败视为可重试, 包装后交给 worker 判重试次数
+    /// </summary>
+    private Exception WrapExecutionException(Type serviceType, MethodInfo method, Exception innerException)
+    {
+        // 任务自己抛的 BackgroundJobExecutionException 说明它已经表过态, 别再套一层
+        if (innerException is BackgroundJobExecutionException)
+        {
+            return innerException;
+        }
+
+        _logger.LogDebug(innerException, "后台任务 {Job} 执行失败。", method.Name);
+
+        return new BackgroundJobExecutionException(
+            $"后台任务 {serviceType.FullName}.{method.Name} 执行失败: {innerException.Message}",
+            innerException,
+            serviceType,
+            method.Name);
+    }
+
+    private static MethodInfo ResolveMethod(Type serviceType, BackgroundJobInfo jobInfo)
+    {
+        MethodInfo? method = serviceType
+            .GetMethods(MethodFlags)
+            .FirstOrDefault(candidate => candidate.Name == jobInfo.MethodName && ParametersMatch(candidate, jobInfo.ParameterTypeNames));
+
+        return method ?? throw new InvalidOperationException(
+            $"在 {serviceType.FullName} 上找不到方法 {jobInfo.MethodName}({string.Join(", ", jobInfo.ParameterTypeNames)})。");
+    }
+
+    private static bool ParametersMatch(MethodInfo method, IReadOnlyList<string> parameterTypeNames)
+    {
+        ParameterInfo[] parameters = method.GetParameters();
+
+        if (parameters.Length != parameterTypeNames.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < parameters.Length; index++)
+        {
+            if (!TypeNameMatches(parameters[index].ParameterType, parameterTypeNames[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TypeNameMatches(Type parameterType, string storedName)
+    {
+        if (string.IsNullOrWhiteSpace(storedName))
+        {
+            return true;
+        }
+
+        if (string.Equals(BackgroundJobTypeName.GetName(parameterType), storedName, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // 程序集名变过时退化成比全名
+        string storedFullName = storedName.Split(',')[0].Trim();
+
+        return string.Equals(parameterType.FullName, storedFullName, StringComparison.Ordinal);
+    }
+
+    private static object?[] DeserializeArguments(MethodInfo method, BackgroundJobInfo jobInfo, CancellationToken cancellationToken)
+    {
+        ParameterInfo[] parameters = method.GetParameters();
+        object?[] arguments = new object?[parameters.Length];
+
+        for (int index = 0; index < parameters.Length; index++)
+        {
+            Type parameterType = parameters[index].ParameterType;
+
+            if (parameterType == typeof(CancellationToken))
+            {
+                arguments[index] = cancellationToken;
+                continue;
+            }
+
+            arguments[index] = index < jobInfo.Arguments.Count
+                ? BackgroundJobSerializer.Deserialize(jobInfo.Arguments[index], parameterType)
+                : null;
+        }
+
+        return arguments;
     }
 }

@@ -7,7 +7,8 @@ namespace Snow.Authorization.Permissions;
 /// <summary>
 /// 权限校验器默认实现: 定义校验(存在/启用/提供器限制) + 多值提供器三态聚合
 /// </summary>
-public sealed class PermissionChecker : IPermissionChecker, ITransientDependency
+[TransientService]
+public sealed class PermissionChecker : IPermissionChecker
 {
     private readonly IPermissionDefinitionManager _permissionDefinitionManager;
     private readonly IPermissionValueProviderManager _permissionValueProviderManager;

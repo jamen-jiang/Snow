@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Snow.DependencyInjection;
 using Snow.Uow;
 
 namespace Snow.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace Snow.EntityFrameworkCore;
 /// <para>3) 上下文登记到工作单元后由工作单元统一保存与提交, 工作单元结束时释放本提供器自己创建的上下文。</para>
 /// </summary>
 /// <typeparam name="TDbContext">上下文类型</typeparam>
+[ScopedService]
 public class SnowDbContextProvider<TDbContext> : IDbContextProvider<TDbContext>
     where TDbContext : class, ISnowDbContext
 {

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Snow.DependencyInjection;
 
 namespace Snow.EventBus.EventHandlers;
 
@@ -11,6 +12,7 @@ namespace Snow.EventBus.EventHandlers;
 /// </code>
 /// 因此处理器串行执行, 任一失败会中断后续处理器。这是默认策略。
 /// </summary>
+[SingletonService]
 public sealed class ForeachAwaitEventHandlerPublisher : IEventHandlerPublisher
 {
     /// <inheritdoc />

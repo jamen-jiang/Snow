@@ -11,25 +11,21 @@ public abstract class DeletionAuditedEntity : Entity, IDeletionAudited
     /// <summary>
     /// 是否已删除
     /// </summary>
-    [Column("IsDeleted")]
     public bool IsDeleted { get; set; }
 
     /// <summary>
     /// 删除人Id
     /// </summary>
-    [Column("DeleterId")]
     public long? DeleterId { get; set; }
 
     /// <summary>
     /// 删除人名称
     /// </summary>
-    [Column("Deleter"), MaxLength(50)]
     public string? Deleter { get; set; }
 
     /// <summary>
     /// 删除时间
     /// </summary>
-    [Column("DeletionTime")]
     public DateTime? DeletionTime { get; set; }
 
     /// <summary>

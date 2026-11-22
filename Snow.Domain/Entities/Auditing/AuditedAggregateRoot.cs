@@ -11,19 +11,16 @@ public abstract class AuditedAggregateRoot : CreationAuditedAggregateRoot, IModi
     /// <summary>
     /// 更新人Id
     /// </summary>
-    [Column("LastModifierId")]
     public long? LastModifierId { get; set; }
 
     /// <summary>
     /// 更新人名称
     /// </summary>
-    [Column("LastModifier"), MaxLength(50)]
     public string? LastModifier { get; set; }
 
     /// <summary>
     /// 更新时间
     /// </summary>
-    [Column("LastModificationTime")]
     public DateTime? LastModificationTime { get; set; }
 
     /// <summary>

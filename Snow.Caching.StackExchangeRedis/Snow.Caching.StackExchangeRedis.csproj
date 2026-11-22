@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Snow.Caching.StackExchangeRedis</RootNamespace>
-    <Description>分布式缓存 Redis 后端: 按 Redis:IsEnabled / Redis:Configuration 装配, 并把 IDistributedCache 替换为支持多键批量读写的 Redis 实现</Description>
+    <Description>分布式缓存 Redis 后端: 按 Redis:Configuration 建连, 并把 IDistributedCache 替换为支持多键批量读写的 Redis 实现</Description>
   </PropertyGroup>
 
   <ItemGroup>

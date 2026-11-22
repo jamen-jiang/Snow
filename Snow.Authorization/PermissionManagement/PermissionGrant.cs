@@ -1,4 +1,4 @@
-namespace Snow.PermissionManagement;
+namespace Snow.Authorization.PermissionManagement;
 
 /// <summary>
 /// 权限授予记录: (权限名, 提供器名, 提供器键) 三元组代表"某主体拥有某权限"

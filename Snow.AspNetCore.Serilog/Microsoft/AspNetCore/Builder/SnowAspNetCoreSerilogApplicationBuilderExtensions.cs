@@ -1,3 +1,4 @@
+using Snow.AspNetCore;
 using Snow.AspNetCore.Serilog;
 
 namespace Microsoft.AspNetCore.Builder;
@@ -16,6 +17,6 @@ public static class SnowAspNetCoreSerilogApplicationBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        return app.UseMiddleware<SnowSerilogMiddleware>();
+        return app.UseSnowMiddlewareOnce<SnowSerilogMiddleware>();
     }
 }

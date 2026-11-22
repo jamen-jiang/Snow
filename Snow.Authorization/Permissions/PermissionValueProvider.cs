@@ -5,7 +5,8 @@ namespace Snow.Authorization.Permissions;
 /// <summary>
 /// 权限值提供器基类: 注入 <see cref="IPermissionStore"/> 供子类查询授权数据
 /// </summary>
-public abstract class PermissionValueProvider : IPermissionValueProvider, ITransientDependency
+[TransientService]
+public abstract class PermissionValueProvider : IPermissionValueProvider
 {
     /// <summary>
     /// 构造器

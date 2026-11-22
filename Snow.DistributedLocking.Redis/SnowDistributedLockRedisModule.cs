@@ -11,6 +11,8 @@ namespace Snow.DistributedLocking;
 /// 注册 Redis 连接并把默认锁顶替成 <see cref="RedisDistributedLock"/>。
 /// <para>连接串取配置 <c>Redis:Configuration</c>(与缓存、会话共用同一节), 缺省 <c>127.0.0.1:6379</c>;
 /// 宿主已注册 <see cref="IConnectionMultiplexer"/> 时直接复用, 不会重复建连。</para>
+/// <para>是否启用由模块图决定: 启动模块写了 <c>[DependsOn(typeof(SnowDistributedLockRedisModule))]</c> 就启用,
+/// 不写则本模块的 <see cref="ConfigureServices"/> 根本不会执行, 锁保持进程内的 <c>LocalDistributedLock</c>。没有配置开关。</para>
 /// <para>租期与续期节奏是常量(<see cref="DistributedLockWatchdog.LeaseTime"/>),
 /// <see cref="DistributedLockOptions"/> 里只有 key 前缀一项。</para>
 /// </summary>

@@ -11,7 +11,8 @@ namespace Snow.Ftping;
 /// FTP 的上传/删除有 bool 与 void, 这里选择<b>如实报告失败</b>(上传返 false, 存在性判断返 false)
 /// 而不是假装成功 —— 写入丢失是事故, 让调用方当场发现比事后排查便宜。</para>
 /// </summary>
-public sealed class NullFtpClient : IFtpClient, ITransientDependency
+[TransientService]
+public sealed class NullFtpClient : IFtpClient
 {
     private readonly ILogger<NullFtpClient>? _logger;
 

@@ -9,7 +9,8 @@ namespace Snow.Security.Users;
 /// 当前用户默认实现: 一切数据都从 <see cref="ICurrentPrincipalAccessor"/> 的当前主体读取
 /// <para>对齐 ABP 的 <c>CurrentUser</c>。认证方案(不透明令牌 / 会话)只负责产出 ClaimsPrincipal, 这里与之解耦。</para>
 /// </summary>
-public class CurrentUser : ICurrentUser, ITransientDependency
+[TransientService]
+public class CurrentUser : ICurrentUser
 {
     private static readonly Claim[] EmptyClaimsArray = [];
 
@@ -38,19 +39,23 @@ public class CurrentUser : ICurrentUser, ITransientDependency
     public virtual string? Name => this.FindClaimValue(UserClaimTypes.Name);
 
     /// <inheritdoc />
-    public virtual string? PhoneNumber => this.FindClaimValue(UserClaimTypes.PhoneNumber);
+    public virtual Guid? TenantId
+    {
+        get
+        {
+            string? value = this.FindClaimValue(UserClaimTypes.TenantId);
+            return Guid.TryParse(value, out Guid tenantId) ? tenantId : null;
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual string? PhoneNumber => this.FindClaimValue(UserClaimTypes.MobilePhone);
 
     /// <inheritdoc />
     public virtual string? Email => this.FindClaimValue(UserClaimTypes.Email);
 
     /// <inheritdoc />
     public virtual string[] Roles => FindClaims(UserClaimTypes.Role).Select(claim => claim.Value).Distinct(StringComparer.Ordinal).ToArray();
-
-    /// <inheritdoc />
-    public virtual bool IsSuperAdmin => string.Equals(this.FindClaimValue(UserClaimTypes.IsSuperAdmin), "true", StringComparison.OrdinalIgnoreCase);
-
-    /// <inheritdoc />
-    public virtual string[] Permissions => FindClaimValues(UserClaimTypes.Permission);
 
     /// <inheritdoc />
     public virtual Claim? FindClaim(string claimType)
@@ -73,13 +78,5 @@ public class CurrentUser : ICurrentUser, ITransientDependency
     private Claim[] FindClaims(string claimType)
     {
         return _principalAccessor.Principal?.Claims.Where(claim => claim.Type == claimType).ToArray() ?? EmptyClaimsArray;
-    }
-
-    private string[] FindClaimValues(string claimType)
-    {
-        return [.. FindClaims(claimType)
-            .Select(claim => claim.Value)
-            .Where(value => !string.IsNullOrEmpty(value))
-            .Distinct(StringComparer.Ordinal)];
     }
 }

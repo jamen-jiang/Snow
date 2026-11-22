@@ -11,19 +11,16 @@ public abstract class CreationAuditedEntity : DeletionAuditedEntity, ICreationAu
     /// <summary>
     /// 创建人Id
     /// </summary>
-    [Column("CreatorId")]
     public long CreatorId { get; set; }
 
     /// <summary>
     /// 创建人名称
     /// </summary>
-    [Column("Creator"), MaxLength(50)]
     public string Creator { get; set; } = string.Empty;
 
     /// <summary>
     /// 创建时间
     /// </summary>
-    [Column("CreationTime")]
     public DateTime CreationTime { get; set; }
 
     /// <summary>

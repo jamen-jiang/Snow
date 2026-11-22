@@ -6,7 +6,8 @@ namespace Snow.DependencyInjection;
 
 /// <summary>
 /// 约定注册入口:每个程序集只枚举一次类型,收集完候选后按生命周期分桶登记 ——
-/// 生命周期来自标记接口或 <see cref="DependencyAttribute"/>,暴露的服务类型来自
+/// 生命周期来自 <see cref="ServiceAttribute"/>(生命周期必须写在标注上,
+/// <see cref="SingletonServiceAttribute"/> 等写明),暴露的服务类型来自
 /// <see cref="ExposeServicesAttribute"/> 或默认推断(<see cref="ExposedServiceExplorer"/>)。
 /// <para>同一批程序集只做一趟扫描,不再按生命周期重复枚举。</para>
 /// </summary>
@@ -21,6 +22,9 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// 扫描给定程序集并按约定注册
+    /// <para>约定注册分两步: <see cref="CollectCandidates"/> 只扫描不写入, <see cref="ApplyConventionalRegistrations"/>
+    /// 统一写入。模块加载器据此把全部扫描提前到任何模块的 ConfigureServices 之前, 显式登记于是稳定排在约定登记之后,
+    /// 谁压过谁不再取决于模块顺序。</para>
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="assemblies">待扫描程序集</param>
@@ -29,12 +33,32 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        if (assemblies.Length == 0)
+        ApplyConventionalRegistrations(services, CollectCandidates(assemblies));
+
+        return services;
+    }
+
+    /// <summary>
+    /// 把一批扫描结果写入服务集合
+    /// <para>写入发生在全部模块的 ConfigureServices 之后, 并遵守显式登记优先: 暴露自身的类型,
+    /// 其服务类型在写入前已有登记就跳过, 宿主用 <c>TryAdd</c> / <c>Add</c> / <c>Replace</c> 都能顶掉默认实现,
+    /// 也不会留下第二条死描述符; 只暴露外部契约的类型(如 IAuthorizationHandler 的多个实现)按实现类型去重后追加,
+    /// 不会被已有登记挡掉。声明了 <see cref="ServiceAttribute.ReplaceServices"/> 的候选例外: 它的意图就是顶掉既有登记。</para>
+    /// </summary>
+    /// <param name="services">服务集合</param>
+    /// <param name="candidates">扫描得到的候选登记</param>
+    internal static void ApplyConventionalRegistrations(IServiceCollection services, IReadOnlyList<ConventionalRegistration> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(candidates);
+
+        if (candidates.Count == 0)
         {
-            return services;
+            return;
         }
 
-        List<ConventionalRegistration> candidates = CollectCandidates(assemblies);
+        // 写入前的登记快照: 显式登记(宿主或模块在 ConfigureServices 里写的)与框架自带登记都在里面
+        HashSet<Type> presentServiceTypes = new(services.Select(descriptor => descriptor.ServiceType));
 
         // 按生命周期分桶追加,保持"单例 → 作用域 → 瞬态"的登记顺序
         foreach (ServiceLifetime lifetime in AllLifetimes)
@@ -43,7 +67,7 @@ public static class ServiceCollectionExtensions
             {
                 if (candidate.Lifetime == lifetime && !candidate.ReplaceServices)
                 {
-                    AddDescriptors(services, candidate);
+                    AddDescriptors(services, candidate, presentServiceTypes);
                 }
             }
         }
@@ -61,10 +85,8 @@ public static class ServiceCollectionExtensions
                 RemoveDescriptors(services, serviceType);
             }
 
-            AddDescriptors(services, candidate);
+            AddDescriptors(services, candidate, presentServiceTypes);
         }
-
-        return services;
     }
 
     /// <summary>
@@ -72,7 +94,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="assemblies">待扫描程序集</param>
     /// <returns>候选登记列表,顺序与程序集、类型声明顺序一致</returns>
-    private static List<ConventionalRegistration> CollectCandidates(Assembly[] assemblies)
+    internal static List<ConventionalRegistration> CollectCandidates(params Assembly[] assemblies)
     {
         List<ConventionalRegistration> candidates = new();
         HashSet<Assembly> scannedAssemblies = new();
@@ -102,7 +124,7 @@ public static class ServiceCollectionExtensions
 
                 if (lifetime is null)
                 {
-                    // 只打拦截器注解、未标生命周期时默认按瞬态登记, 做到"一个注解即可用"
+                    // 只打拦截器注解、没标服务注解时按瞬态登记, 做到"一个注解即可用"
                     if (!hasInterceptors)
                     {
                         continue;
@@ -127,33 +149,97 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// 按服务类型追加描述符
+    /// <para>同一实现类型同时暴露接口与自身时(如 ITokenService + TokenService), 接口描述符指向自身描述符的实例,
+    /// 保证解析接口与解析具体类型拿到同一个对象, 不再各建一个。</para>
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="candidate">候选登记</param>
-    private static void AddDescriptors(IServiceCollection services, ConventionalRegistration candidate)
+    /// <param name="presentServiceTypes">写入前的服务类型快照, 用于显式登记优先判定</param>
+    private static void AddDescriptors(IServiceCollection services, ConventionalRegistration candidate, HashSet<Type> presentServiceTypes)
     {
+        // 开放泛型定义交给代理工厂必然失败(代理需要具体类型), 在这里提前报错而不是等到第一次解析
+        if (candidate.HasInterceptors && candidate.ImplementationType.IsGenericTypeDefinition)
+        {
+            throw new InvalidOperationException(
+                "类型 " + candidate.ImplementationType.FullName + " 是开放泛型, 不能标拦截器注解: AOP 代理需要具体类型。");
+        }
+
+        // 既暴露接口又暴露自身的类型按"单一契约"处理: 任一服务类型已有登记就整条跳过, 显式登记优先
+        bool exposesSelf = candidate.ServiceTypes.Contains(candidate.ImplementationType);
+
+        // 单例/作用域下接口与自身共用一个实例; 瞬态本就每次新建, 不做重定向
+        bool shareInstance = !candidate.HasInterceptors
+            && !candidate.ImplementationType.IsGenericTypeDefinition
+            && candidate.Lifetime != ServiceLifetime.Transient
+            && exposesSelf
+            && candidate.ServiceTypes.Length > 1;
+
         foreach (Type serviceType in candidate.ServiceTypes)
         {
-            if (!candidate.HasInterceptors)
+            if (!candidate.ReplaceServices && presentServiceTypes.Contains(serviceType))
             {
-                services.Add(new ServiceDescriptor(serviceType, candidate.ImplementationType, candidate.Lifetime));
+                if (exposesSelf)
+                {
+                    continue;
+                }
+
+                // 只暴露外部契约的类型是"多实现"登记(如多个 IAuthorizationHandler), 只在实现类型重复时跳过
+                if (HasDescriptor(services, serviceType, candidate.ImplementationType))
+                {
+                    continue;
+                }
+            }
+
+            if (candidate.HasInterceptors)
+            {
+                // 代理只覆盖接口服务类型; 把实现类自身当作服务类型登记会拿到未被代理的实例, 因此跳过
+                if (!serviceType.IsInterface)
+                {
+                    continue;
+                }
+
+                Type proxiedImplementationType = candidate.ImplementationType;
+                InterceptorAttribute[] interceptors = candidate.Interceptors;
+
+                services.Add(new ServiceDescriptor(
+                    serviceType,
+                    serviceProvider => CreateProxy(serviceProvider, proxiedImplementationType, serviceType, interceptors),
+                    candidate.Lifetime));
                 continue;
             }
 
-            // 代理只覆盖接口服务类型; 把实现类自身当作服务类型登记会拿到未被代理的实例, 因此跳过
-            if (!serviceType.IsInterface)
+            if (shareInstance && serviceType != candidate.ImplementationType)
             {
+                Type targetType = candidate.ImplementationType;
+                services.Add(new ServiceDescriptor(
+                    serviceType,
+                    serviceProvider => serviceProvider.GetRequiredService(targetType),
+                    candidate.Lifetime));
                 continue;
             }
 
-            Type implementationType = candidate.ImplementationType;
-            InterceptorAttribute[] interceptors = candidate.Interceptors;
-
-            services.Add(new ServiceDescriptor(
-                serviceType,
-                serviceProvider => CreateProxy(serviceProvider, implementationType, serviceType, interceptors),
-                candidate.Lifetime));
+            services.Add(new ServiceDescriptor(serviceType, candidate.ImplementationType, candidate.Lifetime));
         }
+    }
+
+    /// <summary>
+    /// 判断集合里是否已有某服务类型指向该实现类型的描述符
+    /// </summary>
+    /// <param name="services">服务集合</param>
+    /// <param name="serviceType">服务类型</param>
+    /// <param name="implementationType">实现类型</param>
+    /// <returns>存在时返回 <see langword="true"/></returns>
+    private static bool HasDescriptor(IServiceCollection services, Type serviceType, Type implementationType)
+    {
+        foreach (ServiceDescriptor descriptor in services)
+        {
+            if (descriptor.ServiceType == serviceType && descriptor.ImplementationType == implementationType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -224,32 +310,41 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 生命周期判定:<see cref="DependencyAttribute"/> 显式指定优先,否则按标记接口推断
+    /// 生命周期判定:读类上的服务注解;没标注解的类型不参与约定注册
     /// </summary>
     /// <param name="type">实现类型</param>
-    /// <returns>生命周期;既无标记也无特性时返回 null</returns>
+    /// <returns>生命周期;未标注解时返回 null</returns>
     private static ServiceLifetime? GetLifetime(Type type)
     {
-        DependencyAttribute? dependency = type.GetCustomAttribute<DependencyAttribute>(true);
+        return GetServiceAttribute(type)?.Lifetime;
+    }
 
-        if (dependency?.Lifetime is not null)
+    /// <summary>
+    /// 读取类上的服务注解:从最派生的类型往上找, 命中第一层就停, 因此子类标的注解盖过基类标的
+    /// </summary>
+    /// <param name="type">实现类型</param>
+    /// <returns>注解;未标时返回 null</returns>
+    /// <exception cref="InvalidOperationException">同一个类型上标了多个服务注解</exception>
+    private static ServiceAttribute? GetServiceAttribute(Type type)
+    {
+        for (Type? current = type; current is not null && current != typeof(object); current = current.BaseType)
         {
-            return dependency.Lifetime;
-        }
+            ServiceAttribute[] attributes = current.GetCustomAttributes<ServiceAttribute>(inherit: false).ToArray();
 
-        if (typeof(ISingletonDependency).IsAssignableFrom(type))
-        {
-            return ServiceLifetime.Singleton;
-        }
+            if (attributes.Length == 0)
+            {
+                continue;
+            }
 
-        if (typeof(IScopedDependency).IsAssignableFrom(type))
-        {
-            return ServiceLifetime.Scoped;
-        }
+            if (attributes.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    "类型 " + type.FullName + " 标了多个服务注解(" +
+                    string.Join("、", attributes.Select(attribute => attribute.GetType().Name)) +
+                    "): 一个类型只能标一个, 要替换既有登记就写在那一个上, 例如 [SingletonService(ReplaceServices = true)]。");
+            }
 
-        if (typeof(ITransientDependency).IsAssignableFrom(type))
-        {
-            return ServiceLifetime.Transient;
+            return attributes[0];
         }
 
         return null;
@@ -262,29 +357,17 @@ public static class ServiceCollectionExtensions
     /// <returns>需要替换时返回 true</returns>
     private static bool IsReplacing(Type type)
     {
-        return type.GetCustomAttribute<DependencyAttribute>(true)?.ReplaceServices == true;
+        return GetServiceAttribute(type)?.ReplaceServices == true;
     }
 
     /// <summary>
-    /// 暴露的服务类型:去掉三个生命周期标记本身,其余由 <see cref="ExposedServiceExplorer"/> 决定
+    /// 暴露的服务类型:由 <see cref="ExposedServiceExplorer"/> 决定
     /// </summary>
     /// <param name="type">实现类型</param>
     /// <returns>服务类型集合</returns>
     private static IEnumerable<Type> GetExposedServiceTypes(Type type)
     {
-        return ExposedServiceExplorer.GetExposedServices(type).Where(serviceType => !IsMarkerInterface(serviceType));
-    }
-
-    /// <summary>
-    /// 是否为生命周期标记接口
-    /// </summary>
-    /// <param name="type">接口类型</param>
-    /// <returns>是标记接口时返回 true</returns>
-    private static bool IsMarkerInterface(Type type)
-    {
-        return type == typeof(ITransientDependency)
-            || type == typeof(IScopedDependency)
-            || type == typeof(ISingletonDependency);
+        return ExposedServiceExplorer.GetExposedServices(type);
     }
 
     /// <summary>
@@ -296,7 +379,7 @@ public static class ServiceCollectionExtensions
     /// <param name="ReplaceServices">是否替换既有登记</param>
     /// <param name="Interceptors">类级拦截器, 外层在前</param>
     /// <param name="HasInterceptors">类级或方法级是否声明了拦截器; 为 true 时接口服务类型生成代理</param>
-    private readonly record struct ConventionalRegistration(
+    internal readonly record struct ConventionalRegistration(
         Type ImplementationType,
         ServiceLifetime Lifetime,
         Type[] ServiceTypes,

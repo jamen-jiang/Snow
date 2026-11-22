@@ -4,7 +4,7 @@ namespace Snow.Security.Users;
 
 /// <summary>
 /// 当前登录用户(从 <see cref="Claims.ICurrentPrincipalAccessor"/> 的当前主体读取, 与认证方案无关)
-/// <para>只保留实际会被消费的成员: 身份信息 + 角色 + 声明访问 + 业务扩展(超管/权限)。</para>
+/// <para>只保留实际会被消费的成员: 身份信息 + 角色 + 声明访问。</para>
 /// </summary>
 public interface ICurrentUser
 {
@@ -27,6 +27,11 @@ public interface ICurrentUser
     /// 用户名称
     /// </summary>
     string? Name { get; }
+
+    /// <summary>
+    /// 所属租户 id, 宿主用户为 null
+    /// </summary>
+    Guid? TenantId { get; }
 
     /// <summary>
     /// 手机号
@@ -62,14 +67,4 @@ public interface ICurrentUser
     /// <param name="roleName">角色名</param>
     /// <returns>是否属于</returns>
     bool IsInRole(string roleName);
-
-    /// <summary>
-    /// 是否超级管理员(为 true 时跳过全部权限校验) —— 业务扩展
-    /// </summary>
-    bool IsSuperAdmin { get; }
-
-    /// <summary>
-    /// 权限标识列表, 如 order:add —— 业务扩展
-    /// </summary>
-    string[] Permissions { get; }
 }

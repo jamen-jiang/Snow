@@ -8,7 +8,8 @@ namespace Snow.Emailing;
 /// <para>作为 <see cref="IEmailSender"/> 的兜底实现, 引入 Snow.Emailing.MailKit 后由
 /// <c>MailKitEmailSender</c> 顶替。这样开发期不配 SMTP 也能启动, 生产漏配则只在日志里留痕。</para>
 /// </summary>
-public sealed class NullEmailSender : IEmailSender, ITransientDependency
+[TransientService]
+public sealed class NullEmailSender : IEmailSender
 {
     private readonly ILogger<NullEmailSender>? _logger;
 

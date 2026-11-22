@@ -1,12 +1,13 @@
 using Snow.Authorization.Permissions;
 using Snow.DependencyInjection;
 
-namespace Snow.PermissionManagement;
+namespace Snow.Authorization.PermissionManagement;
 
 /// <summary>
 /// 权限存储实现: 从 <see cref="IPermissionGrantRepository"/> 读取授予数据
 /// </summary>
-public sealed class PermissionStore : IPermissionStore, ITransientDependency
+[TransientService]
+public sealed class PermissionStore : IPermissionStore
 {
     private readonly IPermissionGrantRepository _permissionGrantRepository;
 

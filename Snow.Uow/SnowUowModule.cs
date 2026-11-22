@@ -1,23 +1,11 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.Modularity;
 
 namespace Snow.Uow;
 
 /// <summary>
-/// 工作单元模块: 登记环境访问器与默认管理器
+/// 工作单元模块: 服务由 <see cref="UnitOfWorkAccessor"/> 与 <see cref="SnowUnitOfWorkManager"/>
+/// 上的生命周期注解登记, 本模块只作为加载锚点(依赖它的模块据此确定加载顺序)
 /// </summary>
 public sealed class SnowUowModule : SnowModule
 {
-    /// <summary>
-    /// 登记服务
-    /// </summary>
-    /// <param name="context">服务配置上下文</param>
-    public override void ConfigureServices(ServiceConfigurationContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        context.Services.TryAddSingleton<IUnitOfWorkAccessor, UnitOfWorkAccessor>();
-        context.Services.TryAddTransient<IUnitOfWorkManager, SnowUnitOfWorkManager>();
-    }
 }

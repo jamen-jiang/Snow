@@ -8,7 +8,7 @@ using Snow.Modularity;
 namespace Snow.EventBus;
 
 /// <summary>
-/// 事件总线模块:登记默认发布策略,并用 Scrutor 扫描全部模块程序集,
+/// 事件总线模块:登记默认发布策略,并扫描全部模块程序集,
 /// 把实现 <see cref="IEventHandler{TEvent}"/> 的类型登记成对应的处理器接口
 /// </summary>
 public sealed class SnowEventBusModule : SnowModule
@@ -21,8 +21,8 @@ public sealed class SnowEventBusModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        // 发布策略有多个实现,生命周期与生效实现都显式登记,不依赖约定扫描
-        context.Services.TryAddSingleton<IEventHandlerPublisher, ForeachAwaitEventHandlerPublisher>();
+        // 默认发布策略由 ForeachAwaitEventHandlerPublisher 上的 [SingletonService] 登记: 其它策略(TaskWhenAll 等)
+        // 没有注解, 不会被误登记成第二条, 宿主想换就自己 Add 一份
 
         Assembly[] assemblies = context.Services
             .GetSingletonInstance<IModuleContainer>()
@@ -31,22 +31,25 @@ public sealed class SnowEventBusModule : SnowModule
             .Distinct()
             .ToArray();
 
-        // 处理器只按 IEventHandler<TEvent> 登记: 事件总线在发布时按该接口从容器解析全部实现
-        context.Services.Scan(scan => scan
-            .FromAssemblies(assemblies)
-            .AddClasses(classes => classes.AssignableTo<IEventHandler>())
-            .As(GetEventHandlerInterfaces)
-            .WithTransientLifetime());
-    }
+        // 处理器只按 IEventHandler<TEvent> 登记: 事件总线在发布时按该接口从容器解析全部实现。
+        // 不能交给约定注册: 默认推断要求接口名去掉 I 之后是实现类名的后缀(OrderCreatedHandler),
+        // 而这里的实现类名是任意业务命名, 只能按接口可赋值性全量捞
+        foreach (Type type in assemblies.SelectMany(AssemblyTypeCache.GetTypes))
+        {
+            if (!type.IsClass || type.IsAbstract || !type.IsVisible)
+            {
+                continue;
+            }
 
-    /// <summary>
-    /// 取类型实现的全部事件处理器接口
-    /// </summary>
-    /// <param name="type">处理器实现类型</param>
-    /// <returns>事件处理器接口集合</returns>
-    private static IEnumerable<Type> GetEventHandlerInterfaces(Type type)
-    {
-        return type.GetInterfaces()
-            .Where(contract => contract.IsGenericType && contract.GetGenericTypeDefinition() == typeof(IEventHandler<>));
+            foreach (Type contract in type.GetInterfaces())
+            {
+                if (!contract.IsGenericType || contract.GetGenericTypeDefinition() != typeof(IEventHandler<>))
+                {
+                    continue;
+                }
+
+                context.Services.AddTransient(contract, type);
+            }
+        }
     }
 }

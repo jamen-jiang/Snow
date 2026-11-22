@@ -27,11 +27,6 @@ public class SnowAspNetCoreSerilogOptions
         public string UserId { get; set; } = "UserId";
 
         /// <summary>
-        /// 客户端Id。默认 "ClientId"
-        /// </summary>
-        public string ClientId { get; set; } = "ClientId";
-
-        /// <summary>
         /// 链路Id。默认 "CorrelationId"
         /// </summary>
         public string CorrelationId { get; set; } = "CorrelationId";

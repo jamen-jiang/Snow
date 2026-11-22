@@ -1,67 +1,28 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.DependencyInjection;
 using Snow.DistributedLocking;
 using Snow.Modularity;
+using Snow.Timing;
 
 namespace Snow.BackgroundJobs;
 
 /// <summary>
-/// 后台任务模块: 注册存储、入口实现与内置 worker, 并扫描模块程序集里的作业类
+/// 后台任务模块: 登记存储、入队器、执行器与内置 worker
+/// <para>入队用 lambda, 不需要扫描"作业类型": 要执行什么方法由调用方在表达式里写清楚。</para>
+/// <para>依赖 <see cref="SnowTimingModule"/>: worker 与任务记录都用 <see cref="IClock"/> 取时间。</para>
 /// </summary>
-[DependsOn(typeof(SnowDistributedLockModule))]
+[DependsOn(typeof(SnowDistributedLockModule), typeof(SnowTimingModule))]
 public sealed class BackgroundJobsModule : SnowModule
 {
     /// <inheritdoc />
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
-
         IServiceCollection services = context.Services;
 
-        services.TryAddSingleton<IBackgroundJobStore, InMemoryBackgroundJobStore>();
-        services.TryAddTransient<IBackgroundJobManager, DefaultBackgroundJobManager>();
-
+        // 存储、入队器、执行器都由实现类上的生命周期注解登记; worker 是 HostedService, 只能显式登记
         Configure<BackgroundJobOptions>(services.GetConfiguration().GetSection("BackgroundJobs"));
 
-        // 作业类靠扫描登记: 约定注册只认带生命周期标记的类, 作业类不该被强制加标记
-        Type[] jobTypes = FindJobTypes(services.GetSingletonInstance<IModuleContainer>());
-        Configure<BackgroundJobOptions>(options =>
-        {
-            foreach (Type jobType in jobTypes)
-            {
-                options.AddJob(jobType);
-            }
-        });
-
         services.AddHostedService<BackgroundJobWorker>();
-    }
-
-    private static Type[] FindJobTypes(IModuleContainer moduleContainer)
-    {
-        return moduleContainer.Modules
-            .SelectMany(module => module.AllAssemblies)
-            .Distinct()
-            .SelectMany(AssemblyTypeCache.GetTypes)
-            .Where(IsJobType)
-            .OrderBy(type => type.FullName, StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    /// <summary>
-    /// 作业类判定: 实现 IBackgroundJob&lt;TArgs&gt; 或 IAsyncBackgroundJob&lt;TArgs&gt; 的具体类
-    /// </summary>
-    private static bool IsJobType(Type type)
-    {
-        if (!type.IsClass || type.IsAbstract)
-        {
-            return false;
-        }
-
-        return type.GetInterfaces().Any(interfaceType =>
-            interfaceType.IsGenericType &&
-            (interfaceType.GetGenericTypeDefinition() == typeof(IBackgroundJob<>) ||
-             interfaceType.GetGenericTypeDefinition() == typeof(IAsyncBackgroundJob<>)));
     }
 }

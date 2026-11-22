@@ -11,7 +11,7 @@ namespace Snow.DistributedLocking;
 /// <c>context.Services.Configure&lt;DistributedLockOptions&gt;(...)</c> 设置, 不绑配置节(与 ABP 一致)。</para>
 /// <para>本模块不含远程后端 —— 单机直接用默认的 <see cref="LocalDistributedLock"/>, 多实例部署再加
 /// <c>Snow.DistributedLocking.Redis</c>, 由它的 <c>RedisDistributedLock</c> 按
-/// <c>[Dependency(ReplaceServices = true)]</c> 顶替默认锁。</para>
+/// <c>[SingletonService(ReplaceServices = true)]</c> 顶替默认锁。</para>
 /// </summary>
 public sealed class SnowDistributedLockModule : SnowModule
 {

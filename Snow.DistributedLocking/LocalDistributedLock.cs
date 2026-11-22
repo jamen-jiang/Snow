@@ -13,7 +13,8 @@ namespace Snow.DistributedLocking;
 /// key 无人使用时连同信号量一起从字典摘除, 不随 key 数量增长而泄漏。</para>
 /// <para>进程内锁没有租期概念, 因此不启用看门狗, <see cref="IDistributedLockHandle.CanExtend"/> 恒为 false。</para>
 /// </summary>
-public class LocalDistributedLock : IDistributedLock, ISingletonDependency
+[SingletonService]
+public class LocalDistributedLock : IDistributedLock
 {
     private readonly ConcurrentDictionary<string, LocalLockEntry> _entries = new(StringComparer.Ordinal);
 

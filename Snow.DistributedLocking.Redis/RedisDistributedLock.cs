@@ -12,12 +12,12 @@ namespace Snow.DistributedLocking;
 /// 确认键仍归自己, 免得把已过期的僵尸记录当成还持有), 不会自己把自己锁死;
 /// <c>Task.Run</c> 起的并行分支不算重入, 会正常去抢 Redis 的锁。逐层释放, 归零时才停续期并删键。</para>
 /// <para>拿锁成功后立即启动看门狗(对应 Redisson 在 <c>lock()</c> 里启 <c>ExpirationRenewal</c>),
-/// 业务跑多久锁就保多久。</para>
-/// <para>标 <see cref="DependencyAttribute"/>(ReplaceServices = true) 与 <see cref="ISingletonDependency"/>,
+/// <para>标 <see cref="SingletonServiceAttribute"/>(ReplaceServices = true),
+/// 由约定注册顶替默认的 <see cref="LocalDistributedLock"/>。</para>
 /// 由约定注册顶替默认的 <see cref="LocalDistributedLock"/>。</para>
 /// </summary>
-[Dependency(ReplaceServices = true)]
-public class RedisDistributedLock : IDistributedLock, ISingletonDependency
+[SingletonService(ReplaceServices = true)]
+public class RedisDistributedLock : IDistributedLock
 {
     /// <summary>
     /// 抢锁失败后的重试间隔: 有等待上限时按这个节奏轮询
