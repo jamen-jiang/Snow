@@ -1,34 +1,37 @@
+using System;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.BackgroundJobs;
 using Snow.DependencyInjection;
 using Snow.Modularity;
 using global::Hangfire;
 using global::Hangfire.InMemory;
 
-namespace Snow.BackgroundJobs.HangFire;
+namespace Snow.BackgroundJobs.Hangfire;
 
 /// <summary>
 /// Hangfire 集成模块: 注册 Hangfire 服务端与存储, 并用 Hangfire 实现替换入队与调度入口
 /// <para>宿主已自行 AddHangfire(配置持久化存储)时不再重复注册, 只接管入口。</para>
+/// <para>入队直接用 lambda, 面板里显示的是真实的服务与方法。</para>
 /// </summary>
 [DependsOn(typeof(BackgroundJobsModule))]
-public sealed class SnowHangFireModule : SnowModule
+public sealed class SnowHangfireModule : SnowModule
 {
     /// <inheritdoc />
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
-
-        IConfigurationSection section = context.Services.GetConfiguration().GetSection("HangFire");
-        SnowHangFireOptions hangfireOptions = new();
+        IServiceCollection services = context.Services;
+        IConfigurationSection section = services.GetConfiguration().GetSection("Hangfire");
+        SnowHangfireOptions hangfireOptions = new();
         section.Bind(hangfireOptions);
-        Configure<SnowHangFireOptions>(section);
 
-        if (!context.Services.Any(descriptor => descriptor.ServiceType == typeof(IGlobalConfiguration)))
+        Configure<SnowHangfireOptions>(section);
+
+        bool ownsGlobalConfiguration = !services.Any(descriptor => descriptor.ServiceType == typeof(IGlobalConfiguration));
+
+        if (ownsGlobalConfiguration)
         {
-            context.Services.AddHangfire(configuration =>
+            services.AddHangfire(configuration =>
             {
                 configuration
                     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -44,10 +47,8 @@ public sealed class SnowHangFireModule : SnowModule
 
         if (hangfireOptions.EnableServer)
         {
-            // 直接写进服务端选项: 走委托而不是 IOptions, 保证服务端构建时拿到的就是这份值
-            context.Services.AddHangfireServer(options =>
+            services.AddHangfireServer(options =>
             {
-                // 调度器轮询: 决定延迟任务与重试任务多久出队
                 options.SchedulePollingInterval = TimeSpan.FromSeconds(Math.Max(1, hangfireOptions.PollingIntervalSeconds));
 
                 if (hangfireOptions.WorkerCount.HasValue && hangfireOptions.WorkerCount.Value > 0)
@@ -57,15 +58,10 @@ public sealed class SnowHangFireModule : SnowModule
             });
         }
 
-        context.Services.TryAddTransient<HangFireJobInvoker>();
+        // 内置 worker 必须让位: 否则同一个任务会被两边各执行一次
+        Configure<BackgroundJobOptions>(options => options.Enabled = false);
 
-        // 所有执行交给 Hangfire: 关掉内置 worker, 免得它空轮询进程内存储
-        Configure<BackgroundJobOptions>(options => options.IsJobExecutionEnabled = false);
-
-        // 入口替换: 约定注册若已登记其他实现, 这里以 Hangfire 为准
-        context.Services.RemoveAll<IBackgroundJobManager>();
-        context.Services.AddTransient<IBackgroundJobManager, HangFireBackgroundJobManager>();
-        context.Services.RemoveAll<IBackgroundJobScheduler>();
-        context.Services.AddSingleton<IBackgroundJobScheduler, HangFireBackgroundJobScheduler>();
+        // 两个入口的替换由实现类上的 [TransientService(ReplaceServices = true)] /
+        // [SingletonService(ReplaceServices = true)] 完成, 约定注册会顶掉默认实现, 这里不写替换代码。
     }
 }

@@ -6,9 +6,9 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>Snow.BackgroundJobs.HangFire</AssemblyName>
-    <PackageId>Snow.BackgroundJobs.HangFire</PackageId>
-    <RootNamespace>Snow.BackgroundJobs.HangFire</RootNamespace>
+    <AssemblyName>Snow.BackgroundJobs.Hangfire</AssemblyName>
+    <PackageId>Snow.BackgroundJobs.Hangfire</PackageId>
+    <RootNamespace>Snow.BackgroundJobs.Hangfire</RootNamespace>
     <OutputType>Library</OutputType>
     <IsPackable>true</IsPackable>
     <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>

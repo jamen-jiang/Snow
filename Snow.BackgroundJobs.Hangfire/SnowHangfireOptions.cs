@@ -1,9 +1,9 @@
-namespace Snow.BackgroundJobs.HangFire;
+namespace Snow.BackgroundJobs.Hangfire;
 
 /// <summary>
-/// Hangfire 集成配置, 对应配置节 <c>HangFire</c>
+/// Hangfire 集成配置, 对应配置节 <c>Hangfire</c>
 /// </summary>
-public class SnowHangFireOptions
+public class SnowHangfireOptions
 {
     /// <summary>
     /// 是否注册 Hangfire 服务端(后台作业执行器), 默认 true
