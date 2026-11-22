@@ -101,59 +101,104 @@ builder.Services.AddSnowStaticAssets(
 
 ### 端点统一挂载
 
-映射端点要的是 `IEndpointRouteBuilder`, 而模块的应用初始化阶段只拿得到 `IApplicationBuilder` —— 所以模块不自己 `Map`, 而是把自己的映射动作登记进 `SnowEndpointRouterOptions`, 宿主统一执行一次:
+映射端点要的是 `IEndpointRouteBuilder`, 而模块的应用初始化阶段只拿得到 `IApplicationBuilder` —— 所以模块不自己 `Map`, 而是把映射动作登记进管道登记表 `SnowPipelineRegistry`, 由 `InitializeSnowAsync()` 统一执行:
 
 ```csharp
 WebApplication app = builder.Build();
-await app.InitializeSnowAsync();   // 模块初始化, 各模块已把映射动作登记好
-app.UseSnowEndpoints();           // 一次性挂上 Controller / Hub / 健康检查等全部端点
+await app.InitializeSnowAsync();   // 管道与端点都在这里挂完
 app.Run();
 ```
 
-这与 ABP 的 `app.UseConfiguredEndpoints()` + `AbpEndpointRouterOptions.EndpointConfigureActions` 是同一套机制:
-`SnowMvcModule` 登记 `MapControllers()`, `SnowSignalRModule` 登记 Hub 映射, `SnowHealthChecksModule` 登记 `MapHealthChecks`。
-需要临时加端点就传参数: `app.UseSnowEndpoints(endpoints => endpoints.MapGet("/ping", () => "pong"));`
-只在单独使用某个包时, 才需要手写 `app.UseSnowControllers()` / `app.MapSnowHubs()` / `app.MapSnowHealthChecks()`, 与 `UseSnowEndpoints()` 二选一。
+`SnowMvcModule` 登记 `MapControllers()`, `SnowSignalRModule` 登记 Hub 映射, `SnowHealthChecksModule` 登记 `MapHealthChecks`, `SnowOpenApiModule` 登记文档端点 —— 宿主一行都不用写。
+这与 ABP 的 `AbpEndpointRouterOptions.EndpointConfigureActions` 是同一套机制(差别只在于 ABP 把执行那一步留给宿主的 `UseConfiguredEndpoints()`)。
+
+需要临时加端点:
+
+```csharp
+await app.InitializeSnowAsync();
+app.UseSnowEndpoints(endpoints => endpoints.MapGet("/ping", () => "pong"));   // 已挂过, 只追加这一段
+```
+
+只在单独使用某个包、且不经过 `InitializeSnowAsync()` 时, 才需要手写 `app.UseSnowControllers()` / `app.MapSnowHubs()` / `app.MapSnowHealthChecks()`。
 
 ### 链路标识
 
 每个请求一个链路标识: 先看 `X-Correlation-Id` 请求头, 没有就生成一个, 并写回响应头。请求内 `ICorrelationIdProvider.Get()` 返回同一个值, 日志增强、审计、出站 HTTP 都用它把跨服务日志串起来。
 
+中间件由 `SnowAspNetCoreModule` 登记到 `BeforeRouting` 阶段, 宿主不用写任何一行:
+
 ```csharp
-await app.InitializeSnowAsync();   // 链路标识中间件已由 SnowAspNetCoreModule 自动挂到最前面
-app.UseSnowEndpoints();
+await app.InitializeSnowAsync();   // 链路标识已挂到管道最外层
 ```
 
 配置节 `CorrelationId`: `{ "HttpHeaderName": "X-Correlation-Id", "SetResponseHeader": true }`。
 
-不用 `SnowAspNetCoreModule` 的宿主可手动 `app.UseSnowCorrelationId()`。它与 ABP 的 `app.UseCorrelationId()` / `AbpCorrelationIdMiddleware` 同形, 由 `Snow.AspNetCore` 提供 —— **不放在 Serilog 包里**: Serilog 只消费这个值, 而审计、出站 HTTP、事件总线也都要用它, 放进去会逼着不用 Serilog 的宿主也引 Serilog(ABP 同样把它放在 `Volo.Abp.AspNetCore`)。
+它与 ABP 的 `app.UseCorrelationId()` / `AbpCorrelationIdMiddleware` 同形, 由 `Snow.AspNetCore` 提供 —— **不放在 Serilog 包里**: Serilog 只消费这个值, 而审计、出站 HTTP、事件总线也都要用它, 放进去会逼着不用 Serilog 的宿主也引 Serilog(ABP 同样把它放在 `Volo.Abp.AspNetCore`)。
 
 ### 中间件管道
 
-ASP.NET Core 的请求管道是按代码顺序拼出来的链表, 没有 Spring 那种数字 order; 而模块的 `OnApplicationInitialization` 在 `InitializeSnowAsync()` 那一刻执行, 那时管道还是空的 —— 所以**模块自己挂的中间件天然在最外层**。据此把包内中间件分两类。
-
-**第一类: 与后续阶段无关、挂最外层就对的 → 模块在 `OnApplicationInitialization` 里自己挂, 宿主什么都不用写。** `SnowAspNetCoreModule` 挂 `SnowCorrelationIdMiddleware`, `Snow.AspNetCore.Serilog` 挂 `SnowSerilogMiddleware`, 都走 `UseSnowMiddlewareOnce<T>()`(与宿主手动 `UseSnowCorrelationId()` / `UseSnowSerilogEnrichers()` 自动去重)。日志增强器特意做成"写日志那一刻才读当前租户/用户/链路标识", 因此它即使挂在认证与多租户之前, 内层解析出的值也带得上。
-
-**第二类: 必须排在某个阶段之后的 → 包只登记"阶段 + 顺序", 宿主按锚点展开。** 四个阶段(`SnowPipelineStage`): `BeforeRouting` / `AfterRouting` / `AfterAuthentication` / `AfterAuthorization`。
+宿主一行都不用写: 模块在 `ConfigureServices` 里用一行 `AddSnowMiddleware` 声明自己的中间件属于哪个阶段, `InitializeSnowAsync()` 按阶段顺序统一展开。
 
 ```csharp
-await app.InitializeSnowAsync();                             // 链路标识、日志增强在这里已挂到最前面
-app.UseRouting();
-app.UseAuthentication();
-app.UseSnowPipeline(SnowPipelineStage.AfterAuthentication);  // 多租户(0): 需要路由值与已认证用户
-app.UseAuthorization();
-app.UseSnowPipeline(SnowPipelineStage.AfterAuthorization);
-app.UseSnowEndpoints();
+WebApplication app = builder.Build();
+await app.InitializeSnowAsync();   // 全部中间件 + 全部端点在这里挂完
+app.Run();
 ```
 
-- 阶段登记清单: 只有 `Snow.AspNetCore.MultiTenancy` 走锚点, 登记 `MultiTenancyMiddleware`(AfterAuthentication, 顺序 `MultiTenancy`); 链路标识与日志增强不登记, 由各自模块在初始化阶段直接挂到最前面。
-- 多租户为什么不能像链路标识/日志那样搬进 `OnApplicationInitialization`: 它要读路由值(Route 出资者)与已认证用户, 必须在 `UseRouting()` / `UseAuthentication()` 之后, 而模块初始化时这两个锚点还没出现。
-- `UseSnowCorrelationId()` / `UseSnowSerilogEnrichers()` / `UseSnowMultiTenancy()` 三个扩展都还在(内部 `UseSnowMiddlewareOnce`, 与自动挂载去重): 前两个一般不必写, 第三个在不用 `Snow.AspNetCore.MultiTenancy` 包时才有用。
-- 宿主自己的中间件: 直接在锚点之间 `app.Use(...)` / `app.UseMiddleware<T>()`; 想和某个阶段的包内中间件写在一起, 用 `app.UseSnowStage(SnowPipelineStage.AfterAuthentication, p => p.UseMyMiddleware())`。
-- 给自己的包注册: `services.AddSnowMiddlewareStep<TStep>(stage, order)`(TStep 实现 `ISnowMiddlewareStep`, 自己 `app.Use`) 或 `services.AddSnowMiddleware<TMiddleware>(stage, order)`(框架用 `app.UseMiddleware` 挂, 类型会自动 `TryAddTransient` 登记, `IMiddleware` 因此能按请求构造)。
-- 三条硬规则: 同阶段同 order 启动即抛 `SnowInitializationException`(宿主自己的从 `SnowMiddlewareOrders.HostOffset` 起递增); 同一阶段只能展开一次; 登记了阶段却没摆对应锚点时, `UseSnowEndpoints()` 会抛异常点名缺哪个阶段(全部手写 `UseXxx` 的老宿主不受此检查影响)。
-- 与 Spring 对照: Spring 是 `Filter` 集合 + `@Order` 数字全排序, 库能自我装配, 代价是顺序变成公共契约、排查要查表; 这里只固定阶段, 阶段内才按数字排。
+为什么需要这一层: ASP.NET Core 的管道是按代码顺序拼出来的链表, 没有插入 API; 而模块的 `OnApplicationInitialization` 是按模块依赖顺序依次执行的, 表达不了"认证之后、授权之前"这种夹在中间的位置。所以位置用阶段表达, 阶段之间的路由 / 认证 / 授权三段由 `SnowAspNetCoreModule` 自己插进去:
+
+| 阶段 | 位置 | 谁登记 |
+| --- | --- | --- |
+| `Outermost` | 一切之前 | `Snow.Authentication`(登录态异常转 401/403, 兜住后面所有中间件) |
+| `BeforeRouting` | 路由之前 | `SnowAspNetCoreModule`(链路标识)、`Snow.AspNetCore.Serilog`(日志上下文增强) |
+| — | `UseRouting()` | 框架插入; 没注册路由服务时自动跳过 |
+| `AfterRouting` | 路由之后、认证之前 | 需要读端点/路由值但不需要用户的中间件 |
+| — | `UseAuthentication()` | 框架插入; 没有任何认证方案时自动跳过 |
+| `AfterAuthentication` | 认证之后、授权之前 | `Snow.AspNetCore.MultiTenancy`(要读已认证用户与路由值) |
+| — | `UseAuthorization()` | 框架插入; 没有授权服务时自动跳过 |
+| `AfterAuthorization` | 授权之后、端点之前 | `Snow.AspNetCore.RateLimiting`(要读端点上的限流策略) |
+| `BeforeEndpoints` | 端点之前的终端分支 | `Snow.BackgroundJobs.Hangfire`(仪表盘, 受 `EnableDashboard` 控制) |
+
+模块侧就一行:
+
+```csharp
+public override void ConfigureServices(ServiceConfigurationContext context)
+{
+    // 中间件类型本身就是去重键: 同一类型登记两次会在启动期直接报错, 不会静默生效
+    context.Services.AddSnowMiddleware<MultiTenancyMiddleware>(SnowPipelineStage.AfterAuthentication);
+}
+```
+
+微软自家中间件是 `internal` 的(如限流只能走 `UseRateLimiter()`), 这种用重载:
+
+```csharp
+context.Services.AddSnowMiddleware(SnowPipelineStage.AfterAuthorization, app => app.UseRateLimiter());
+```
+
+宿主自己加中间件, 按需要选:
+
+```csharp
+// 1) 不关心位置: 原生写法, 放在 InitializeSnowAsync 前后即可
+app.UseMyOuterMiddleware();
+await app.InitializeSnowAsync();     // 之前 = 整段之前, 之后 = 整段之后
+app.UseMyInnerMiddleware();
+
+// 2) 关心位置: 和包内中间件同一套写法, 只写阶段, 不写任何序号
+builder.Services.AddSnowMiddleware<MyMiddleware>(SnowPipelineStage.AfterAuthorization);
+
+// 3) 内联: 需要临时插一段逻辑
+builder.Services.AddSnowMiddleware(SnowPipelineStage.AfterRouting, app => app.Use(async (context, next) =>
+{
+    // ...
+    await next(context);
+}));
+```
+
+- 中间件实现本身仍是原生写法: `app.UseMiddleware<T>()` 或实现 `IMiddleware`; 登记只决定"挂在哪个阶段", 不改变"怎么挂"。
+- 同一阶段内按登记顺序执行; 同一中间件类型重复登记直接抛 `SnowInitializationException`。
 - 注意: 约定式中间件构造器注入的 Scoped 服务实际只建一次(启动期); 需要每请求作用域实例就继承 `SnowMiddlewareBase`(实现 `IMiddleware`, 容器按请求构造), 或用 `InvokeAsync` 参数注入。
+- 与 Spring 对照: Spring 是 `Filter` 集合 + `@Order` 数字全排序, 库能自我装配, 代价是顺序成了公共契约、每个 filter 都要维护一个数字; 这里换成阶段枚举, 数量固定、语义自解释, 库照样自我装配。
+
 
 ## 后台任务: 两个端口, 各管一件事
 
@@ -237,8 +282,8 @@ public sealed class ReconService(IBackgroundJobScheduler scheduler)
 [DependsOn(typeof(SnowHangfireModule))]
 public sealed class MyModule : SnowModule;
 
-// 挂仪表盘, 默认 /hangfire, 路径与标题取自 Hangfire 配置节
-app.UseSnowHangfireDashboard();
+// Program.cs: 仪表盘由模块按 Hangfire 配置节自动挂好(默认 /hangfire), 宿主不用写 UseSnowHangfireDashboard()
+await app.InitializeSnowAsync();
 ```
 
 模块做的事: 关掉内置 worker(免得它空轮询进程内存储), 并接上 Hangfire 的服务端与存储; 两个端口本身的替换不写代码 —— `HangfireBackgroundJobManager` / `HangfireBackgroundJobScheduler` 上标了 `ReplaceServices = true`, 约定注册会把默认实现顶掉(与 MailKit / FTP / Excel 那批同一套路)。
@@ -367,7 +412,7 @@ await tokenService.EnableAsync(42);
 | `TokenDisabledException` | 403 | 账号已被封禁 |
 
 响应体是 `ProblemDetails`(`application/problem+json`)。MVC 宿主由模块自动注册的 `TokenExceptionFilter` 接管;
-最小 API 或自建管线在 `UseRouting()` 之后加一行 `app.UseSnowTokenExceptionHandling()` 即可。
+最小 API 宿主也不用写任何一行 —— 模块已把 `TokenExceptionMiddleware` 登记到 `Outermost` 阶段, `InitializeSnowAsync()` 时自动挂上。
 只拦上面三类, 其它异常原样抛出, 不影响宿主自己的错误处理。
 
 
@@ -756,9 +801,7 @@ public class BookAppService : ApplicationService
 
 ```csharp
 WebApplication app = builder.Build();
-await app.InitializeSnowAsync();   // 必须先初始化模块
-app.UseSnowEndpoints();            // 统一挂载: 自动 API、Hub、健康检查一次挂完
-// 或单独挂: app.UseSnowControllers();
+await app.InitializeSnowAsync();   // 管道 + 全部端点(Controller / Hub / 健康检查 / 文档)一次挂完
 app.Run();
 ```
 
@@ -787,8 +830,10 @@ public sealed class MyHttpApiHostModule : SnowModule { }
 ```
 
 ```csharp
-app.UseSnowSwagger();   // 默认暴露 /swagger/v1.json 与 /swagger 界面(裸前缀会 302 跳到 /swagger/)
+await app.InitializeSnowAsync();   // 文档端点已由 SnowOpenApiModule 登记, 默认 /swagger/v1.json 与 /swagger 界面
 ```
+
+单独使用本包(不走 `InitializeSnowAsync()`)时才需要手写 `app.UseSnowSwagger();`。
 
 选项既可以走配置节 `Swagger`, 也可以在 `PreConfigureServices` 里用 `context.Services.AddSnowSwagger(options => ...)` 覆盖(后执行者赢):
 
@@ -824,8 +869,10 @@ public sealed class MyHttpApiHostModule : SnowModule
 ```
 
 ```csharp
-app.MapSnowHealthChecks();   // 默认映射 GET /health(走 UseSnowEndpoints() 时已自动挂上, 不必再调)
+await app.InitializeSnowAsync();   // 默认映射 GET /health, 由模块登记, 宿主不用写
 ```
+
+单独使用本包时才需要手写 `app.MapSnowHealthChecks();`。
 
 ```json
 {
@@ -854,8 +901,10 @@ context.Services.AddSnowSignalR(options => options.EnableDetailedErrors = true);
 ```
 
 ```csharp
-app.MapSnowHubs();   // 走 UseSnowEndpoints() 时已自动挂上, 不必再调
+await app.InitializeSnowAsync();   // Hub 端点由模块登记, 宿主不用写
 ```
+
+单独使用本包时才需要手写 `app.MapSnowHubs();`。
 
 ```json
 {
@@ -870,7 +919,7 @@ app.MapSnowHubs();   // 走 UseSnowEndpoints() 时已自动挂上, 不必再调
 
 ## 限流
 
-直接用微软自带的限流中间件(`Microsoft.AspNetCore.RateLimiting`), 本包只做两件事: 在模块里帮你调用 `AddRateLimiter`, 并提供 `UseSnowRateLimiting()` 包一层 `UseRateLimiter()`。**没有任何自有选项类型**: 配置动作收到的就是原生的 `RateLimiterOptions`。
+直接用微软自带的限流中间件(`Microsoft.AspNetCore.RateLimiting`), 本包只做两件事: 在模块里帮你调用 `AddRateLimiter`, 并把 `UseRateLimiter()` 登记到 `AfterAuthorization` 阶段。**没有任何自有选项类型**: 配置动作收到的就是原生的 `RateLimiterOptions`。
 
 ```csharp
 [DependsOn(typeof(SnowRateLimitingModule))]
@@ -924,10 +973,11 @@ public sealed class MyHttpApiHostModule : SnowModule
 ```
 
 ```csharp
-app.UseRouting();
-app.UseSnowRateLimiting();   // 内部就是 app.UseRateLimiter()
-app.MapControllers();
+await app.InitializeSnowAsync();   // 限流中间件已由 SnowRateLimitingModule 登记(order 700), 宿主不用写
+app.Run();
 ```
+
+单独使用本包时才需要手写 `app.UseSnowRateLimiting();`(内部就是 `app.UseRateLimiter()`)。
 
 说明:
 
@@ -1022,12 +1072,8 @@ app.UseAuthentication();
 public sealed class MyHttpApiHostModule : SnowModule;
 
 // Program.cs
-await app.InitializeSnowAsync();
-app.UseRouting();
-app.UseAuthentication();
-app.UseSnowPipeline(SnowPipelineStage.AfterAuthentication);  // 多租户中间件已由本包自注册
-app.UseAuthorization();
-app.UseSnowEndpoints();
+await app.InitializeSnowAsync();   // 路由 / 认证 / 多租户 / 授权 / 端点全在这一次里按序挂好
+app.Run();
 ```
 
 ```json
@@ -1060,6 +1106,8 @@ app.UseSnowEndpoints();
 键名统一由 `MultiTenancy:AspNetCore:TenantKey` 决定(默认 `__tenant`)。自己再加出资者: 实现 `ITenantResolveContributor`, 在模块里 `context.Services.AddTransient<ITenantResolveContributor, MyContributor>()` —— 排在哪一位就决定了它的优先级。
 
 中间件流程: 关闭 → 放行; 开启 → 跑出资者 → 解析出值就去存储查 → 查到则 `ICurrentTenant.Change` 包住整个请求, 查不到直接返回 **404** `{"error":{"code":"TenantNotFound",...}}`(不会悄悄当宿主处理)。
+
+中间件由 `SnowAspNetCoreMultiTenancyModule` 登记到 `AfterAuthentication` 阶段自动挂载(要读路由值, 也要读已认证用户), 宿主不用写 `app.UseSnowMultiTenancy()`。
 
 ### 租户存储
 
@@ -1230,14 +1278,14 @@ git tag v1.2.0 && git push origin v1.2.0
 | `Snow.Data` | 数据过滤: 按过滤器类型开关全局过滤(软删除等), 状态按异步调用链隔离 |
 | `Snow.Timing` | 时间: `IClock` 抽象与直接读系统时钟的默认实现 |
 | `Snow.Tracing` | 链路标识: `ICorrelationIdProvider` 与进程内默认实现 |
-| `Snow.AspNetCore` | Web 宿主能力包: `SnowAspNetCoreModule`(HTTP 上下文访问器、Web 对象访问器、包内静态资源合并) + `UseSnowAspNetCore()` / `InitializeSnowAsync()`, 端点统一挂载 `UseSnowEndpoints()`(对应 ABP 的 `UseConfiguredEndpoints()`) + 中间件管道 `UseSnowPipeline()` / `UseSnowStage()` + 链路标识 `UseSnowCorrelationId()`(对应 ABP 的 `UseCorrelationId()`), 外加全部框架能力的契约与内存实现; 不含任何具体后端(EF / Redis / Hangfire / Serilog / MailKit / FluentFTP / ClosedXML / Elsa 由宿主按需引用) |
+| `Snow.AspNetCore` | Web 宿主能力包: `SnowAspNetCoreModule`(HTTP 上下文访问器、Web 对象访问器、包内静态资源合并、按阶段展开管道与端点) + `UseSnowAspNetCore()` / `InitializeSnowAsync()`, 管道登记表 `SnowPipelineRegistry` + 阶段枚举 `SnowPipelineStage`(`AddSnowMiddleware<T>(stage)` 声明中间件、`AddSnowEndpoint(...)` 声明端点, 初始化时按阶段展开, 宿主零接线) + 链路标识中间件 `SnowCorrelationIdMiddleware`(对应 ABP 的 `AbpCorrelationIdMiddleware`) + 应用初始化上下文扩展 `GetApplicationBuilder()` 一族, 外加全部框架能力的契约与内存实现; 不含任何具体后端(EF / Redis / Hangfire / Serilog / MailKit / FluentFTP / ClosedXML / Elsa 由宿主按需引用) |
 | `Snow.AspNetCore.Serilog` | Serilog 集成: 请求级租户/用户/链路标识自动进日志上下文; 已依赖 `Snow.AspNetCore`(与 ABP 的 `Volo.Abp.AspNetCore.Serilog` 依赖 `Volo.Abp.AspNetCore` 同形), 宿主不必再单独声明接线模块 |
 | `Snow.AspNetCore.Mvc` | MVC 与自动 API: 应用服务按约定自动变成 Controller(路由/动词/参数绑定), 统一响应信封 `SnowApiResponse`, 异常与模型校验统一成 400/403/404/500 错误响应 |
 | `Snow.OpenApi` | OpenAPI 文档与调试界面: 官方 Microsoft.AspNetCore.OpenApi 出文档 + Scalar 出界面, 自动收录全部自动 API, 可选 Bearer 认证方案, 自动加载程序集 XML 注释 |
 | `Snow.AspNetCore.HealthChecks` | 健康检查: `AddSnowHealthCheck<T>` 登记, `MapSnowHealthChecks()` 暴露 JSON 端点(默认 `/health`) |
 | `Snow.AspNetCore.SignalR` | SignalR: `SnowHub` 基类与 `[SnowHub]` 路径注解, Hub 自动扫描, `MapSnowHubs()` 挂端点 |
 | `Snow.AspNetCore.RateLimiting` | 限流: 对微软自带 `AddRateLimiter`/`UseRateLimiter` 的薄封装, 无自有选项 |
-| `Snow.AspNetCore.MultiTenancy` | 多租户 Web 适配层: 查询串 / 路由 / 请求头 / Cookie 四个租户出资者 + 多租户中间件(自注册到 `AfterAuthentication` 阶段, 请求级切换租户, 未知租户回 404; 仍可手写 `UseSnowMultiTenancy()`), 已依赖 `Snow.MultiTenancy` |
+| `Snow.AspNetCore.MultiTenancy` | 多租户 Web 适配层: 查询串 / 路由 / 请求头 / Cookie 四个租户出资者 + 多租户中间件(自注册到 `AfterAuthentication` 阶段, 请求级切换租户, 未知租户回 404), 已依赖 `Snow.MultiTenancy` |
 
 ### 领域与应用
 
@@ -1315,7 +1363,7 @@ git tag v1.2.0 && git push origin v1.2.0
 | `[Auditing]` | 方法级审计日志(调用方 / 耗时 / 参数 / 异常), 由 `IAuditingStore` 落库 |
 | `[RequirePermission("Snow.Orders.Create")]` | 要求当前用户拥有指定权限, 策略动态生成并缓存 |
 | `[TokenCheckLogin]` / `[TokenCheckRole(...)]` | 登录 / 角色校验, 策略名 `snowauth:*` 动态生成; 权限用 `[RequirePermission(...)]` |
-| `app.UseSnowTokenExceptionHandling()` | 把登录态异常翻译成 401/403(最小 API 宿主用; MVC 宿主已由模块自动接管) |
+| `app.UseSnowTokenExceptionHandling()` | 把登录态异常翻译成 401/403(单独使用 `Snow.Authentication` 时才需要; 正常由模块登记到 `Outermost` 阶段自动挂) |
 
 ## 许可
 

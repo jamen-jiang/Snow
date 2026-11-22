@@ -1,22 +1,38 @@
 namespace Snow.AspNetCore;
 
 /// <summary>
-/// 中间件管道阶段: 宿主管道里的锚点位置
-/// <para>ASP.NET Core 的管道是代码顺序链表, 没有 order 数字, 所以框架只能提供少数固定锚点:
-/// 宿主在每个锚点调用一次 <c>UseSnowPipeline(阶段)</c>, 各包把中间件登记到某个阶段, 之后加中间件不再改宿主。</para>
-/// <para>枚举值有间隔, 便于以后插入新阶段而不影响已有含义。</para>
+/// 管道阶段: 模块只声明"挂在哪一段", 段内顺序就是登记顺序
+/// <para>路由 / 认证 / 授权这三段由 <see cref="SnowAspNetCoreModule"/> 自己插在阶段之间, 模块因此不需要知道任何数字。</para>
 /// </summary>
 public enum SnowPipelineStage
 {
-    /// <summary>路由之前: 链路标识、日志上下文增强等最外层中间件</summary>
-    BeforeRouting = 0,
+    /// <summary>
+    /// 最外层: 兜异常用, 排在路由、认证、多租户全部之前
+    /// </summary>
+    Outermost = 0,
 
-    /// <summary>路由之后、认证之前: 需要路由值但不需要当前用户的中间件</summary>
-    AfterRouting = 1000,
+    /// <summary>
+    /// 路由之前: 链路标识、日志增强这类与路由无关的中间件
+    /// </summary>
+    BeforeRouting = 100,
 
-    /// <summary>认证之后、授权之前: 多租户等需要当前用户声明的中间件</summary>
-    AfterAuthentication = 2000,
+    /// <summary>
+    /// 路由之后、认证之前: 需要读端点元数据的中间件
+    /// </summary>
+    AfterRouting = 200,
 
-    /// <summary>授权之后、端点映射之前: 工作单元、审计等需要授权结果的中间件</summary>
-    AfterAuthorization = 3000,
+    /// <summary>
+    /// 认证之后、授权之前: 需要读已认证用户的中间件(多租户)
+    /// </summary>
+    AfterAuthentication = 300,
+
+    /// <summary>
+    /// 授权之后、端点之前: 需要读授权结果的中间件(限流)
+    /// </summary>
+    AfterAuthorization = 400,
+
+    /// <summary>
+    /// 端点之前: 自己处理请求的终端分支(仪表盘、接口文档)
+    /// </summary>
+    BeforeEndpoints = 500,
 }

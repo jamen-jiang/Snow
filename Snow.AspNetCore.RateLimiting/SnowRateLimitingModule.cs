@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.Modularity;
+using Snow.AspNetCore;
 
 namespace Snow.AspNetCore.RateLimiting;
 
@@ -26,5 +27,9 @@ public sealed class SnowRateLimitingModule : SnowModule
 
         // 即使宿主没有追加任何配置也登记一次, 使 UseRateLimiter 与 [EnableRateLimiting] 可用
         context.Services.AddRateLimiter(limiter => setup?.Apply(limiter));
+
+        // 中间件由本模块自己挂: 排在路由与授权之后(要读端点上的限流策略)、端点之前。
+        // 微软的 RateLimitingMiddleware 是 internal, 只能用 UseRateLimiter() 这个公开扩展
+        context.Services.AddSnowMiddleware(SnowPipelineStage.AfterAuthorization, app => app.UseRateLimiter());
     }
 }

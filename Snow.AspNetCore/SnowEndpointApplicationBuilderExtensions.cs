@@ -1,20 +1,34 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Snow.Modularity;
 
 namespace Snow.AspNetCore;
 
 /// <summary>
 /// 端点统一挂载
+/// <para>各模块用 <c>AddSnowEndpoint(...)</c> 把映射动作登记进 <see cref="SnowPipelineRegistry"/>,
+/// Web 宿主下由 <see cref="SnowAspNetCoreModule"/> 在应用初始化阶段自动执行, 宿主一行都不用写。</para>
 /// </summary>
 public static class SnowEndpointApplicationBuilderExtensions
 {
+    private const string AppliedKey = "Snow.Endpoints.Applied";
+
     /// <summary>
-    /// 执行各模块登记的端点配置动作, 一次性把 Controller / Hub / 健康检查等端点挂完
-    /// <para>对应 ABP 的 <c>UseConfiguredEndpoints()</c>。宿主只需在模块初始化之后调用一次,
-    /// 不用再逐个调用 <c>UseSnowControllers()</c> / <c>MapSnowHubs()</c> / <c>MapSnowHealthChecks()</c>。</para>
+    /// 判断端点配置动作是否已经执行过
+    /// </summary>
+    /// <param name="app">应用构建器</param>
+    /// <returns>已执行返回 true</returns>
+    public static bool IsSnowEndpointsApplied(this IApplicationBuilder app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        return app.Properties.ContainsKey(AppliedKey);
+    }
+
+    /// <summary>
+    /// 执行各模块登记的端点映射动作(只执行一次)
+    /// <para>Web 宿主(<c>WebApplication</c>)下这一步由 <c>SnowAspNetCoreModule</c> 自动完成;
+    /// 本方法保留给通用主机与需要追加端点的宿主, 重复调用不会重复映射。</para>
     /// </summary>
     /// <param name="app">应用构建器</param>
     /// <param name="additionalConfigurationAction">额外的端点配置动作</param>
@@ -25,70 +39,79 @@ public static class SnowEndpointApplicationBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        VerifyPipelineStages(app);
+        if (app.IsSnowEndpointsApplied())
+        {
+            // 已经映射过: 只追加宿主这一次的额外动作
+            if (additionalConfigurationAction is not null && app is IEndpointRouteBuilder mapped)
+            {
+                additionalConfigurationAction(mapped);
+            }
 
-        SnowEndpointRouterOptions options = app.ApplicationServices
-            .GetRequiredService<IOptions<SnowEndpointRouterOptions>>()
-            .Value;
+            return app;
+        }
 
-        if (options.EndpointConfigureActions.Count == 0 && additionalConfigurationAction is null)
+        return ApplyEndpoints(app, additionalConfigurationAction, markApplied: true);
+    }
+
+    /// <summary>
+    /// 自动挂载端点: 只在 Web 宿主下生效, 由模块在应用初始化阶段调用
+    /// </summary>
+    /// <param name="app">应用构建器</param>
+    /// <returns>应用构建器本身</returns>
+    internal static IApplicationBuilder UseSnowEndpointsIfWebHost(this IApplicationBuilder app)
+    {
+        if (app is not IEndpointRouteBuilder)
+        {
+            // 通用主机: 端点要在宿主自己调 UseRouting/UseEndpoints 的位置挂, 这里不插手
+            return app;
+        }
+
+        if (app.IsSnowEndpointsApplied())
         {
             return app;
+        }
+
+        return ApplyEndpoints(app, null, markApplied: true);
+    }
+
+    private static IApplicationBuilder ApplyEndpoints(
+        IApplicationBuilder app,
+        Action<IEndpointRouteBuilder>? additionalConfigurationAction,
+        bool markApplied)
+    {
+        IReadOnlyList<Action<IEndpointRouteBuilder>> endpoints = app.ApplicationServices
+            .GetService<SnowPipelineRegistry>()?
+            .Endpoints ?? [];
+
+        if (endpoints.Count == 0 && additionalConfigurationAction is null)
+        {
+            return app;
+        }
+
+        if (markApplied)
+        {
+            app.Properties[AppliedKey] = true;
         }
 
         // WebApplication 自身就是 IEndpointRouteBuilder, 直接往上映射即可, 不需要 UseRouting + UseEndpoints 那一套
         if (app is IEndpointRouteBuilder endpointRouteBuilder)
         {
-            Apply(app, endpointRouteBuilder, options, additionalConfigurationAction);
+            Apply(app, endpointRouteBuilder, endpoints, additionalConfigurationAction);
             return app;
         }
 
-        return app.UseEndpoints(endpoints => Apply(app, endpoints, options, additionalConfigurationAction));
-    }
-
-    /// <summary>
-    /// 检查"已登记但从未展开"的中间件阶段: 只在宿主已经用了管道锚点时严格检查(老宿主继续手动 Use 不受影响)
-    /// </summary>
-    /// <param name="app">应用构建器</param>
-    /// <exception cref="SnowInitializationException">有阶段登记了中间件却没有对应的锚点调用</exception>
-    private static void VerifyPipelineStages(IApplicationBuilder app)
-    {
-        SnowPipelineState state = app.ApplicationServices.GetRequiredService<SnowPipelineState>();
-        if (state.AppliedStages.Count == 0)
-        {
-            return;
-        }
-
-        SnowMiddlewareOptions options = app.ApplicationServices
-            .GetRequiredService<IOptions<SnowMiddlewareOptions>>()
-            .Value;
-
-        List<SnowPipelineStage> missing = options.Steps
-            .Select(step => step.Stage)
-            .Distinct()
-            .Where(stage => !state.IsStageApplied(stage))
-            .ToList();
-
-        if (missing.Count > 0)
-        {
-            throw new SnowInitializationException(
-                "以下中间件阶段已登记但没有展开, 请在管道里补上 UseSnowPipeline(SnowPipelineStage.Xxx): "
-                + string.Join(", ", missing));
-        }
+        return app.UseEndpoints(builder => Apply(app, builder, endpoints, additionalConfigurationAction));
     }
 
     private static void Apply(
         IApplicationBuilder app,
         IEndpointRouteBuilder endpoints,
-        SnowEndpointRouterOptions options,
+        IReadOnlyList<Action<IEndpointRouteBuilder>> configureActions,
         Action<IEndpointRouteBuilder>? additionalConfigurationAction)
     {
-        using IServiceScope scope = app.ApplicationServices.CreateScope();
-        SnowEndpointRouteBuilderContext context = new(endpoints, scope.ServiceProvider);
-
-        foreach (Action<SnowEndpointRouteBuilderContext> configure in options.EndpointConfigureActions)
+        foreach (Action<IEndpointRouteBuilder> configure in configureActions)
         {
-            configure(context);
+            configure(endpoints);
         }
 
         additionalConfigurationAction?.Invoke(endpoints);

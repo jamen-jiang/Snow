@@ -2,6 +2,7 @@ using System;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.BackgroundJobs;
+using Snow.AspNetCore;
 using Snow.DependencyInjection;
 using Snow.Modularity;
 using global::Hangfire;
@@ -63,5 +64,11 @@ public sealed class SnowHangfireModule : SnowModule
 
         // 两个入口的替换由实现类上的 [TransientService(ReplaceServices = true)] /
         // [SingletonService(ReplaceServices = true)] 完成, 约定注册会顶掉默认实现, 这里不写替换代码。
+
+        // 仪表盘由本模块自己挂(受 EnableDashboard 控制), 宿主不用写 UseSnowHangfireDashboard()
+        if (hangfireOptions.EnableDashboard)
+        {
+            context.Services.AddSnowMiddleware(SnowPipelineStage.BeforeEndpoints, app => app.UseSnowHangfireDashboard());
+        }
     }
 }

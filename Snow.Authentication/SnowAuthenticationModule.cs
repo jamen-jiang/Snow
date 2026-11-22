@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using Snow.AspNetCore;
 using Snow.Authorization;
 using Snow.DependencyInjection;
 using Snow.Modularity;
@@ -97,8 +98,11 @@ public sealed class SnowAuthenticationModule : SnowModule
         // TokenPolicyProvider 上标了 [SingletonService(ReplaceServices = true)], 由约定注册顶掉框架自带的
         // DefaultAuthorizationPolicyProvider; snowauth:* 策略只有它认得, 宿主若要自定义策略解析应继承或包装它。
 
-        // 把 TokenUtil 抛的异常映射成 401/403; 只用 MVC 的宿主会经这里拿到过滤器, 最小 API 见 TokenExceptionHandling
+        // 把 TokenUtil 抛的异常映射成 401/403; MVC 走过滤器, 最小 API 走管道最外层的中间件(本模块自己挂)
         context.Services.Configure<MvcOptions>(mvcOptions => mvcOptions.Filters.Add<TokenExceptionFilter>());
+
+        // 最外层: 兜住后面所有中间件抛的登录态异常
+        context.Services.AddSnowMiddleware<TokenExceptionMiddleware>(SnowPipelineStage.Outermost);
     }
 
     /// <inheritdoc />

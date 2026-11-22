@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Snow.AspNetCore\Snow.AspNetCore.csproj" />
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\Snow.BackgroundJobs\Snow.BackgroundJobs.csproj" />
   </ItemGroup>

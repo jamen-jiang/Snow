@@ -17,6 +17,6 @@ public static class SnowAspNetCoreSerilogApplicationBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        return app.UseSnowMiddlewareOnce<SnowSerilogMiddleware>();
+        return app.UseSnowMiddleware<SnowSerilogMiddleware>();
     }
 }

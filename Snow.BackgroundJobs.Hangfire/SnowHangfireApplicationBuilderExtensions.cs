@@ -12,6 +12,7 @@ public static class SnowHangfireApplicationBuilderExtensions
 {
     /// <summary>
     /// 挂载 Hangfire 仪表盘, 路径与标题取自 <see cref="SnowHangfireOptions"/>
+    /// <para>正常情况不用调: <c>SnowHangfireModule</c> 已按配置自动挂好; 保留给需要自定义授权过滤器的宿主。</para>
     /// </summary>
     /// <param name="app">应用构建器</param>
     /// <param name="configure">追加/覆盖仪表盘选项(如授权过滤器)</param>

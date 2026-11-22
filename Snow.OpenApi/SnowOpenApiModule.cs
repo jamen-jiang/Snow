@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
+using Snow.AspNetCore;
 using Snow.DependencyInjection;
 using Snow.Modularity;
 
@@ -42,6 +43,10 @@ public sealed class SnowOpenApiModule : SnowModule
         {
             return;
         }
+
+        // 文档端点也走统一挂载: 宿主调 InitializeSnowAsync() 之后就已经能访问, 不用再写 UseSnowSwagger()
+        context.Services.AddSnowEndpoint(endpoints =>
+            SnowSwaggerApplicationBuilderExtensions.MapSwaggerEndpoints(endpoints, swagger));
 
         SnowXmlComments xmlComments = SnowXmlComments.Load(swagger.IncludeXmlComments ? GetXmlCommentPaths(context.Services) : []);
 

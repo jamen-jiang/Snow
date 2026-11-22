@@ -53,9 +53,8 @@ public sealed class SnowMvcModule : SnowModule
             RegisterApplicationServiceControllers(context, builder);
         }
 
-        // 端点映射动作登记到统一挂载入口: 宿主只需调用一次 UseSnowEndpoints()
-        context.Services.Configure<SnowEndpointRouterOptions>(router =>
-            router.EndpointConfigureActions.Add(item => item.Endpoints.MapControllers()));
+        // 端点映射动作登记到统一挂载入口: 初始化时自动执行, 宿主不用写 UseSnowEndpoints()
+        context.Services.AddSnowEndpoint(endpoints => endpoints.MapControllers());
     }
 
     private static void RegisterApplicationServiceControllers(ServiceConfigurationContext context, IMvcBuilder builder)

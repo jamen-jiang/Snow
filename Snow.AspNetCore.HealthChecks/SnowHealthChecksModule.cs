@@ -32,8 +32,7 @@ public sealed class SnowHealthChecksModule : SnowModule
                 tags: item.Tags));
         }
 
-        // 端点映射动作登记到统一挂载入口: 宿主只需调用一次 UseSnowEndpoints()
-        context.Services.Configure<SnowEndpointRouterOptions>(router =>
-            router.EndpointConfigureActions.Add(item => item.Endpoints.MapSnowHealthChecks()));
+        // 端点映射动作登记到统一挂载入口: 初始化时自动执行, 宿主不用写 UseSnowEndpoints()
+        context.Services.AddSnowEndpoint(endpoints => endpoints.MapSnowHealthChecks());
     }
 }
