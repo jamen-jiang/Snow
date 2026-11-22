@@ -9,7 +9,7 @@ namespace Snow.AspNetCore.RateLimiting;
 public static class SnowRateLimitingServiceCollectionExtensions
 {
     /// <summary>
-    /// 在模块的 PreConfigureServices 阶段追加限流配置
+    /// 追加限流配置。必须在 <c>AddApplication</c> 之前调用, 否则本模块的 ConfigureServices 已经跑过, 动作不会生效
     /// <para>参数是微软自带的 <see cref="RateLimiterOptions"/>, 直接写 GlobalLimiter 与 AddFixedWindowLimiter 等方法。</para>
     /// </summary>
     /// <param name="services">服务集合</param>

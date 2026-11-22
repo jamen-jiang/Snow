@@ -17,6 +17,7 @@ namespace Snow.OpenApi;
 [DependsOn(typeof(Snow.AspNetCore.Mvc.SnowMvcModule))]
 public sealed class SnowOpenApiModule : SnowModule
 {
+
     /// <summary>
     /// 登记文档服务与文档生成器的三段加工
     /// </summary>
@@ -43,10 +44,6 @@ public sealed class SnowOpenApiModule : SnowModule
         {
             return;
         }
-
-        // 文档端点也走统一挂载: 宿主调 InitializeSnowAsync() 之后就已经能访问, 不用再写 UseSnowSwagger()
-        context.Services.AddSnowEndpoint(endpoints =>
-            SnowSwaggerApplicationBuilderExtensions.MapSwaggerEndpoints(endpoints, swagger));
 
         SnowXmlComments xmlComments = SnowXmlComments.Load(swagger.IncludeXmlComments ? GetXmlCommentPaths(context.Services) : []);
 
@@ -110,6 +107,11 @@ public sealed class SnowOpenApiModule : SnowModule
                 return Task.CompletedTask;
             });
         });
+
+        // 端点映射交给统一挂载: 与 ABP 的 EndpointConfigureActions 同形
+        Configure<SnowEndpointRouterOptions>(options =>
+            options.EndpointConfigureActions.Add(endpointContext =>
+                SnowSwaggerApplicationBuilderExtensions.MapSwaggerEndpoints(endpointContext.Endpoints, swagger)));
     }
 
     private static SnowSwaggerOptions BuildOptions(IServiceCollection services)

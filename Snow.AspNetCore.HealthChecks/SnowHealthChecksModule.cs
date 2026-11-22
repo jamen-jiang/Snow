@@ -9,6 +9,7 @@ namespace Snow.AspNetCore.HealthChecks;
 /// <summary>
 /// 健康检查模块: 把登记表里的检查项挂到框架的健康检查服务上
 /// <para>依赖 <see cref="SnowAspNetCoreModule"/>: 健康端点是一个 HTTP 端点。</para>
+/// <para>端点由模块声明, 框架在全部模块初始化完成之后统一映射, 宿主一行不用写。</para>
 /// </summary>
 [DependsOn(typeof(SnowAspNetCoreModule))]
 public sealed class SnowHealthChecksModule : SnowModule
@@ -32,7 +33,7 @@ public sealed class SnowHealthChecksModule : SnowModule
                 tags: item.Tags));
         }
 
-        // 端点映射动作登记到统一挂载入口: 初始化时自动执行, 宿主不用写 UseSnowEndpoints()
-        context.Services.AddSnowEndpoint(endpoints => endpoints.MapSnowHealthChecks());
+        Configure<SnowEndpointRouterOptions>(options =>
+            options.EndpointConfigureActions.Add(endpointContext => endpointContext.Endpoints.MapSnowHealthChecks()));
     }
 }

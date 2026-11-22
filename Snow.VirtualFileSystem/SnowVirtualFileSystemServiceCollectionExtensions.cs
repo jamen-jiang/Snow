@@ -9,7 +9,7 @@ public static class SnowVirtualFileSystemServiceCollectionExtensions
 {
     /// <summary>
     /// 登记文件集
-    /// <para>可在模块的 PreConfigureServices 阶段调用; 选项在运行时解析, 调用时机不受限制。</para>
+    /// <para>选项在运行时解析, 所以只要在 <c>AddApplication</c> 之前调用即可, 与模块加载顺序无关。</para>
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="configure">文件集配置动作</param>

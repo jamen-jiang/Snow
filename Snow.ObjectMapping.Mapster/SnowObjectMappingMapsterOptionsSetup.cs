@@ -1,7 +1,7 @@
 namespace Snow.ObjectMapping.Mapster;
 
 /// <summary>
-/// 收集宿主在 PreConfigureServices 阶段追加的 Mapster 选项配置动作
+/// 收集宿主在 <c>AddApplication</c> 之前追加的 Mapster 选项配置动作
 /// </summary>
 public sealed class SnowObjectMappingMapsterOptionsSetup
 {

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -8,22 +7,12 @@ namespace Snow.Modularity;
 
 /// <summary>
 /// 模块化应用(对应 ABP 的 AbpApplicationBase + AbpApplicationWithExternalServiceProvider):
-/// 持有模块容器与服务集合,按依赖顺序驱动模块的三个注册阶段与三个初始化阶段,
-/// 关闭阶段交给 <see cref="IModuleManager"/> 逆序执行
+/// 持有模块容器与服务集合,按依赖顺序驱动模块的服务注册与应用初始化两个阶段
 /// </summary>
-public sealed class SnowApplication : ISnowApplication
+public sealed class SnowApplication
 {
-    private const double SlowModuleThresholdMilliseconds = 100;
-
-    private readonly List<ModuleRegistrationTiming> _registrationTimings = new();
-
     private IServiceProvider? _serviceProvider;
-    private bool _disposed;
     private bool _configuredServices;
-    private double _configureServicesTotalMilliseconds;
-
-    /// <inheritdoc />
-    public Type StartupModuleType { get; }
 
     /// <inheritdoc />
     public IServiceCollection Services { get; }
@@ -32,40 +21,25 @@ public sealed class SnowApplication : ISnowApplication
     public IReadOnlyList<SnowModuleDescriptor> Modules { get; }
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<Type, SnowModuleDescriptor> ModulesByType { get; }
-
-    /// <inheritdoc />
     /// <exception cref="SnowInitializationException">初始化之前访问</exception>
     public IServiceProvider ServiceProvider => _serviceProvider
         ?? throw new SnowInitializationException("应用尚未初始化, 请先调用 " + nameof(InitializeAsync) + "。");
 
-    /// <inheritdoc />
-    public SnowModuleDescriptor? Find(Type moduleType)
-    {
-        ArgumentNullException.ThrowIfNull(moduleType);
-
-        return ModulesByType.TryGetValue(moduleType, out SnowModuleDescriptor? module) ? module : null;
-    }
-
-    /// <summary>
-    /// 各模块在服务注册阶段的耗时,按执行顺序排列;宿主可用于启动诊断
-    /// </summary>
-    public IReadOnlyList<ModuleRegistrationTiming> RegistrationTimings => _registrationTimings;
-
-    internal SnowApplication(IServiceCollection services, IModuleContainer modules, Type startupModuleType)
+    internal SnowApplication(IServiceCollection services, IModuleContainer modules)
     {
         Services = services ?? throw new ArgumentNullException(nameof(services));
         ArgumentNullException.ThrowIfNull(modules);
-        StartupModuleType = startupModuleType ?? throw new ArgumentNullException(nameof(startupModuleType));
 
         Modules = modules.Modules;
-        ModulesByType = modules.ModulesByType;
     }
 
     /// <inheritdoc />
     public async Task ConfigureServicesAsync()
     {
-        CheckMultipleConfigureServices();
+        if (_configuredServices)
+        {
+            throw new SnowInitializationException("服务注册阶段已经执行过, 不能重复执行。");
+        }
 
         ServiceConfigurationContext context = new ServiceConfigurationContext(Services);
 
@@ -77,25 +51,13 @@ public sealed class SnowApplication : ISnowApplication
 
         AttachContext(context);
 
-        // 1. 前置注册: 全部模块先跑一遍
-        foreach (SnowModuleDescriptor module in Modules)
-        {
-            if (module.Instance is IPreConfigureServices preConfigureServices)
-            {
-                await preConfigureServices.PreConfigureServicesAsync(context);
-            }
-        }
-
-        // 2. 注册: 逐模块只做约定扫描并记耗时, 显式登记(ConfigureServices)全部落地后再统一写入约定登记,
-        //    这样宿主与模块的显式登记稳定排在约定登记之前, TryAdd / Add / Replace 都能顶掉默认实现
+        // 逐模块只做约定扫描并收集候选, 显式登记(ConfigureServices)全部落地后再统一写入约定登记,
+        // 这样宿主与模块的显式登记稳定排在约定登记之前, TryAdd / Add / Replace 都能顶掉默认实现
         HashSet<Assembly> scannedAssemblies = new HashSet<Assembly>();
         List<ServiceCollectionExtensions.ConventionalRegistration> conventionalCandidates = new();
-        Stopwatch totalStopwatch = Stopwatch.StartNew();
 
         foreach (SnowModuleDescriptor module in Modules)
         {
-            Stopwatch moduleStopwatch = Stopwatch.StartNew();
-
             if (!module.Instance.SkipAutoServiceRegistration)
             {
                 foreach (Assembly assembly in module.AllAssemblies)
@@ -106,99 +68,12 @@ public sealed class SnowApplication : ISnowApplication
                     }
                 }
             }
-
-            double scanMilliseconds = moduleStopwatch.Elapsed.TotalMilliseconds;
-
-            moduleStopwatch.Restart();
 
             await module.Instance.ConfigureServicesAsync(context);
-
-            _registrationTimings.Add(new ModuleRegistrationTiming(
-                module.Type, scanMilliseconds, moduleStopwatch.Elapsed.TotalMilliseconds));
         }
 
         // 约定登记统一写入: 此时集合里已经有所有显式登记(宿主与模块的)
         ServiceCollectionExtensions.ApplyConventionalRegistrations(Services, conventionalCandidates);
-
-        totalStopwatch.Stop();
-        _configureServicesTotalMilliseconds = totalStopwatch.Elapsed.TotalMilliseconds;
-
-        // 3. 后置注册: 全部模块再跑一遍, 适合覆盖式注册
-        foreach (SnowModuleDescriptor module in Modules)
-        {
-            if (module.Instance is IPostConfigureServices postConfigureServices)
-            {
-                await postConfigureServices.PostConfigureServicesAsync(context);
-            }
-        }
-
-        DetachContext();
-
-        _configuredServices = true;
-    }
-
-    /// <inheritdoc />
-    public void ConfigureServices()
-    {
-        CheckMultipleConfigureServices();
-
-        ServiceConfigurationContext context = new ServiceConfigurationContext(Services);
-
-        Services.AddSingleton(context);
-        Services.AddOptions();
-
-        AttachContext(context);
-
-        foreach (SnowModuleDescriptor module in Modules)
-        {
-            if (module.Instance is IPreConfigureServices preConfigureServices)
-            {
-                preConfigureServices.PreConfigureServices(context);
-            }
-        }
-
-        HashSet<Assembly> scannedAssemblies = new HashSet<Assembly>();
-        List<ServiceCollectionExtensions.ConventionalRegistration> conventionalCandidates = new();
-        Stopwatch totalStopwatch = Stopwatch.StartNew();
-
-        foreach (SnowModuleDescriptor module in Modules)
-        {
-            Stopwatch moduleStopwatch = Stopwatch.StartNew();
-
-            if (!module.Instance.SkipAutoServiceRegistration)
-            {
-                foreach (Assembly assembly in module.AllAssemblies)
-                {
-                    if (scannedAssemblies.Add(assembly))
-                    {
-                        conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(assembly));
-                    }
-                }
-            }
-
-            double scanMilliseconds = moduleStopwatch.Elapsed.TotalMilliseconds;
-
-            moduleStopwatch.Restart();
-
-            module.Instance.ConfigureServices(context);
-
-            _registrationTimings.Add(new ModuleRegistrationTiming(
-                module.Type, scanMilliseconds, moduleStopwatch.Elapsed.TotalMilliseconds));
-        }
-
-        // 约定登记统一写入: 此时集合里已经有所有显式登记(宿主与模块的)
-        ServiceCollectionExtensions.ApplyConventionalRegistrations(Services, conventionalCandidates);
-
-        totalStopwatch.Stop();
-        _configureServicesTotalMilliseconds = totalStopwatch.Elapsed.TotalMilliseconds;
-
-        foreach (SnowModuleDescriptor module in Modules)
-        {
-            if (module.Instance is IPostConfigureServices postConfigureServices)
-            {
-                postConfigureServices.PostConfigureServices(context);
-            }
-        }
 
         DetachContext();
 
@@ -207,91 +82,6 @@ public sealed class SnowApplication : ISnowApplication
 
     /// <inheritdoc />
     public async Task InitializeAsync(IServiceProvider serviceProvider)
-    {
-        SetServiceProvider(serviceProvider);
-
-        LogRegistrationTimings(serviceProvider);
-
-        ApplicationInitializationContext context = new ApplicationInitializationContext(serviceProvider);
-
-        await GetModuleManager(serviceProvider).InitializeModulesAsync(context);
-    }
-
-    /// <inheritdoc />
-    public void Initialize(IServiceProvider serviceProvider)
-    {
-        SetServiceProvider(serviceProvider);
-
-        LogRegistrationTimings(serviceProvider);
-
-        ApplicationInitializationContext context = new ApplicationInitializationContext(serviceProvider);
-
-        GetModuleManager(serviceProvider).InitializeModules(context);
-    }
-
-    /// <inheritdoc />
-    public async Task ShutdownAsync()
-    {
-        if (_serviceProvider is null)
-        {
-            return;
-        }
-
-        ApplicationShutdownContext context = new ApplicationShutdownContext(_serviceProvider);
-
-        await GetModuleManager(_serviceProvider).ShutdownModulesAsync(context);
-    }
-
-    /// <inheritdoc />
-    public void Shutdown()
-    {
-        if (_serviceProvider is null)
-        {
-            return;
-        }
-
-        ApplicationShutdownContext context = new ApplicationShutdownContext(_serviceProvider);
-
-        GetModuleManager(_serviceProvider).ShutdownModules(context);
-    }
-
-    /// <summary>
-    /// 关闭模块并释放服务提供者(异步)
-    /// </summary>
-    /// <returns>表示释放过程的任务</returns>
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-
-        if (_serviceProvider is not null)
-        {
-            await ShutdownAsync();
-
-            if (_serviceProvider is IAsyncDisposable asyncDisposable)
-            {
-                await asyncDisposable.DisposeAsync();
-            }
-            else if (_serviceProvider is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
-        }
-    }
-
-    /// <summary>
-    /// 关闭模块并释放服务提供者(同步)
-    /// </summary>
-    public void Dispose()
-    {
-        DisposeAsync().AsTask().GetAwaiter().GetResult();
-    }
-
-    private void SetServiceProvider(IServiceProvider serviceProvider)
     {
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
@@ -306,14 +96,24 @@ public sealed class SnowApplication : ISnowApplication
         }
 
         _serviceProvider = serviceProvider;
-    }
 
-    private void CheckMultipleConfigureServices()
-    {
-        if (_configuredServices)
+        ApplicationInitializationContext context = new ApplicationInitializationContext(serviceProvider);
+
+        foreach (SnowModuleDescriptor module in Modules)
         {
-            throw new SnowInitializationException("服务注册阶段已经执行过, 不能重复执行。");
+            try
+            {
+                await module.Instance.OnApplicationInitializationAsync(context);
+            }
+            catch (Exception exception)
+            {
+                throw new SnowInitializationException(
+                    "模块 " + module.Type.AssemblyQualifiedName + " 在应用初始化阶段抛出异常: " + exception.Message,
+                    exception);
+            }
         }
+
+        serviceProvider.GetService<ILogger<SnowApplication>>()?.LogInformation("全部模块初始化完成");
     }
 
     private void AttachContext(ServiceConfigurationContext context)
@@ -330,43 +130,5 @@ public sealed class SnowApplication : ISnowApplication
         {
             module.Instance.ServiceConfigurationContext = null;
         }
-    }
-
-    private IModuleManager GetModuleManager(IServiceProvider serviceProvider)
-    {
-        return serviceProvider.GetRequiredService<IModuleManager>();
-    }
-
-    /// <summary>
-    /// 输出服务注册阶段的启动诊断:逐模块耗时(调试级)、慢模块告警、总计(信息级)
-    /// </summary>
-    /// <param name="serviceProvider">容器构建完成后的服务提供者</param>
-    private void LogRegistrationTimings(IServiceProvider serviceProvider)
-    {
-        // 分类名由 ILogger<T> 自动取 typeof(T).FullName, 不写死字符串
-        ILogger? logger = serviceProvider.GetService<ILogger<SnowApplication>>();
-
-        if (logger is null || _registrationTimings.Count == 0)
-        {
-            return;
-        }
-
-        foreach (ModuleRegistrationTiming timing in _registrationTimings)
-        {
-            logger.LogDebug(
-                "模块 {Module} 注册耗时: 扫描 {ScanMilliseconds:F2} ms, ConfigureServices {ConfigureMilliseconds:F2} ms",
-                timing.ModuleType.Name, timing.ScanMilliseconds, timing.ConfigureServicesMilliseconds);
-
-            if (timing.TotalMilliseconds >= SlowModuleThresholdMilliseconds)
-            {
-                logger.LogWarning(
-                    "模块 {Module} 注册偏慢: {TotalMilliseconds:F2} ms(阈值 {Threshold:F0} ms)",
-                    timing.ModuleType.Name, timing.TotalMilliseconds, SlowModuleThresholdMilliseconds);
-            }
-        }
-
-        logger.LogInformation(
-            "共 {ModuleCount} 个模块, 服务注册阶段总耗时 {TotalMilliseconds:F2} ms",
-            _registrationTimings.Count, _configureServicesTotalMilliseconds);
     }
 }

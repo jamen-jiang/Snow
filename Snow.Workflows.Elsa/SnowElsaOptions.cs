@@ -21,8 +21,8 @@ public enum SnowElsaDatabaseProvider
 }
 
 /// <summary>
-/// Elsa 接入选项。既可通过配置节 Workflows:Elsa 绑定标量, 也可在模块的 PreConfigureServices
-/// 里用 services.AddSnowElsa(o =&gt; ...) 追加代码级设置(工作流类型、数据库回调等)。
+/// Elsa 接入选项。既可通过配置节 Workflows:Elsa 绑定标量, 也可在 AddApplication 之前
+/// 用 services.AddSnowElsa(o =&gt; ...) 追加代码级设置(工作流类型、数据库回调等)。
 /// </summary>
 public sealed class SnowElsaOptions
 {

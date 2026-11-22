@@ -24,7 +24,7 @@ public static class ApplicationInitializationContextExtensions
     public static IApplicationBuilder GetApplicationBuilder(this ApplicationInitializationContext context)
     {
         return context.GetApplicationBuilderOrNull() ?? throw new SnowInitializationException(
-            "应用构建器尚未就绪: 宿主必须先调用 UseSnowAspNetCore()/InitializeSnowAsync() 再驱动模块初始化。");
+            "应用构建器尚未就绪: 启动模块没有依赖 SnowAspNetCoreModule, 它的启动过滤器因此没有注册。");
     }
 
     /// <summary>

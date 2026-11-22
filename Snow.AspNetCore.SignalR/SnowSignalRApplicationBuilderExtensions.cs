@@ -13,7 +13,8 @@ public static class SnowSignalRApplicationBuilderExtensions
 {
     /// <summary>
     /// 把登记表里的 Hub 全部映射成端点
-    /// <para>只在单独使用本包时调用; 宿主走 <c>UseSnowEndpoints()</c> 时由模块自动映射, 不必再调这里。</para>
+    /// <para>正常情况不用调: <c>SnowSignalRModule</c> 已把映射动作声明进端点清单,
+    /// 框架在全部模块初始化完成之后统一执行。保留给单独使用本包的宿主。</para>
     /// </summary>
     /// <param name="endpoints">端点路由构建器</param>
     /// <returns>端点路由构建器本身</returns>

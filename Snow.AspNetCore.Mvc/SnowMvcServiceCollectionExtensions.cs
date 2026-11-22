@@ -8,8 +8,8 @@ namespace Snow.AspNetCore.Mvc;
 public static class SnowMvcServiceCollectionExtensions
 {
     /// <summary>
-    /// 在模块的 PreConfigureServices 阶段调整自动 API 选项
-    /// <para>只在 <c>AddApplication</c> 之前调用有效: 本模块的 ConfigureServices 会先应用这些动作再建约定。</para>
+    /// 调整自动 API 选项
+    /// <para>必须在 <c>AddApplication</c> 之前调用: 本模块的 ConfigureServices 会先应用这些动作再建约定, 之后再追加就晚了。</para>
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="configure">选项配置动作</param>

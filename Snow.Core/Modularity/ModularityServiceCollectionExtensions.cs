@@ -13,11 +13,10 @@ public static class ModularityServiceCollectionExtensions
     /// </summary>
     /// <typeparam name="TStartupModule">启动模块类型</typeparam>
     /// <param name="services">服务集合</param>
-    /// <returns>模块化应用实例,用于后续初始化与关闭</returns>
-    public static SnowApplication AddApplication<TStartupModule>(this IServiceCollection services)
+    public static void AddApplication<TStartupModule>(this IServiceCollection services)
         where TStartupModule : SnowModule
     {
-        return services.AddApplication(typeof(TStartupModule));
+        services.AddApplication(typeof(TStartupModule));
     }
 
     /// <summary>
@@ -25,9 +24,19 @@ public static class ModularityServiceCollectionExtensions
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="startupModuleType">启动模块类型</param>
-    /// <returns>模块化应用实例,用于后续初始化与关闭</returns>
-    public static SnowApplication AddApplication(this IServiceCollection services, Type startupModuleType)
+    public static void AddApplication(this IServiceCollection services, Type startupModuleType)
     {
-        return SnowApplicationFactory.CreateAsync(services, startupModuleType).GetAwaiter().GetResult();
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(startupModuleType);
+
+        IReadOnlyList<SnowModuleDescriptor> modules = ModuleLoader.LoadModules(services, startupModuleType);
+
+        ModuleContainer container = new(modules);
+        SnowApplication application = new(services, container);
+
+        services.AddSingleton<IModuleContainer>(container);
+        services.AddSingleton(application);
+
+        application.ConfigureServicesAsync().GetAwaiter().GetResult();
     }
 }

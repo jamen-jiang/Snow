@@ -10,6 +10,7 @@ namespace Snow.AspNetCore.SignalR;
 /// <summary>
 /// SignalR 模块: 登记实时通信服务, 并在约定扫描时收集 Hub
 /// <para>依赖 <see cref="SnowAspNetCoreModule"/>: Hub 端点挂在 ASP.NET Core 上。</para>
+/// <para>Hub 端点由模块声明, 框架在全部模块初始化完成之后统一映射, 宿主一行不用写。</para>
 /// </summary>
 [DependsOn(typeof(SnowAspNetCoreModule))]
 public sealed class SnowSignalRModule : SnowModule
@@ -53,9 +54,6 @@ public sealed class SnowSignalRModule : SnowModule
             return;
         }
 
-        // 端点映射动作登记到统一挂载入口: 初始化时自动执行, 宿主不用写 UseSnowEndpoints()
-        context.Services.AddSnowEndpoint(endpoints => SnowSignalRApplicationBuilderExtensions.MapHubs(endpoints, registry));
-
         context.Services.AddSignalR(signalR =>
         {
             signalR.EnableDetailedErrors = options.EnableDetailedErrors;
@@ -64,6 +62,10 @@ public sealed class SnowSignalRModule : SnowModule
                 signalR.MaximumReceiveMessageSize = size;
             }
         });
+
+        Configure<SnowEndpointRouterOptions>(current =>
+            current.EndpointConfigureActions.Add(endpointContext =>
+                SnowSignalRApplicationBuilderExtensions.MapHubs(endpointContext.Endpoints, registry)));
     }
 
     private static IEnumerable<Type> GetHubTypes(Assembly assembly)
@@ -99,7 +101,7 @@ public sealed class SnowSignalRModule : SnowModule
         {
             foreach (SnowModuleDescriptor module in container.Modules)
             {
-                assemblies.Add(module.Assembly);
+                assemblies.Add(module.Type.Assembly);
             }
         }
 

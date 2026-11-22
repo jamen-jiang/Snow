@@ -9,8 +9,8 @@ namespace Snow.Workflows.Elsa;
 public static class SnowElsaServiceCollectionExtensions
 {
     /// <summary>
-    /// 追加 Elsa 设置。请在自己的模块 PreConfigureServices 里调用(那时所有模块还没开始注册服务),
-    /// 或在 AddApplication 之前调用; 若在 ConfigureServices 里调用, 因为 SnowElsaModule 可能已经跑过, 设置不会生效。
+    /// 追加 Elsa 设置。必须在 <c>AddApplication</c> 之前调用; 若在模块的 ConfigureServices 里调用,
+    /// 因为 SnowElsaModule 可能已经跑过, 设置不会生效。
     /// </summary>
     public static IServiceCollection AddSnowElsa(this IServiceCollection services, Action<SnowElsaOptions>? configure = null)
     {

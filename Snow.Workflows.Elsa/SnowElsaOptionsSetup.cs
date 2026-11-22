@@ -1,9 +1,9 @@
 namespace Snow.Workflows.Elsa;
 
 /// <summary>
-/// 收集宿主在 PreConfigureServices 阶段给出的选项配置动作。
-/// 之所以要这一层: Snow 先跑完所有模块的 PreConfigureServices, 再逐个跑 ConfigureServices,
-/// 所以宿主可以在自己模块的 PreConfigureServices 里调用 AddSnowElsa(...), 而这里收集到的动作
+/// 收集宿主在 <c>AddApplication</c> 之前给出的选项配置动作。
+/// 之所以要这一层: AddApplication 里各模块的 ConfigureServices 按依赖顺序逐个执行,
+/// 所以宿主要在调用 AddApplication 之前调用 AddSnowElsa(...), 这里收集到的动作
 /// 会在 SnowElsaModule.ConfigureServices 里被应用 —— 那时才真正注册 Elsa 的服务。
 /// </summary>
 public sealed class SnowElsaOptionsSetup

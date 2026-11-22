@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Logging;
 
 namespace Snow.Modularity;
@@ -12,15 +11,12 @@ public static class SnowModuleHelper
     /// 从启动模块出发递归收集全部模块类型,被依赖的模块排在前面
     /// </summary>
     /// <param name="startupModuleType">启动模块类型</param>
-    /// <param name="logger">可选的日志记录器</param>
     /// <returns>模块类型列表</returns>
-    public static List<Type> FindAllModuleTypes(Type startupModuleType, ILogger? logger)
+    public static List<Type> FindAllModuleTypes(Type startupModuleType)
     {
-        List<Type> moduleTypes = new List<Type>();
+        List<Type> moduleTypes = [];
 
-        logger?.Log(LogLevel.Debug, "已加载的模块:");
-
-        AddModuleAndDependenciesRecursively(moduleTypes, new HashSet<Type>(), startupModuleType, logger);
+        AddModuleAndDependenciesRecursively(moduleTypes, new HashSet<Type>(), startupModuleType);
 
         return moduleTypes;
     }
@@ -34,8 +30,8 @@ public static class SnowModuleHelper
     {
         CheckModuleType(moduleType);
 
-        List<Type> dependencies = new List<Type>();
-        HashSet<Type> seen = new HashSet<Type>();
+        List<Type> dependencies = [];
+        HashSet<Type> seen = [];
 
         foreach (object attribute in moduleType.GetCustomAttributes(true))
         {
@@ -54,42 +50,6 @@ public static class SnowModuleHelper
         }
 
         return dependencies;
-    }
-
-    /// <summary>
-    /// 取模块参与约定扫描的全部程序集:主程序集在前,
-    /// 之后是 <see cref="AdditionalAssemblyAttribute"/> 声明的额外程序集(对应 ABP 的 AbpModuleHelper.GetAllAssemblies)
-    /// </summary>
-    /// <param name="moduleType">模块类型</param>
-    /// <returns>程序集数组,已去重</returns>
-    public static Assembly[] GetAllAssemblies(Type moduleType)
-    {
-        ArgumentNullException.ThrowIfNull(moduleType);
-
-        List<Assembly> assemblies = new List<Assembly>();
-
-        foreach (object attribute in moduleType.GetCustomAttributes(true))
-        {
-            if (attribute is not AdditionalAssemblyAttribute additionalAssembly)
-            {
-                continue;
-            }
-
-            foreach (Assembly assembly in additionalAssembly.Assemblies)
-            {
-                if (assembly != null && !assemblies.Contains(assembly))
-                {
-                    assemblies.Add(assembly);
-                }
-            }
-        }
-
-        if (!assemblies.Contains(moduleType.Assembly))
-        {
-            assemblies.Add(moduleType.Assembly);
-        }
-
-        return assemblies.ToArray();
     }
 
     /// <summary>
@@ -137,7 +97,7 @@ public static class SnowModuleHelper
         }
     }
 
-    private static void AddModuleAndDependenciesRecursively(List<Type> moduleTypes, HashSet<Type> visited, Type moduleType, ILogger? logger, int depth = 0)
+    private static void AddModuleAndDependenciesRecursively(List<Type> moduleTypes, HashSet<Type> visited, Type moduleType)
     {
         CheckModuleType(moduleType);
 
@@ -148,11 +108,9 @@ public static class SnowModuleHelper
 
         moduleTypes.Add(moduleType);
 
-        logger?.Log(LogLevel.Debug, new string(' ', depth * 2) + "- " + moduleType.FullName);
-
         foreach (Type dependedModuleType in FindDependedModuleTypes(moduleType))
         {
-            AddModuleAndDependenciesRecursively(moduleTypes, visited, dependedModuleType, logger, depth + 1);
+            AddModuleAndDependenciesRecursively(moduleTypes, visited, dependedModuleType);
         }
     }
 }

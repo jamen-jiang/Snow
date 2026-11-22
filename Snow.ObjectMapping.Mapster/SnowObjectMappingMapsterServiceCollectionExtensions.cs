@@ -8,7 +8,7 @@ namespace Snow.ObjectMapping.Mapster;
 public static class SnowObjectMappingMapsterServiceCollectionExtensions
 {
     /// <summary>
-    /// 在模块的 PreConfigureServices 阶段调整 Mapster 映射选项
+    /// 调整 Mapster 映射选项。必须在 <c>AddApplication</c> 之前调用
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="configure">选项配置动作</param>

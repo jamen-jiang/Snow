@@ -2,13 +2,14 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Snow.AspNetCore;
 
 namespace Snow.Authentication;
 
 /// <summary>
 /// 把登录态异常翻译成 HTTP 状态码: 未登录 401, 缺角色/被封禁 403
-/// <para>MVC 宿主由模块自动注册的 <see cref="TokenExceptionFilter"/> 接管; 最小 API 与其它管线用
-/// <c>app.UseSnowTokenExceptionHandling()</c>。不接的话 <see cref="TokenUtil.GetLoginId"/> 抛出的异常会变成 500。</para>
+/// <para>MVC 宿主由模块自动注册的 <see cref="TokenExceptionFilter"/> 接管; 最小 API 与其它管线由模块登记的管道过滤器接管,
+/// 它挂在 <c>OnPreRouting</c>(路由之前), 包住认证阶段。不接的话 <see cref="TokenUtil.GetLoginId"/> 抛出的异常会变成 500。</para>
 /// </summary>
 public static class TokenExceptionHandling
 {
@@ -94,7 +95,10 @@ public sealed class TokenExceptionFilter : IAsyncExceptionFilter
 }
 
 /// <summary>
-/// 最小 API 用的异常中间件: 包在管线最外层, 只拦登录态异常
+/// 最小 API 用的异常中间件: 只拦登录态异常
+/// <para>由认证模块登记成管道过滤器, 挂在 <c>OnPreRouting</c>(路由之前、认证之前):
+/// 兜住它内层所有中间件(含认证阶段 <c>JwtBearer</c>)与端点抛的登录态异常。
+/// 链路标识在骨架最外层, 所以异常在这里被捕获时链路标识的作用域还活着, 错误响应仍能带回 X-Correlation-Id。</para>
 /// </summary>
 public sealed class TokenExceptionMiddleware
 {
@@ -131,13 +135,27 @@ public sealed class TokenExceptionMiddleware
 /// </summary>
 public static class TokenExceptionHandlingExtensions
 {
+    private const string Marker = "Snow.Middleware.TokenException";
+
     /// <summary>
-    /// 挂上登录态异常中间件(最小 API 宿主用; MVC 宿主已被 <see cref="TokenExceptionFilter"/> 覆盖, 重复挂也无害)
+    /// 挂上登录态异常中间件
+    /// <para>由 <c>SnowAuthenticationModule</c> 登记成管道过滤器, 挂在 <c>OnPreRouting</c> —— 位置在 <c>UseAuthentication()</c> 之前,
+    /// 这样认证阶段抛的令牌异常也在它内层。MVC 宿主另有 <see cref="TokenExceptionFilter"/> 覆盖控制器内的同一批异常。</para>
+    /// <para>挂在 <c>UseAuthentication()</c> 之后只覆盖控制器与端点里的异常, <c>JwtBearer</c> 在认证阶段抛的令牌异常会漏成 500。</para>
+    /// <para>重复调用不会重复挂。</para>
     /// </summary>
     /// <param name="app">应用构建器</param>
+    /// <returns>同一个应用构建器, 便于链式调用</returns>
     public static IApplicationBuilder UseSnowTokenExceptionHandling(this IApplicationBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
+
+        if (app.Properties.ContainsKey(Marker))
+        {
+            return app;
+        }
+
+        app.Properties[Marker] = true;
         return app.UseMiddleware<TokenExceptionMiddleware>();
     }
 }

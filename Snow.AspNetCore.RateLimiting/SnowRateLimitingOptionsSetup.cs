@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Snow.AspNetCore.RateLimiting;
 
 /// <summary>
-/// 收集宿主在 PreConfigureServices 阶段追加的限流配置动作
+/// 收集宿主在 <c>AddApplication</c> 之前追加的限流配置动作
 /// <para>动作收到的就是微软自带的 <see cref="RateLimiterOptions"/>, 不做任何包装。</para>
 /// </summary>
 public sealed class SnowRateLimitingOptionsSetup

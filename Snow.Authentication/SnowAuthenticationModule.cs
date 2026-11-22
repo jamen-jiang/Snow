@@ -33,7 +33,7 @@ namespace Snow.Authentication;
 /// 本模块<b>不注册</b> <see cref="IDistributedCache"/>, 只在解析会话存储时取容器里已有的实例: 宿主注册了 Redis 就用 Redis,
 /// 什么都没注册才回退进程内实现(<see cref="MemoryDistributedCache"/>)。因此与缓存模块的装配顺序无关。</para>
 /// </summary>
-[DependsOn(typeof(SnowSecurityModule), typeof(SnowAuthorizationModule), typeof(SnowTimingModule))]
+[DependsOn(typeof(SnowSecurityModule), typeof(SnowAuthorizationModule), typeof(SnowTimingModule), typeof(SnowAspNetCoreModule))]
 public sealed class SnowAuthenticationModule : SnowModule
 {
     /// <summary>
@@ -98,11 +98,12 @@ public sealed class SnowAuthenticationModule : SnowModule
         // TokenPolicyProvider 上标了 [SingletonService(ReplaceServices = true)], 由约定注册顶掉框架自带的
         // DefaultAuthorizationPolicyProvider; snowauth:* 策略只有它认得, 宿主若要自定义策略解析应继承或包装它。
 
-        // 把 TokenUtil 抛的异常映射成 401/403; MVC 走过滤器, 最小 API 走管道最外层的中间件(本模块自己挂)
+        // 把 TokenUtil 抛的异常映射成 401/403: MVC 走过滤器, 最小 API 走管道过滤器。
+        // 管道过滤器挂在路由之前 —— 它必须包住 UseAuthentication(), 否则 JwtBearer 在认证阶段抛的令牌异常会漏成 500
         context.Services.Configure<MvcOptions>(mvcOptions => mvcOptions.Filters.Add<TokenExceptionFilter>());
-
-        // 最外层: 兜住后面所有中间件抛的登录态异常
-        context.Services.AddSnowMiddleware<TokenExceptionMiddleware>(SnowPipelineStage.Outermost);
+        Configure<SnowPipelineOptions>(options => options.AddFilter(new SnowPipelineFilter(
+            "Snow.Authentication",
+            preRouting: app => app.UseSnowTokenExceptionHandling())));
     }
 
     /// <inheritdoc />

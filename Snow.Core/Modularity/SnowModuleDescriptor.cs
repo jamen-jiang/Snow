@@ -13,13 +13,7 @@ public class SnowModuleDescriptor
     public Type Type { get; }
 
     /// <summary>
-    /// 模块类型所在的程序集(模块主程序集)
-    /// </summary>
-    public Assembly Assembly { get; }
-
-    /// <summary>
-    /// 模块参与约定扫描的全部程序集:主程序集加上
-    /// <see cref="AdditionalAssemblyAttribute"/> 声明的额外程序集
+    /// 模块参与约定扫描的程序集,即模块自身所在的程序集
     /// </summary>
     public Assembly[] AllAssemblies { get; }
 
@@ -55,12 +49,11 @@ public class SnowModuleDescriptor
         }
 
         Type = type;
-        Assembly = type.Assembly;
-        AllAssemblies = SnowModuleHelper.GetAllAssemblies(type);
+        AllAssemblies = [type.Assembly];
         Instance = instance;
 
-        _dependencies = new List<SnowModuleDescriptor>();
-        _dependencySet = new HashSet<SnowModuleDescriptor>();
+        _dependencies = [];
+        _dependencySet = [];
     }
 
     /// <summary>

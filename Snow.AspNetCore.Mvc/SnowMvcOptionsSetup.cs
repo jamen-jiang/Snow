@@ -1,7 +1,7 @@
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
-/// 收集宿主在 PreConfigureServices 阶段追加的选项配置动作
+/// 收集宿主在 <c>AddApplication</c> 之前追加的选项配置动作
 /// <para>必须在所有模块的 ConfigureServices 之前登记, 否则本模块读到的是空列表。</para>
 /// </summary>
 public sealed class SnowMvcOptionsSetup

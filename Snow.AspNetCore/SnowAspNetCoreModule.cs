@@ -1,7 +1,7 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Snow.Aop.Castle;
@@ -18,9 +18,14 @@ using Snow.Uow;
 namespace Snow.AspNetCore;
 
 /// <summary>
-/// Web 宿主模块: 只做 Web 层接线, 不含 MVC 约定
+/// Web 宿主模块: 做 Web 层接线, 并在应用初始化阶段合并静态资源、展开 HTTP 管道
 /// <para>对齐 ABP 的 <c>AbpAspNetCoreModule</c>: 保证 HTTP 上下文访问器可用,
 /// 把只有宿主才有的对象放进对象访问器, 并把各包带的静态资源合并进 WebRoot。</para>
+/// <para><b>管道由框架展开</b>: 骨架写死在 <see cref="SnowApplicationBuilder"/> 里
+/// (链路标识 → 路由 → 认证 → 授权 → 端点), 各能力包只把自己的中间件登记成
+/// <see cref="ISnowPipelineFilter"/> 挂到某个具名位置上, 宿主一行管道代码都不用写。</para>
+/// <para><b>宿主不用写初始化代码</b>: 模块初始化、管道展开与端点映射都由本模块注册的
+/// <see cref="SnowAspNetCoreStartupFilter"/> 自动触发。</para>
 /// <para>依赖 <see cref="SnowSecurityModule"/>: 当前主体以 <c>HttpContext.User</c> 为准, 需要它的上下文访问器。</para>
 /// <para>依赖列表对齐 ABP 的 <c>AbpAspNetCoreModule</c>(它依赖 Auditing / Security / VirtualFileSystem / UnitOfWork / Http / Authorization / Validation / ExceptionHandling / AspNetCoreAbstractions):
 /// 安全、授权、审计、工作单元、数据过滤在这里; 虚拟文件系统 / 校验 / 异常包装 Snow 尚无独立包。
@@ -28,9 +33,6 @@ namespace Snow.AspNetCore;
 /// 由宿主在自己的模块里按需 <c>DependsOn</c> —— 与 ABP 把 Caching / EventBus / BackgroundJobs 留给宿主声明同理。
 /// </para>
 /// <para>认证模块(<c>SnowAuthenticationModule</c>)故意不在此列: 它需要 JWT 参数, 属于应用层选型, 与 ABP 把 <c>Volo.Abp.AspNetCore.Authentication.JwtBearer</c> 单列同理。</para>
-/// <para>本模块还是管道的唯一装配点: 各模块用 <c>AddSnowMiddleware&lt;T&gt;(stage)</c> 声明中间件,
-/// 用 <c>AddSnowEndpoint(...)</c> 声明端点, 这里按阶段顺序展开。路由 / 认证 / 授权三段由本模块自己插在阶段之间,
-/// 所以模块只表达"在哪一段", 不碰任何顺序数字, 宿主也不写管道代码。</para>
 /// </summary>
 [DependsOn(
     typeof(SnowAuditingModule),
@@ -51,19 +53,22 @@ public sealed class SnowAspNetCoreModule : SnowModule
         // 上下文访问器是 Web 层所有能力的地基(当前用户、当前请求)
         context.Services.AddHttpContextAccessor();
 
-        // 宿主构建完成后由 UseSnowAspNetCore / InitializeSnowAsync 填值, 单例里也能取到当前应用对象
+        // 启动过滤器填值, 单例里也能取到当前应用对象
         context.Services.AddObjectAccessor<IApplicationBuilder>();
         context.Services.AddObjectAccessor<WebApplication>();
         context.Services.AddObjectAccessor<IHost>();
         context.Services.AddObjectAccessor<IEndpointRouteBuilder>();
 
+        // 端点清单的选项容器: 模块用 Configure<SnowEndpointRouterOptions>(...) 把映射动作交进来
+        context.Services.AddOptions<SnowEndpointRouterOptions>();
+
+        // 管道过滤器清单: 各能力包用 Configure<SnowPipelineOptions>(options => options.AddFilter(...)) 登记
+        context.Services.AddOptions<SnowPipelineOptions>();
+
+        // 宿主不用写初始化代码: 应用构建器由过滤器交给访问器, 模块初始化、管道展开与端点映射也由它驱动
+        context.Services.AddSingleton<IStartupFilter, SnowAspNetCoreStartupFilter>();
+
         Configure<SnowAspNetCoreOptions>(context.Services.GetConfiguration().GetSection("AspNetCore"));
-
-        // 管道登记表必须存在: 即使没有任何模块登记, 本模块也要靠它展开路由 / 认证 / 授权
-        context.Services.GetSnowPipelineRegistry();
-
-        // 链路标识与位置无关, 挂最外层让后续所有日志与审计都能读到
-        context.Services.AddSnowMiddleware<SnowCorrelationIdMiddleware>(SnowPipelineStage.BeforeRouting);
     }
 
     /// <inheritdoc />
@@ -71,14 +76,43 @@ public sealed class SnowAspNetCoreModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.GetApplicationBuilderOrNull() is { } app)
-        {
-            ExpandPipeline(app, context.ServiceProvider.GetRequiredService<SnowPipelineRegistry>());
+        MergeStaticAssets(context);
+    }
 
-            // 各模块登记的端点动作(Controller / Hub / 健康检查 / 接口文档)也在这里一次挂完, 宿主不用再写 UseSnowEndpoints()
-            app.UseSnowEndpointsIfWebHost();
+    /// <summary>
+    /// 执行各模块登记的端点映射动作
+    /// <para>映射端点要的是 <see cref="IEndpointRouteBuilder"/>, 模块在服务注册阶段拿不到它,
+    /// 所以模块只把动作交进 <see cref="SnowEndpointRouterOptions"/>, 由框架在管道最后一步统一执行。</para>
+    /// </summary>
+    /// <param name="services">根服务提供者</param>
+    /// <param name="endpoints">端点路由构建器</param>
+    internal static void ApplyEndpoints(IServiceProvider services, IEndpointRouteBuilder endpoints)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(endpoints);
+
+        SnowEndpointRouterOptions options = services.GetRequiredService<IOptions<SnowEndpointRouterOptions>>().Value;
+        if (options.EndpointConfigureActions.Count == 0)
+        {
+            return;
         }
 
+        // 独立作用域: 映射动作里解析 Scoped 服务不会捕获根容器
+        using IServiceScope scope = endpoints.ServiceProvider.CreateScope();
+        SnowEndpointRouteBuilderContext endpointContext = new(endpoints, scope.ServiceProvider);
+
+        foreach (Action<SnowEndpointRouteBuilderContext> configure in options.EndpointConfigureActions)
+        {
+            configure(endpointContext);
+        }
+    }
+
+    /// <summary>
+    /// 把各包带的静态资源合并进 WebRoot
+    /// </summary>
+    /// <param name="context">应用初始化上下文</param>
+    private static void MergeStaticAssets(ApplicationInitializationContext context)
+    {
         SnowAspNetCoreOptions options = context.ServiceProvider.GetRequiredService<IOptions<SnowAspNetCoreOptions>>().Value;
         if (!options.MergeStaticAssets || options.StaticAssetFileProviders.Count == 0)
         {
@@ -95,57 +129,5 @@ public sealed class SnowAspNetCoreModule : SnowModule
         List<IFileProvider> fileProviders = [environment.WebRootFileProvider];
         fileProviders.AddRange(options.StaticAssetFileProviders);
         environment.WebRootFileProvider = new CompositeFileProvider(fileProviders);
-    }
-
-    /// <summary>
-    /// 按阶段展开管道: 每个阶段先跑模块登记的中间件, 再插入该阶段之后由框架负责的那一段
-    /// </summary>
-    /// <param name="app">应用构建器</param>
-    /// <param name="registry">管道登记表</param>
-    private static void ExpandPipeline(IApplicationBuilder app, SnowPipelineRegistry registry)
-    {
-        // 1. 最外层: 兜异常用, 要在一切之前
-        ApplyStage(app, registry, SnowPipelineStage.Outermost);
-
-        // 2. 路由之前: 链路标识、日志增强
-        ApplyStage(app, registry, SnowPipelineStage.BeforeRouting);
-
-        // 3. 路由: 没有注册路由服务(极简宿主)时跳过, UseRouting 会因缺少 EndpointDataSource 报错
-        if (app.ApplicationServices.GetService<EndpointDataSource>() is not null)
-        {
-            app.UseRouting();
-        }
-
-        // 4. 路由之后、认证之前
-        ApplyStage(app, registry, SnowPipelineStage.AfterRouting);
-
-        // 5. 认证: 宿主一个方案都没登记时跳过, 少了 AuthenticationMiddleware 也不影响匿名端点
-        if (app.ApplicationServices.GetService<IAuthenticationSchemeProvider>() is not null)
-        {
-            app.UseAuthentication();
-        }
-
-        // 6. 认证之后、授权之前: 多租户要读已认证用户与路由值
-        ApplyStage(app, registry, SnowPipelineStage.AfterAuthentication);
-
-        // 7. 授权
-        if (app.ApplicationServices.GetService<IAuthorizationPolicyProvider>() is not null)
-        {
-            app.UseAuthorization();
-        }
-
-        // 8. 授权之后、端点之前: 限流要读端点上的策略
-        ApplyStage(app, registry, SnowPipelineStage.AfterAuthorization);
-
-        // 9. 端点之前的终端分支: 仪表盘、接口文档
-        ApplyStage(app, registry, SnowPipelineStage.BeforeEndpoints);
-    }
-
-    private static void ApplyStage(IApplicationBuilder app, SnowPipelineRegistry registry, SnowPipelineStage stage)
-    {
-        foreach (SnowPipelineEntry entry in registry.MiddlewareIn(stage))
-        {
-            entry.Configure(app);
-        }
     }
 }

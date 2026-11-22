@@ -1,7 +1,7 @@
 namespace Snow.AspNetCore.HealthChecks;
 
 /// <summary>
-/// 检查项登记表: 收集宿主在 PreConfigureServices 阶段登记的检查类型
+/// 检查项登记表: 收集宿主在 <c>AddApplication</c> 之前登记的检查类型
 /// </summary>
 public sealed class SnowHealthCheckRegistry
 {

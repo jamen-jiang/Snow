@@ -74,7 +74,7 @@ public sealed class SnowValidationFluentValidationModule : SnowModule
         {
             foreach (SnowModuleDescriptor module in container.Modules)
             {
-                assemblies.Add(module.Assembly);
+                assemblies.Add(module.Type.Assembly);
             }
         }
 

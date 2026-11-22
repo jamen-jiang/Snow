@@ -5,6 +5,7 @@ using Elsa.Persistence.EFCore.Modules.Management;
 using Elsa.Persistence.EFCore.Modules.Runtime;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Snow.AspNetCore;
 using Snow.DependencyInjection;
 using Snow.Modularity;
 
@@ -13,7 +14,7 @@ namespace Snow.Workflows.Elsa;
 /// <summary>
 /// Elsa 模块: 加载 Elsa 引擎并接上本框架的 ISnowWorkflowRunner。
 /// </summary>
-[DependsOn(typeof(SnowWorkflowsModule))]
+[DependsOn(typeof(SnowWorkflowsModule), typeof(SnowAspNetCoreModule))]
 public sealed class SnowElsaModule : SnowModule
 {
     /// <inheritdoc />
@@ -93,5 +94,11 @@ public sealed class SnowElsaModule : SnowModule
 
             options.ConfigureElsa?.Invoke(elsa);
         });
+
+        // Elsa 的工作流端点要路由值, 挂在路由之后
+        Configure<SnowPipelineOptions>(options => options.AddFilter(new SnowPipelineFilter(
+            "Snow.Workflows.Elsa",
+            postRouting: app => app.UseSnowWorkflows())));
+
     }
 }

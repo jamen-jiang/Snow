@@ -17,6 +17,8 @@ namespace Snow.AspNetCore.Mvc;
 /// <para>依赖 <see cref="SnowAspNetCoreModule"/>: 自动 API 跑在它提供的 HTTP 上下文之上。</para>
 /// <para>依赖 <see cref="SnowValidationModule"/>: 自动校验过滤器用 <see cref="ISnowObjectValidator"/> 跑 DataAnnotations 与 FluentValidation,
 /// 与 ABP 把 <c>AbpValidationActionFilter</c> 放在 Volo.Abp.AspNetCore.Mvc 里同形 —— 校验只有一个包, 不需要 AspNetCore 后缀的校验包。</para>
+/// <para>端点与 ABP 一样由模块声明(AbpEndpointRouterOptions.EndpointConfigureActions 同形的 SnowEndpointRouterOptions),
+/// 框架在全部模块初始化完成之后统一映射, 宿主不用写 <c>MapControllers()</c>。</para>
 /// </summary>
 [DependsOn(typeof(SnowAspNetCoreModule), typeof(SnowValidationModule))]
 public sealed class SnowMvcModule : SnowModule
@@ -53,8 +55,9 @@ public sealed class SnowMvcModule : SnowModule
             RegisterApplicationServiceControllers(context, builder);
         }
 
-        // 端点映射动作登记到统一挂载入口: 初始化时自动执行, 宿主不用写 UseSnowEndpoints()
-        context.Services.AddSnowEndpoint(endpoints => endpoints.MapControllers());
+        // 端点映射交给统一挂载: 与 ABP 的 EndpointConfigureActions 同形
+        Configure<SnowEndpointRouterOptions>(options =>
+            options.EndpointConfigureActions.Add(endpointContext => endpointContext.Endpoints.MapControllers()));
     }
 
     private static void RegisterApplicationServiceControllers(ServiceConfigurationContext context, IMvcBuilder builder)
@@ -88,7 +91,7 @@ public sealed class SnowMvcModule : SnowModule
         {
             foreach (SnowModuleDescriptor module in container.Modules)
             {
-                assemblies.Add(module.Assembly);
+                assemblies.Add(module.Type.Assembly);
             }
         }
 

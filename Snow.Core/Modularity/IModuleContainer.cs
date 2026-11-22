@@ -1,7 +1,8 @@
 namespace Snow.Modularity;
 
 /// <summary>
-/// 模块容器(对应 ABP 的 IModuleContainer):保存本次应用加载的全部模块及其依赖顺序
+/// 模块容器(对应 ABP 的 IModuleContainer):保存本次应用加载的全部模块及其依赖顺序。
+/// 各包用它做程序集发现(<c>Modules.SelectMany(module => module.AllAssemblies)</c>)。
 /// </summary>
 public interface IModuleContainer
 {
@@ -9,17 +10,4 @@ public interface IModuleContainer
     /// 按加载顺序排列的模块列表,被依赖的模块排在前
     /// </summary>
     IReadOnlyList<SnowModuleDescriptor> Modules { get; }
-
-    /// <summary>
-    /// 模块类型到模块描述信息的索引,与 <see cref="Modules"/> 内容一致。
-    /// 候选来源是加载器已建好的字典,容器不重建。
-    /// </summary>
-    IReadOnlyDictionary<Type, SnowModuleDescriptor> ModulesByType { get; }
-
-    /// <summary>
-    /// 按模块类型查找模块描述信息
-    /// </summary>
-    /// <param name="moduleType">模块类型</param>
-    /// <returns>找到的模块描述信息;未加载该模块时返回 null</returns>
-    SnowModuleDescriptor? Find(Type moduleType);
 }

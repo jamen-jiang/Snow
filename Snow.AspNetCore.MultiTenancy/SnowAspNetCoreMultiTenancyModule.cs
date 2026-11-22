@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -11,8 +12,9 @@ namespace Snow.AspNetCore.MultiTenancy;
 /// 多租户 Web 适配模块(对齐 ABP 的 <c>AbpAspNetCoreMultiTenancyModule</c>)
 /// <para>登记四个请求侧出资者, 顺序与 ABP 一致: QueryString → Route → Header → Cookie;
 /// 当前用户出资者已在 <see cref="SnowMultiTenancyModule"/> 里排在最前面。</para>
-/// <para>中间件由本模块登记进管道清单, 排在路由与认证之后、授权之前, 宿主不用写 <c>UseSnowMultiTenancy()</c>:
-/// 路由出资者要读路由值, 当前用户出资者要读已认证用户。</para>
+/// <para>租户解析中间件由本模块登记成管道过滤器, 挂在 <c>OnPostPipeline</c>(认证与授权之后、端点之前):
+/// 它的"当前用户"出资者要读已认证主体的租户声明, 放认证之前就只能拿到匿名请求,
+/// 表现为静默回落到 Host 租户 —— 不报错, 但数据写进错误的租户。</para>
 /// </summary>
 [DependsOn(typeof(SnowMultiTenancyModule), typeof(SnowAspNetCoreModule))]
 public sealed class SnowAspNetCoreMultiTenancyModule : SnowModule
@@ -32,7 +34,8 @@ public sealed class SnowAspNetCoreMultiTenancyModule : SnowModule
         context.Services.TryAddEnumerable(ServiceDescriptor.Transient<ITenantResolveContributor, HeaderTenantResolveContributor>());
         context.Services.TryAddEnumerable(ServiceDescriptor.Transient<ITenantResolveContributor, CookieTenantResolveContributor>());
 
-        // 认证之后、授权之前: 路由出资者要读路由值, 当前用户出资者要读已认证用户
-        context.Services.AddSnowMiddleware<MultiTenancyMiddleware>(SnowPipelineStage.AfterAuthentication);
+        Configure<SnowPipelineOptions>(options => options.AddFilter(new SnowPipelineFilter(
+            "Snow.AspNetCore.MultiTenancy",
+            postPipeline: app => app.UseSnowMultiTenancy())));
     }
 }

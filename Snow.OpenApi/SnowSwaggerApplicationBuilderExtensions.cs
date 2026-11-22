@@ -14,7 +14,8 @@ public static class SnowSwaggerApplicationBuilderExtensions
 {
     /// <summary>
     /// 挂上文档端点与 Scalar 调试界面
-    /// <para>正常情况不用调: <c>SnowOpenApiModule</c> 已把端点登记进统一挂载, <c>InitializeSnowAsync()</c> 之后就能访问。保留给单独使用的宿主。</para>
+    /// <para>正常情况不用调: <c>SnowOpenApiModule</c> 已把映射动作声明进端点清单,
+    /// 框架在全部模块初始化完成之后统一执行。保留给单独使用本包的宿主。</para>
     /// </summary>
     /// <param name="app">应用构建器</param>
     /// <returns>应用构建器本身</returns>
@@ -33,7 +34,7 @@ public static class SnowSwaggerApplicationBuilderExtensions
 
         if (endpoints is null)
         {
-            throw new SnowInitializationException("找不到端点路由构建器: 需要 Web 宿主, 并先调用 UseSnowAspNetCore / InitializeSnowAsync。");
+            throw new SnowInitializationException("找不到端点路由构建器: 需要 Web 宿主, 且启动模块要依赖 SnowAspNetCoreModule。");
         }
 
         MapSwaggerEndpoints(endpoints, options);

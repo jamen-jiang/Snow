@@ -8,7 +8,7 @@ namespace Snow.AspNetCore.SignalR;
 public static class SnowSignalRServiceCollectionExtensions
 {
     /// <summary>
-    /// 显式登记一个 Hub, 在模块的 PreConfigureServices 阶段调用
+    /// 显式登记一个 Hub。必须在 <c>AddApplication</c> 之前调用
     /// </summary>
     /// <typeparam name="THub">Hub 类型</typeparam>
     /// <param name="services">服务集合</param>
@@ -24,7 +24,7 @@ public static class SnowSignalRServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 调整 SignalR 选项, 在模块的 PreConfigureServices 阶段调用
+    /// 调整 SignalR 选项。必须在 <c>AddApplication</c> 之前调用
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="configure">选项配置动作</param>

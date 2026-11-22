@@ -8,7 +8,7 @@ namespace Snow.AspNetCore.HealthChecks;
 public static class SnowHealthChecksServiceCollectionExtensions
 {
     /// <summary>
-    /// 登记一个健康检查项, 在模块的 PreConfigureServices 阶段调用
+    /// 登记一个健康检查项。必须在 <c>AddApplication</c> 之前调用
     /// </summary>
     /// <typeparam name="THealthCheck">实现 IHealthCheck 的类型</typeparam>
     /// <param name="services">服务集合</param>
@@ -25,7 +25,7 @@ public static class SnowHealthChecksServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 调整健康检查端点选项, 在模块的 PreConfigureServices 阶段调用
+    /// 调整健康检查端点选项。必须在 <c>AddApplication</c> 之前调用
     /// </summary>
     /// <param name="services">服务集合</param>
     /// <param name="configure">选项配置动作</param>
