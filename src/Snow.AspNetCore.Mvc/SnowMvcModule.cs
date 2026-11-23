@@ -1,7 +1,10 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.DependencyInjection;
@@ -34,18 +37,27 @@ public sealed class SnowMvcModule : SnowModule
         // 过滤器从 IOptions 读配置, 所以把生效后的选项写回选项管道
         context.Services.Configure<SnowMvcOptions>(options => CopyTo(effective, options));
 
+        // AddService 登记过滤器要求容器里真有这个服务: 自己先登记一遍(与 ABP 在 AbpAspNetCoreMvcModule 里逐个登记过滤器同理)
         context.Services.AddScoped<SnowObjectValidationActionFilter>();
+        context.Services.AddTransient<SnowModelStateInvalidFilter>();
+        context.Services.AddTransient<SnowResultFilter>();
+        context.Services.AddTransient<SnowExceptionFilter>();
 
         // 关掉 [ApiController] 自带的 ModelState 过滤器, 统一由下面两个过滤器出 SnowApiResponse 格式的错误
         context.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
 
+        // 框架过滤器一律 AddService 登记: 这样生成的是 ServiceFilterAttribute,
+        // SnowMvcActionDescriptorProvider 才认得出来并能在控制器关掉特性时把它摘掉(Add<T>() 生成 TypeFilterAttribute, 摘不掉)
         IMvcBuilder builder = context.Services.AddControllers(options =>
         {
             options.Filters.AddService<SnowObjectValidationActionFilter>(-1000);
-            options.Filters.Add<SnowModelStateInvalidFilter>();
-            options.Filters.Add<SnowResultFilter>();
-            options.Filters.Add<SnowExceptionFilter>();
+            options.Filters.AddService(typeof(SnowModelStateInvalidFilter));
+            options.Filters.AddService(typeof(SnowResultFilter));
+            options.Filters.AddService(typeof(SnowExceptionFilter));
         });
+
+        // 动作描述符定型后摘掉框架过滤器, 对应 ABP 的 AbpMvcActionDescriptorProvider
+        context.Services.TryAddEnumerable(ServiceDescriptor.Transient<IActionDescriptorProvider, SnowMvcActionDescriptorProvider>());
 
         builder.AddMvcOptions(options =>
             options.Conventions.Add(new SnowApplicationServiceConvention(effective)));

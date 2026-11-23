@@ -34,41 +34,6 @@ public class CorrelationIdProvider : ICorrelationIdProvider
         string? parent = Get();
         CorrelationId = correlationId;
 
-        return new RestoreAction(this, parent);
-    }
-
-    /// <summary>
-    /// 恢复上一个链路标识
-    /// </summary>
-    private sealed class RestoreAction : IDisposable
-    {
-        private readonly CorrelationIdProvider _provider;
-        private readonly string? _parent;
-        private bool _disposed;
-
-        /// <summary>
-        /// 记下替换前的链路标识, 以便释放时还原
-        /// </summary>
-        /// <param name="provider">所属的提供者</param>
-        /// <param name="parent">替换前的链路标识</param>
-        public RestoreAction(CorrelationIdProvider provider, string? parent)
-        {
-            _provider = provider;
-            _parent = parent;
-        }
-
-        /// <summary>
-        /// 还原成替换前的链路标识, 重复释放无副作用
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            _provider.CorrelationId = _parent;
-        }
+        return new DisposeAction(() => CorrelationId = parent);
     }
 }

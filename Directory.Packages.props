@@ -25,6 +25,7 @@
     <PackageVersion Include="StackExchange.Redis" Version="3.4.35" />
     <!-- Redis 分布式缓存: 会话与缓存后端共用, 多实例共享 -->
     <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="11.0.0" />
+
     <!-- 选项绑定: 模块基类 SnowModule 的 Configure<T>(IConfiguration) 便捷方法要用 -->
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0" />
     <!-- HTTP 客户端: Snow.Http.Client 用 IHttpClientFactory 登记命名客户端 -->

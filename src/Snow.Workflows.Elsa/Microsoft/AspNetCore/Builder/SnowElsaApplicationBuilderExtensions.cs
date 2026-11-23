@@ -1,7 +1,8 @@
 using Elsa.Extensions;
 using Microsoft.AspNetCore.Builder;
+using Snow.Workflows.Elsa;
 
-namespace Snow.Workflows.Elsa;
+namespace Microsoft.AspNetCore.Builder;
 
 /// <summary>
 /// 工作流 HTTP 中间件: 把 Elsa 的 <c>HttpWorkflowsMiddleware</c> 挂到管道上

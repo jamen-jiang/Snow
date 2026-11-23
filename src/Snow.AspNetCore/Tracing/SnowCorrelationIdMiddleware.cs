@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
+using Snow.AspNetCore.Middleware;
 using Snow.DependencyInjection;
-using Snow.Security.Middleware;
 using Snow.Tracing;
 
-namespace Snow.AspNetCore;
+namespace Snow.AspNetCore.Tracing;
 
 /// <summary>
 /// 链路标识中间件(对应 ABP 的 <c>AbpCorrelationIdMiddleware</c>): 从请求头取链路标识, 缺失则生成一个

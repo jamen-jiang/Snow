@@ -1,15 +1,21 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
+using Snow.AspNetCore.Filters;
 
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
 /// 模型绑定/校验失败时直接返回 400 与字段错误列表的过滤器
 /// <para>自动 API 的应用服务类没有 [ApiController] 特性, 所以这层行为要自己补上。</para>
+/// <para>实现 <see cref="ISnowFilter"/>: 控制器标了 <see cref="DisableSnowFeaturesAttribute"/> 时由
+/// <c>SnowMvcActionDescriptorProvider</c> 在动作描述符定型时把它整个摘掉, 请求期不做判断。</para>
 /// </summary>
-public sealed class SnowModelStateInvalidFilter : IActionFilter
+public sealed class SnowModelStateInvalidFilter : IActionFilter, ISnowFilter
 {
     private readonly SnowMvcOptions _options;
 

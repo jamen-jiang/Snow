@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.Modularity;
 using Xunit;
@@ -6,7 +7,7 @@ using Xunit;
 namespace Snow.AspNetCore.Tests;
 
 /// <summary>
-/// HTTP 管道: 骨架由启动过滤器展开, 端点由模块统一映射, 两段初始化按序执行
+/// HTTP 管道: 管道由宿主手写, 端点由模块统一映射, 两段初始化按序执行
 /// </summary>
 public class SnowAspNetCorePipelineTests
 {
@@ -14,7 +15,7 @@ public class SnowAspNetCorePipelineTests
     /// 端点映射执行各模块登记的动作, 且给的动作能拿到端点构建器
     /// </summary>
     [Fact]
-    public void MapEndpoints_RunsRegisteredActions()
+    public void UseSnowEndpoints_RunsRegisteredActions()
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder();
         builder.Services.AddRouting();
@@ -25,9 +26,42 @@ public class SnowAspNetCorePipelineTests
 
         WebApplication app = builder.Build();
 
-        SnowAspNetCoreModule.MapEndpoints(app, app.Services);
+        app.UseSnowEndpoints();
 
         Assert.Single(seen);
+    }
+
+    /// <summary>
+    /// 宿主额外传进来的映射动作也会执行: 一个模块动作都没登记时同样生效(对应 ABP UseConfiguredEndpoints 的可选参数)
+    /// </summary>
+    [Fact]
+    public void UseSnowEndpoints_RunsAdditionalConfigurationAction()
+    {
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        builder.Services.AddRouting();
+        builder.Services.AddOptions<SnowEndpointRouterOptions>();
+
+        WebApplication app = builder.Build();
+
+        bool invoked = false;
+        app.UseSnowEndpoints(endpoints => invoked = endpoints is not null);
+
+        Assert.True(invoked);
+    }
+
+    /// <summary>
+    /// 既没登记动作也没传额外动作时原样返回, 一个中间件都不加
+    /// </summary>
+    [Fact]
+    public void UseSnowEndpoints_WithoutAnyAction_DoesNothing()
+    {
+        WebApplicationBuilder builder = WebApplication.CreateBuilder();
+        builder.Services.AddRouting();
+        builder.Services.AddOptions<SnowEndpointRouterOptions>();
+
+        WebApplication app = builder.Build();
+
+        Assert.Same(app, app.UseSnowEndpoints());
     }
 
     /// <summary>

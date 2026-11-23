@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Snow.BackgroundJobs.Hangfire;
 using global::Hangfire;
 
-namespace Snow.BackgroundJobs.Hangfire;
+namespace Microsoft.AspNetCore.Builder;
 
 /// <summary>
 /// 仪表盘中间件: 把 Hangfire 面板挂到管道上

@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Snow.DependencyInjection;
 using Snow.MultiTenancy;
-using Snow.Security.Middleware;
+using Snow.AspNetCore.Middleware;
 using Snow.Security.Users;
 using Snow.Tracing;
 using Serilog.Context;

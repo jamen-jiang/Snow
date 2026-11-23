@@ -9,9 +9,8 @@ namespace Snow.Modularity;
 /// 与容器构建之后的应用初始化阶段(<see cref="OnPreApplicationInitialization"/> / <see cref="OnApplicationInitialization"/> /
 /// <see cref="OnPostApplicationInitialization"/>); 应用关停时跑 <see cref="OnApplicationShutdown"/>。</para>
 /// <para>每个动作都有同步与异步两个版本, 异步版本默认调用同步版本, 重写任意一个都生效(与 ABP 一致)。</para>
-/// <para>模块不碰 HTTP 管道骨架: 骨架由框架的启动过滤器铺开。要加中间件就在初始化阶段里写
-/// <c>context.GetApplicationBuilder().UseXxx()</c>: 预初始化与第一段里写的落在骨架之外(最外层),
-/// 收尾段里写的落在授权之后、端点之前。</para>
+/// <para>模块不铺管道: 整条管道由宿主在启动模块的 <c>OnApplicationInitialization</c> 里按行序手写(对齐 ABP 模板)。
+/// 能力包要加中间件只提供 <c>UseXxx()</c> 扩展方法, 挂不挂、挂在哪一行由宿主决定。</para>
 /// <para>加载顺序由 <see cref="DependsOnAttribute"/> 描述, 加载器负责拓扑排序; 同一阶段内的先后 = 拓扑序。</para>
 /// </summary>
 public abstract class SnowModule :

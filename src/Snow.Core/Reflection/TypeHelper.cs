@@ -57,6 +57,38 @@ public static class TypeHelper
 #endif
 
     /// <summary>
+    /// 判断类型是不是 <see cref="Task"/> 或 <see cref="Task{TResult}"/>。
+    /// </summary>
+    /// <param name="type">要判断的类型</param>
+    public static bool IsTaskOrTaskOfT(this Type type)
+    {
+        return type == typeof(Task) || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Task<>));
+    }
+
+    /// <summary>
+    /// 判断类型是不是 <see cref="Task{TResult}"/>。
+    /// </summary>
+    /// <param name="type">要判断的类型</param>
+    public static bool IsTaskOfT(this Type type)
+    {
+        return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Task<>);
+    }
+
+    /// <summary>
+    /// 剥掉异步外壳: <see cref="Task"/> 当 void 看, <see cref="Task{TResult}"/> 取其结果类型, 其它原样返回。
+    /// </summary>
+    /// <param name="type">要处理的类型</param>
+    public static Type UnwrapTask(Type type)
+    {
+        if (type == typeof(Task))
+        {
+            return typeof(void);
+        }
+
+        return type.IsTaskOfT() ? type.GenericTypeArguments[0] : type;
+    }
+
+    /// <summary>
     /// 判断类型是否为可空值类型 <see cref="Nullable{T}"/>。
     /// </summary>
     /// <param name="type">要判断的类型</param>

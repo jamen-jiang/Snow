@@ -61,9 +61,11 @@ public static class SnowModuleHelper
     {
         ArgumentNullException.ThrowIfNull(moduleType);
 
-        if (!typeof(SnowModule).IsAssignableFrom(moduleType))
+        // 判定只看接口, 与 ABP 的 AbpModule.CheckAbpModuleType 判 IAbpModule 一致:
+        // 模块不必继承 SnowModule, 自己实现 ISnowModule 也算模块。
+        if (!typeof(ISnowModule).IsAssignableFrom(moduleType))
         {
-            throw new ModuleLoadException("类型 " + moduleType.FullName + " 未继承 " + nameof(SnowModule));
+            throw new ModuleLoadException("类型 " + moduleType.FullName + " 未实现 " + nameof(ISnowModule));
         }
 
         if (moduleType.IsAbstract)
@@ -81,15 +83,15 @@ public static class SnowModuleHelper
     /// 实例化模块
     /// </summary>
     /// <param name="moduleType">模块类型</param>
-    /// <returns>模块实例</returns>
+    /// <returns>模块实例, 以 <see cref="ISnowModule"/> 返回(与 ABP 的 ModuleLoader 里 <c>(IAbpModule)Activator.CreateInstance(...)</c> 同理)</returns>
     /// <exception cref="ModuleLoadException">类型非法或缺少公共无参构造器</exception>
-    public static SnowModule CreateInstance(Type moduleType)
+    public static ISnowModule CreateInstance(Type moduleType)
     {
         CheckModuleType(moduleType);
 
         try
         {
-            return (SnowModule)Activator.CreateInstance(moduleType)!;
+            return (ISnowModule)Activator.CreateInstance(moduleType)!;
         }
         catch (Exception exception)
         {

@@ -18,9 +18,10 @@ public class SnowModuleDescriptor
     public Assembly[] AllAssemblies { get; }
 
     /// <summary>
-    /// 模块实例
+    /// 模块实例, 按接口暴露(对应 ABP 的 <c>AbpModuleDescriptor.Instance</c> 是 <c>IAbpModule</c>)
+    /// <para>要拿基类上的成员(跳过约定扫描、服务配置上下文)先 <c>is SnowModule</c> 判一下: 模块可以只实现接口。</para>
     /// </summary>
-    public SnowModule Instance { get; }
+    public ISnowModule Instance { get; }
 
     /// <summary>
     /// 直接依赖的模块,被依赖者在前
@@ -35,7 +36,7 @@ public class SnowModuleDescriptor
     /// </summary>
     /// <param name="type">模块类型</param>
     /// <param name="instance">模块实例</param>
-    public SnowModuleDescriptor(Type type, SnowModule instance)
+    public SnowModuleDescriptor(Type type, ISnowModule instance)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(instance);

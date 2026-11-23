@@ -1,16 +1,23 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
+using Snow.AspNetCore.Filters;
 
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
 /// 把返回值包装成 <see cref="SnowApiResponse"/> 的结果过滤器
 /// <para>只处理 <see cref="ObjectResult"/>: FileResult / NoContentResult / 已经包装过的响应原样放过。</para>
+/// <para>实现 <see cref="ISnowFilter"/>: 控制器标了 <see cref="DisableSnowFeaturesAttribute"/> 时由
+/// <c>SnowMvcActionDescriptorProvider</c> 在动作描述符定型时把它整个摘掉, 请求期不做判断。</para>
 /// </summary>
-public sealed class SnowResultFilter : IAsyncResultFilter
+public sealed class SnowResultFilter : IAsyncResultFilter, ISnowFilter
 {
     private readonly SnowMvcOptions _options;
 
@@ -52,7 +59,7 @@ public sealed class SnowResultFilter : IAsyncResultFilter
         return objectResult.Value is not SnowApiResponse and not ProblemDetails;
     }
 
-    private bool ShouldWrap(Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor actionDescriptor)
+    private bool ShouldWrap(ActionDescriptor actionDescriptor)
     {
         if (actionDescriptor is not ControllerActionDescriptor controllerAction)
         {

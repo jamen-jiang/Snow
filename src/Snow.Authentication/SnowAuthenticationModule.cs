@@ -98,9 +98,11 @@ public sealed class SnowAuthenticationModule : SnowModule
         // TokenPolicyProvider 上标了 [SingletonService(ReplaceServices = true)], 由约定注册顶掉框架自带的
         // DefaultAuthorizationPolicyProvider; snowauth:* 策略只有它认得, 宿主若要自定义策略解析应继承或包装它。
 
-        // 把 TokenUtil 抛的异常映射成 401/403: MVC 走 action filter;
-        // 最小 API 走管道中间件 UseSnowTokenExceptionHandling(), 由宿主挂在认证之外(见模块文档)。
-        context.Services.Configure<MvcOptions>(mvcOptions => mvcOptions.Filters.Add<TokenExceptionFilter>());
+        // 登录态异常转 401/403: MVC 管道里用过滤器。必须用 AddService 登记 —— 它生成 ServiceFilterAttribute,
+        // SnowMvcActionDescriptorProvider 才认得出这是框架过滤器, [DisableSnowFeatures(DisableMvcFilters = true)] 才摘得掉。
+        // 最小 API 没有 MVC 过滤器这一层, 走中间件: 宿主在管道里挂 UseSnowTokenExceptionHandling()。
+        context.Services.AddTransient<TokenExceptionFilter>();
+        context.Services.Configure<MvcOptions>(mvcOptions => mvcOptions.Filters.AddService(typeof(TokenExceptionFilter)));
     }
 
     /// <inheritdoc />

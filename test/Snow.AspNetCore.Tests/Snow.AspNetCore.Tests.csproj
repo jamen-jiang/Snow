@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Snow.AspNetCore\Snow.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.Mvc\Snow.AspNetCore.Mvc.csproj" />
   </ItemGroup>
 
 </Project>

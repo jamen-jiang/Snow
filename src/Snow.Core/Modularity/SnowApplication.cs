@@ -12,8 +12,9 @@ namespace Snow.Modularity;
 /// → 全部模块的 <c>PostConfigureServices</c>(与 ABP 一致, 不是"一个模块跑完三段再下一个")。</para>
 /// <para>应用初始化阶段两段: 第一段 <see cref="InitializeModulesAsync"/> 跑各模块的 <c>OnApplicationInitialization</c>;
 /// 收尾段 <see cref="PostInitializeModulesAsync"/> 跑各模块的 <c>OnPostApplicationInitialization</c>。
-/// Web 宿主在两段之间展开 HTTP 管道, 所以模块在两段里写的 <c>app.Use(...)</c> 分别落在骨架之外与骨架之内。
-/// 两段之前还有 <see cref="PreInitializeModulesAsync"/>(跑 <c>OnPreApplicationInitialization</c>), 同样在骨架之外。</para>
+/// 两段之前还有 <see cref="PreInitializeModulesAsync"/>(跑 <c>OnPreApplicationInitialization</c>)。
+/// Web 宿主在 <c>Program.cs</c> 里用 <c>await app.InitializeApplicationAsync()</c> 一次跑完三段(对齐 ABP),
+/// 启动模块在 <c>OnApplicationInitialization</c> 里手写的整条管道因此在 <c>app.Run()</c> 之前定型。</para>
 /// </summary>
 public sealed class SnowApplication
 {
@@ -86,7 +87,8 @@ public sealed class SnowApplication
 
         foreach (SnowModuleDescriptor module in Modules)
         {
-            if (!module.Instance.SkipAutoServiceRegistration)
+            // 只认基类: 跳过约定扫描是 SnowModule 上的开关, 只实现接口的模块没有这个概念(默认不跳)
+            if (module.Instance is SnowModule snowModule && !snowModule.SkipAutoServiceRegistration)
             {
                 foreach (Assembly assembly in module.AllAssemblies)
                 {
@@ -115,11 +117,33 @@ public sealed class SnowApplication
         DetachContext();
 
         _configuredServices = true;
+
+        TryToSetEnvironment(Services);
+    }
+
+    /// <summary>
+    /// 环境名兜底: 全部模块跑完仍没人填, 就按生产环境处理
+    /// <para>对应 ABP 的 <c>AbpApplicationBase.TryToSetEnvironment</c>: 同一处、同样在 PostConfigureServices 之后。</para>
+    /// </summary>
+    /// <param name="services">服务集合</param>
+    private static void TryToSetEnvironment(IServiceCollection services)
+    {
+        // 只用 ImplementationInstance 查: 这里还没建容器, 不能为了一个字符串去构建临时容器
+        ISnowHostEnvironment? hostEnvironment = services.GetSingletonInstanceOrNull<ISnowHostEnvironment>();
+        if (hostEnvironment is null)
+        {
+            return;
+        }
+
+        if (hostEnvironment.EnvironmentName.IsNullOrWhiteSpace())
+        {
+            hostEnvironment.EnvironmentName = SnowEnvironments.Production;
+        }
     }
 
     /// <summary>
     /// 跑完整个应用初始化: 预初始化 → 第一段 → 收尾段
-    /// <para>非 Web 宿主用它一次跑完; Web 宿主由启动过滤器分三次调用下面三个方法, 好在各段之间展开 HTTP 管道。</para>
+    /// <para>非 Web 宿主直接用它一次跑完; Web 宿主由 <c>app.InitializeApplicationAsync()</c> 代跑, 那个扩展方法按同样顺序调下面三个方法。</para>
     /// </summary>
     /// <param name="serviceProvider">根服务提供者</param>
     /// <returns>表示初始化过程的任务</returns>
@@ -132,7 +156,7 @@ public sealed class SnowApplication
 
     /// <summary>
     /// 应用预初始化阶段: 逐个模块执行 <see cref="SnowModule.OnPreApplicationInitializationAsync"/>
-    /// <para>容器已构建、管道骨架还没展开; 模块在这里挂的中间件同样落在骨架之外。
+    /// <para>容器已构建、宿主还没开始写管道; 模块在这里挂的中间件同样落在最外层。
     /// 幂等: 已经用同一个服务提供者跑过就直接返回; 换一个服务提供者抛异常。</para>
     /// </summary>
     /// <param name="serviceProvider">根服务提供者</param>
@@ -190,8 +214,8 @@ public sealed class SnowApplication
 
     /// <summary>
     /// 应用初始化收尾段: 逐个模块执行 <see cref="SnowModule.OnPostApplicationInitializationAsync"/>
-    /// <para>必须在第一段之后调用; Web 宿主把它放在管道骨架展开之后、端点映射之前, 模块在这一段挂的中间件
-    /// 因此落在"授权之后、端点之前"。重复调用幂等。</para>
+    /// <para>必须在第一段之后调用; Web 宿主的 <c>InitializeApplicationAsync()</c> 紧跟第一段调它,
+    /// 模块在这一段挂的中间件因此落在宿主手写的整条管道之后。重复调用幂等。</para>
     /// </summary>
     /// <returns>表示初始化过程的任务</returns>
     public async Task PostInitializeModulesAsync()
@@ -219,7 +243,7 @@ public sealed class SnowApplication
 
     /// <summary>
     /// 关停应用: 逐个模块执行 <see cref="SnowModule.OnApplicationShutdownAsync"/>, 关停里的服务解析走独立作用域
-    /// <para>Web 宿主由启动过滤器挂在 <c>IHostApplicationLifetime.ApplicationStopping</c> 上, 宿主不用自己调。重复调用幂等。</para>
+    /// <para>Web 宿主由 <c>app.InitializeApplicationAsync()</c> 挂在 <c>IHostApplicationLifetime.ApplicationStopping</c> 上, 宿主不用自己调。重复调用幂等。</para>
     /// </summary>
     /// <returns>表示关停过程的任务</returns>
     public async Task ShutdownAsync()
@@ -292,7 +316,7 @@ public sealed class SnowApplication
     private async Task RunPhaseAsync(
         IServiceProvider serviceProvider,
         string phase,
-        Func<SnowModule, ApplicationInitializationContext, Task> invoke)
+        Func<ISnowModule, ApplicationInitializationContext, Task> invoke)
     {
         ApplicationInitializationContext context = new ApplicationInitializationContext(serviceProvider);
 
@@ -315,7 +339,10 @@ public sealed class SnowApplication
     {
         foreach (SnowModuleDescriptor module in Modules)
         {
-            module.Instance.ServiceConfigurationContext = context;
+            if (module.Instance is SnowModule snowModule)
+            {
+                snowModule.ServiceConfigurationContext = context;
+            }
         }
     }
 
@@ -323,7 +350,10 @@ public sealed class SnowApplication
     {
         foreach (SnowModuleDescriptor module in Modules)
         {
-            module.Instance.ServiceConfigurationContext = null;
+            if (module.Instance is SnowModule snowModule)
+            {
+                snowModule.ServiceConfigurationContext = null;
+            }
         }
     }
 }

@@ -23,7 +23,7 @@ public static class ModuleLoader
 
         foreach (Type moduleType in SnowModuleHelper.FindAllModuleTypes(startupModuleType))
         {
-            SnowModule module = SnowModuleHelper.CreateInstance(moduleType);
+            ISnowModule module = SnowModuleHelper.CreateInstance(moduleType);
 
             services.AddSingleton(moduleType, module);
 

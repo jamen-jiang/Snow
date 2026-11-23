@@ -18,7 +18,7 @@ public class DependsOnAttribute : Attribute, IDependedTypesProvider
     /// <summary>
     /// 构造器
     /// </summary>
-    /// <param name="dependedTypes">被依赖的模块类型,必须继承 SnowModule</param>
+    /// <param name="dependedTypes">被依赖的模块类型,必须实现 <see cref="ISnowModule"/></param>
     public DependsOnAttribute(params Type[]? dependedTypes)
     {
         DependedTypes = dependedTypes ?? Type.EmptyTypes;

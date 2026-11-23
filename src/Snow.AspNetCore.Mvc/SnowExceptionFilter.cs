@@ -1,16 +1,22 @@
+using System;
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Snow;
+using Snow.AspNetCore.Filters;
 
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
 /// 把异常翻译成统一错误响应与合适的 HTTP 状态码的过滤器
 /// <para>业务异常(<see cref="SnowUserFriendlyException"/>)按消息返回; 其余异常默认只回"服务器内部错误", 细节靠日志。</para>
+/// <para>实现 <see cref="ISnowFilter"/>: 控制器标了 <see cref="DisableSnowFeaturesAttribute"/> 时由
+/// <c>SnowMvcActionDescriptorProvider</c> 在动作描述符定型时把它整个摘掉, 请求期不做判断。</para>
 /// </summary>
-public sealed class SnowExceptionFilter : IExceptionFilter
+public sealed class SnowExceptionFilter : IExceptionFilter, ISnowFilter
 {
     private readonly SnowMvcOptions _options;
     private readonly ILogger<SnowExceptionFilter> _logger;

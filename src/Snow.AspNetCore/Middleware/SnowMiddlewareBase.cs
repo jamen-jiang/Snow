@@ -1,12 +1,13 @@
-using System.Reflection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Controllers;
 
-namespace Snow.Security.Middleware;
+namespace Snow.AspNetCore.Middleware;
 
 /// <summary>
 /// 框架中间件基类: 实现 <see cref="IMiddleware"/> 后由容器构造, 构造器可以自由注入服务
 /// <para>对齐 ABP 的 <c>AbpMiddlewareBase</c>; 中间件因此可以声明任意依赖, 不受 UseMiddleware 只注入 RequestDelegate 的限制。</para>
+/// <para>放在接线包而非 <c>Snow.Security</c>: 它依赖 ASP.NET Core 的 <see cref="IMiddleware"/> 与 MVC 的 <c>ControllerActionDescriptor</c>,
+/// 而 <c>Snow.Security</c> 是安全契约包(当前用户 / ClaimsPrincipal 抽象), 不该替宿主决定用哪个 Web 栈。</para>
 /// </summary>
 public abstract class SnowMiddlewareBase : IMiddleware
 {
@@ -18,11 +19,10 @@ public abstract class SnowMiddlewareBase : IMiddleware
     /// <returns>是否跳过</returns>
     protected virtual Task<bool> ShouldSkipAsync(HttpContext context, RequestDelegate next)
     {
-        Endpoint? endpoint = context.GetEndpoint();
-        ControllerActionDescriptor? controllerActionDescriptor = endpoint?.Metadata.GetMetadata<ControllerActionDescriptor>();
-        DisableSnowFeaturesAttribute? disableSnowFeaturesAttribute = controllerActionDescriptor?.ControllerTypeInfo.GetCustomAttribute<DisableSnowFeaturesAttribute>();
+        // 只认控制器端点: 最小 API / 静态文件没有 ControllerActionDescriptor, 一律不跳过
+        ControllerActionDescriptor? controllerActionDescriptor = context.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>();
 
-        return Task.FromResult(disableSnowFeaturesAttribute != null && disableSnowFeaturesAttribute.DisableMiddleware);
+        return Task.FromResult(SnowFeatureSwitches.IsMiddlewareDisabled(controllerActionDescriptor?.ControllerTypeInfo));
     }
 
     /// <summary>

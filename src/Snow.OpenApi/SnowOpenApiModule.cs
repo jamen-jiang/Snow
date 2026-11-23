@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.Routing;
 using Snow.AspNetCore;
 using Snow.DependencyInjection;
 using Snow.Modularity;

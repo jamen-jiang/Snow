@@ -24,16 +24,22 @@ dotnet add package Snow.EntityFrameworkCore.PostgreSql
 ```csharp
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-// 加载启动模块及其全部依赖, 并立即执行服务注册阶段
-builder.Services.AddApplication<MyModule>();
+// 加载启动模块及其全部依赖, 并立即执行服务注册阶段。
+// Web 宿主用 builder 上的这个入口: 它顺手把 builder.Configuration 顶进容器、
+// 把 builder.Environment.EnvironmentName 抄进应用创建选项 —— 宿主不必再写
+// AddSingleton<IConfiguration>(builder.Configuration), 也不必自己填环境名。
+await builder.AddApplicationAsync<MyModule>();
 
 WebApplication app = builder.Build();
 
-// 宿主到这里就结束: 框架注册的启动过滤器会自动驱动模块初始化(管道由启动模块自己写)
+// 初始化应用: 填好对象访问器、挂上关停钩子、驱动全部模块的初始化阶段
+// 管道由启动模块自己在 OnApplicationInitialization 里写, 这里不写任何 UseXxx
+await app.InitializeApplicationAsync();
+
 app.Run();
 ```
 
-模块类继承 `SnowModule` 并用 `[DependsOn]` 声明依赖:
+模块类继承 `SnowModule`(或只实现 `ISnowModule` 接口)并用 `[DependsOn]` 声明依赖:
 
 ```csharp
 [DependsOn(
@@ -58,7 +64,19 @@ public sealed class MyModule : SnowModule
 ## 模块生命周期: 六个可重写的阶段
 
 模块基类照着 ABP 的 `AbpModule` 给: 服务注册三趟, 应用初始化三段, 加一个关停。每个阶段都有同步与异步一对, 异步版默认调用同步版 —— 重写任意一个都生效。
-每个阶段另有一个接口(`IPreConfigureServices` / `IPostConfigureServices` / `IOnPreApplicationInitialization` / `IOnApplicationInitialization` / `IOnPostApplicationInitialization` / `IOnApplicationShutdown`, 外加空的 `ISnowModule` 标记), `SnowModule` 的类声明把它们全部列上, 框架按接口判断再调用 —— 与 `AbpModule` 的声明逐项对齐。
+每个阶段另有一个接口(`IPreConfigureServices` / `IPostConfigureServices` / `IOnPreApplicationInitialization` / `IOnApplicationInitialization` / `IOnPostApplicationInitialization` / `IOnApplicationShutdown`), `SnowModule` 的类声明把它们全部列上, 框架按接口判断再调用 —— 与 `AbpModule` 的声明逐项对齐。
+
+`ISnowModule` 与 ABP 的 `IAbpModule` 成员逐个对齐, **只有服务注册中段那两个方法**:
+
+```csharp
+public interface ISnowModule
+{
+    Task ConfigureServicesAsync(ServiceConfigurationContext context);
+    void ConfigureServices(ServiceConfigurationContext context);
+}
+```
+
+所以「是不是模块」只看这个接口(`SnowModuleHelper.CheckModuleType` 判 `typeof(ISnowModule).IsAssignableFrom`), 启动模块的泛型约束是 `where TStartupModule : ISnowModule`, 不要求继承 `SnowModule`。前段与后段在 ABP 里本来就是独立接口, 这里同理: 想参与它们就实现对应接口, 不参与也不必被迫继承基类。
 
 | 阶段 | 方法 | 何时执行 | 能做什么 |
 | --- | --- | --- | --- |
@@ -74,7 +92,7 @@ public sealed class MyModule : SnowModule
 - 依赖声明只有 `[DependsOn(typeof(XModule))]`, 拓扑排序后保证被依赖的模块先注册、先初始化; 同一趟内的先后也按这个顺序。
 - 模块实例本身以自身类型登记成单例, 所以模块里可以写构造注入。
 - `ServiceConfigurationContext` 只在服务注册的三趟里可用, 在初始化阶段访问会抛 `SnowInitializationException`。
-- 三个阶段由框架自己驱动: Web 宿主在 `SnowAspNetCoreModule` 注册的 `IStartupFilter` 里按"预初始化 → 第一段 → 收尾段"跑(宿主在其中的第一段里写管道), 关停挂到 `ApplicationStopping`; 非 Web 宿主(控制台 / Worker)没有 `IStartupFilter`, `await serviceProvider.InitializeAsync()` 一次把三段跑完(也可以 `PreInitializeModulesAsync()` / `InitializeModulesAsync()` / `PostInitializeModulesAsync()` 分开跑), 退出前 `serviceProvider.Shutdown()`。
+- 三个阶段由宿主显式触发(对齐 ABP): Web 宿主在 `builder.Build()` 之后调一次 `await app.InitializeApplicationAsync()`, 它填好四个 Web 对象访问器、把关停挂到 `ApplicationStopping`、再按"预初始化 → 第一段 → 收尾段"跑完, 启动模块就在其中的第一段里写管道; 非 Web 宿主(控制台 / Worker)调 `await serviceProvider.InitializeAsync()` 一次把三段跑完(也可以 `PreInitializeModulesAsync()` / `InitializeModulesAsync()` / `PostInitializeModulesAsync()` 分开跑), 退出前 `serviceProvider.Shutdown()`。框架不注册 `IStartupFilter`, `builder.Build()` 里不会偷偷初始化。
 - 中间件由宿主在启动模块的第一段里手写(`context.GetApplicationBuilder()` 拿构建器, 按行序 `app.UseXxx()`), 能力包只提供 `UseXxx()` 扩展方法; 不需要 `Order`、不登记、不实现接口 —— 位置就是代码行序(见下文「中间件管道」)。
 - 关停阶段的服务解析走独立作用域, 所以关停里可以正常注入 Scoped 服务; 重复调用幂等。
 - 需要「在 `AddApplication` 之前」生效的选项(`AddSnowMvc` / `AddSnowSwagger` / `AddSnowRateLimiting` / `AddSnowElsa` 等), 直接在 `builder.Services` 上调用, 不要塞进模块的 `ConfigureServices` —— 那时被依赖模块可能已经跑过, 动作就晚了。
@@ -101,12 +119,98 @@ public sealed class MyHttpApiHostModule : SnowModule { }
 | --- | --- |
 | 上下文访问器 | 登记 `IHttpContextAccessor`, 当前用户与当前请求都从这里来 |
 | 对象访问器 | `IObjectAccessor<IApplicationBuilder>` / `<WebApplication>` / `<IHost>` / `<IEndpointRouteBuilder>`, 让单例服务也能拿到只有宿主才有的对象 |
-| 静态资源合并 | `AddSnowStaticAssets(...)` 登记的 `IFileProvider` 在启动时并进 `WebRootFileProvider`, 包里带的 wwwroot 可直接被访问 |
+| 静态资源合并 | `SnowAspNetCoreOptions.StaticAssetFileProviders` 里登记的 `IFileProvider` 在启动时并进 `WebRootFileProvider`, 包里带的 wwwroot 可直接被访问 |
+| 环境与声明 | `GetHostingEnvironment()` 取宿主 Web 环境(没登记就返回环境名为 `Development` 的空实现, 不必自己写 `??` 分支); `TransformSnowClaims()` 登记一个 `IClaimsTransformation`, 把 `sub` / `role` / `email` / `name` / `family_name` / `given_name` 映射成 `UserClaimTypes` 那套名字 |
+| 宿主环境名 | `ISnowHostEnvironment` 在模块装配前就登记好(默认 `SnowHostEnvironment`), 模块在服务注册阶段就能问「现在是什么环境」, 不必等容器建好 |
+
+### 宿主环境名: `ISnowHostEnvironment`
+
+`IWebHostEnvironment` 只有 Web 宿主才有, 而模块在**服务注册阶段**就要按环境分支 —— 那时容器还没建, 也不该为了一个字符串让内核包去依赖 ASP.NET Core。所以环境名单独抽一层, 与 ABP 的 `IAbpHostEnvironment` 逐项对应:
+
+| 类型 | 位置 | 对应 ABP |
+| --- | --- | --- |
+| `ISnowHostEnvironment`(只有 `string? EnvironmentName { get; set; }`) | `Snow.Core`, 命名空间 `Snow` | `IAbpHostEnvironment` |
+| `SnowHostEnvironment`(唯一实现, 可写) | `Snow.Core` | `AbpHostEnvironment` |
+| `SnowHostEnvironmentExtensions`(`IsDevelopment` / `IsStaging` / `IsProduction` / `IsEnvironment(string)`, 比较忽略大小写) | `Snow.Core` | `AbpHostEnvironmentExtensions` |
+| `SnowEnvironments`(`Development` / `Staging` / `Production` 三个常量) | `Snow.Core` | `Microsoft.Extensions.Hosting.Environments`(值相同, 只是不为一个常量引 `Hosting.Abstractions`) |
+
+填充顺序与 ABP 一致, 三处各管一段:
+
+1. `AddApplication` / `AddApplicationAsync` 在**装配模块之前**用 `TryAddSingleton<ISnowHostEnvironment>(new SnowHostEnvironment { EnvironmentName = options.Environment })` 放好可写单例 —— 宿主若先放了自己的实现就不覆盖。对应 ABP 在 `AbpApplicationBase` 构造器里 `services.AddSingleton<IAbpHostEnvironment>(new AbpHostEnvironment { EnvironmentName = options.Environment })`; `options` 就是 `SnowApplicationCreationOptions`。
+2. `SnowAspNetCoreModule.PreConfigureServices` 在环境名为空时取 `context.Services.GetHostingEnvironment().EnvironmentName` 填进去 —— Web 宿主下就是 `ASPNETCORE_ENVIRONMENT` 的值; 非 Web 宿主(或还没被 Web 主机登记)时 `GetHostingEnvironment()` 给出环境名为 `Development` 的空实现, 所以这一句与 ABP 的 `AbpAspNetCoreModule` 完全同形, 不会留下空环境名。
+3. 服务注册收尾(`PostConfigureServices` 全部跑完之后)兜底: 全程没人填就置成 `Production`。对应 ABP 的 `AbpApplicationBase.TryToSetEnvironment`。
+
+```csharp
+public sealed class MyModule : SnowModule
+{
+    public override void ConfigureServices(ServiceConfigurationContext context)
+    {
+        // 服务注册阶段就能判断环境, 此时容器还没建
+        ISnowHostEnvironment host = context.Services.GetSingletonInstance<ISnowHostEnvironment>();
+        if (host.IsDevelopment())
+        {
+            context.Services.AddSingleton<ICache, InMemoryCache>();
+        }
+    }
+}
+```
+
+服务注册之后(初始化阶段、请求期)直接用容器里的 `ISnowHostEnvironment`, 它是单例; 宿主想自己说了算就在 `AddApplication` 之前 `services.AddSingleton<ISnowHostEnvironment>(new SnowHostEnvironment { EnvironmentName = "Staging" })`。
+
+### Web 宿主入口: `builder.AddApplicationAsync<T>()`
+
+对应 ABP 的 `WebApplicationBuilderExtensions`(同名类、同在 `Microsoft.Extensions.DependencyInjection` 命名空间, 宿主不必额外 using)。它比 `builder.Services.AddApplicationAsync<T>()` 多的就两件事, 与 ABP 逐行对应:
+
+```csharp
+public static async Task<SnowApplication> AddApplicationAsync<TStartupModule>(
+    this WebApplicationBuilder builder,
+    Action<SnowApplicationCreationOptions>? optionsAction = null)
+    where TStartupModule : ISnowModule
+{
+    return await builder.Services.AddApplicationAsync<TStartupModule>(options =>
+    {
+        options.Services.ReplaceConfiguration(builder.Configuration);   // 配置顶进容器
+        optionsAction?.Invoke(options);
+        if (options.Environment.IsNullOrWhiteSpace())
+        {
+            options.Environment = builder.Environment.EnvironmentName;  // 环境名抄进选项
+        }
+    });
+}
+```
+
+| 成员 | 落点 | 作用 | 对应 ABP |
+| --- | --- | --- | --- |
+| `AddApplicationAsync<TStartupModule>(builder, optionsAction)` | `Snow.AspNetCore`, 命名空间 `Microsoft.Extensions.DependencyInjection` | Web 宿主装配入口 | `WebApplicationBuilderExtensions.AddApplicationAsync<TStartupModule>` |
+| `AddApplicationAsync(builder, startupModuleType, optionsAction)` | 同上 | 按类型装配 | 同上的类型重载 |
+| `SnowApplicationCreationOptions`(`Services` / `Environment`) | `Snow.Core`, 命名空间 `Snow.Modularity` | 应用创建选项 | `AbpApplicationCreationOptions` |
+| `ReplaceConfiguration(services, configuration)` | `Snow.Core`, 命名空间 `Snow.DependencyInjection` | 用 `Replace` 顶掉已有的 `IConfiguration` 登记 | `ServiceCollectionConfigurationExtensions.ReplaceConfiguration` |
+
+ABP 那份创建选项还有 `PlugInSources` / `Configuration` / `SkipConfigureServices` / `ApplicationName` 四项, 分别服务于插件源、自建配置、跳过服务注册、应用信息访问器 —— 这几个子系统 Snow 还没有, 所以只留真正被消费的 `Environment`: 少一个成员比多一个没人读的成员好, 等子系统落地再往里加。
+
+宿主想自己说了算, 三条路任选: `optionsAction` 里填 `Environment`(优先于 `builder.Environment`)、在 `AddApplicationAsync` 之前 `services.AddSingleton<ISnowHostEnvironment>(...)`(`TryAddSingleton` 不覆盖)、或者根本不用这个入口, 直接 `builder.Services.AddApplicationAsync<T>()` 并自己 `AddSingleton<IConfiguration>`。
 
 接线: 启动模块声明 `[DependsOn(typeof(SnowAspNetCoreModule))]`, 并在它的 `OnApplicationInitialization` 里手写管道(见「中间件管道」); `Program.cs` 里仍然只有 `builder.Build()` 与 `app.Run()`。
-`SnowAspNetCoreModule` 在服务注册阶段登记了一个 `IStartupFilter`, 宿主 `builder.Build()` 之后框架先执行它: 填好四个 Web 对象访问器, 驱动全部模块的应用初始化(宿主就在第一段里写管道), 之后跑收尾段, 最后把模块的关停阶段挂到 `ApplicationStopping` 上。端点映射由宿主最后一行 `app.UseSnowEndpoints()` 触发。
+宿主在 `builder.Build()` 之后调一次 `await app.InitializeApplicationAsync()`: 填好四个 Web 对象访问器, 驱动全部模块的应用初始化(宿主就在第一段里写管道), 跑收尾段, 并把模块的关停阶段挂到 `ApplicationStopping` 上。端点映射由宿主最后一行 `app.UseSnowEndpoints()` 触发。
 
-启动过滤器仍替你保证: 对象访问器一定填好、模块初始化一定按拓扑序跑完、关停在 `ApplicationStopping` 上只跑一次 —— 这些不用宿主记。管道本身则写在你的启动模块里, 与 ABP 一致。
+`InitializeApplicationAsync()` 替你保证: 对象访问器一定填好、模块初始化一定按拓扑序跑完、关停在 `ApplicationStopping` 上只跑一次、重复调用幂等 —— 这些不用宿主记。管道本身则写在你的启动模块里, 与 ABP 模板的 `await app.InitializeApplicationAsync()` 逐行对应。
+
+模块在 `OnApplicationInitialization` 里要拿宿主对象, 用 `ApplicationInitializationContext` 上的一组扩展(与 ABP 的 `ApplicationInitializationContextExtensions` 一一对应):
+
+| 扩展方法 | 取不到时 | 对应 ABP | 什么时候用 |
+| --- | --- | --- | --- |
+| `GetApplicationBuilder()` / `GetApplicationBuilderOrNull()` | 抛 `SnowInitializationException` / 返回 null | 同名 | 在启动模块里手写管道 |
+| `GetHost()` / `GetHostOrNull()` | 抛 `SnowInitializationException` / 返回 null | 同名 | 读宿主生命周期、注册关停回调 |
+| `GetEndpointRouteBuilder()` / `GetEndpointRouteBuilderOrNull()` | 抛 `SnowInitializationException` / 返回 null | 同名 | 直接映射端点, 不走 `UseSnowEndpoints()` |
+| `GetWebApplication()` / `GetWebApplicationOrNull()` | 抛 `SnowInitializationException` / 返回 null | 同名 | 需要 `WebApplication` 本身(通用主机会返回 null) |
+| `GetEnvironment()` / `GetEnvironmentOrNull()` | 抛 `InvalidOperationException` / 返回 null | 同名 | 按环境分支(内容根、环境名) |
+| `GetConfiguration()` | 抛 `InvalidOperationException` | 同名 | 初始化阶段读配置 |
+| `GetLoggerFactory()` | 抛 `InvalidOperationException` | 同名 | 初始化阶段还没有 `HttpContext`, 只能自己造 logger |
+| `GetHttpContext()` | 容器里没有 `IHttpContextAccessor` 时抛 `InvalidOperationException`, 不在请求线程上时返回 null | 同名(在 ABP 的 `ServiceProviderAccessorExtensions`) | 初始化阶段想读当前请求 |
+
+带 `OrNull` 的版本是给非 Web 宿主用的: 控制台 / Worker 里 `GetApplicationBuilderOrNull()` 返回 null, 模块据此跳过 Web 相关的接线, 而不是抛异常。
+
+`GetHttpContext()` 不是 `ApplicationInitializationContext` 自己的方法: 它挂在 `IServiceProviderAccessor` 接口上(命名空间 `Snow.DependencyInjection`, 只有 `IServiceProvider ServiceProvider { get; }` 一个成员), 而 `ApplicationInitializationContext` 实现了这个接口 —— 与 ABP 把 `ApplicationInitializationContext` 声明成 `IServiceProviderAccessor` 同形。好处是以后任何持有服务提供者的上下文(应用关停上下文、后台任务上下文)只要实现同一个接口, 取当前请求这一份扩展就能复用。
 
 ```csharp
 // 单例里取当前应用对象(只读用途: 看环境、读配置、拿根容器)
@@ -118,16 +222,38 @@ public sealed class MyService(IObjectAccessor<IApplicationBuilder> accessor)
 
 ```csharp
 // 包内静态资源: 把程序集里的 wwwroot 暴露成 WebRoot 的一部分
-builder.Services.AddSnowStaticAssets(
-    new ManifestEmbeddedFileProvider(typeof(MyModule).Assembly, "wwwroot"));
+builder.Services.Configure<SnowAspNetCoreOptions>(options =>
+    options.StaticAssetFileProviders.Add(
+        new ManifestEmbeddedFileProvider(typeof(MyModule).Assembly, "wwwroot")));
 ```
 
 配置节 `Snow` 有一项 `MergeStaticAssets`(默认 `true`)。
 把 `MergeStaticAssets` 置 `false` 就不合并, 此时已登记的提供器一个都不用 —— 启动日志会记一条警告列出被跳过的提供器类型, 不静默丢弃。
 
+### 环境与声明映射: `GetHostingEnvironment()` / `TransformSnowClaims()`
+
+这两个扩展在 `SnowAspNetCoreServiceCollectionExtensions`(命名空间 `Microsoft.Extensions.DependencyInjection`, 与 ABP 的 `AbpAspNetCoreServiceCollectionExtensions` 同位置), 只在需要时调:
+
+```csharp
+// 服务注册阶段取宿主环境: 没登记 IWebHostEnvironment 时返回环境名为 Development 的空实现
+IWebHostEnvironment environment = builder.Services.GetHostingEnvironment();
+if (environment.EnvironmentName == SnowEnvironments.Development)
+{
+    builder.Services.AddSingleton<ICache, InMemoryCache>();
+}
+
+// 外部令牌的声明名映射: sub → UserClaimTypes.UserId、role → Role、email → Email、
+// name → UserName、family_name → SurName、given_name → Name
+builder.Services.TransformSnowClaims();
+```
+
+- `TransformSnowClaims()` 只是登记一个 `IClaimsTransformation`, 认证中间件在认证成功后调用它: 命中的声明被复制一份、换成映射后的类型名追加到同一身份上, 原声明保留, 两边都能读到。映射表在 `SnowClaimsMapOptions.Maps` 里, 想改就在登记前 `Configure<SnowClaimsMapOptions>(...)`。
+- 不调就不生效, 框架不默认登记 —— 与 ABP 一致(`TransformAbpClaims()` 在 ABP 的模块与模板里也都没有调用点)。
+- `GetHostingEnvironment()` 与 `ISnowHostEnvironment` 的分工: 后者是给**模块在服务注册阶段**用的可写环境名(内核层, 不依赖 ASP.NET Core); 前者是给宿主在 `Program.cs` 里用的只读 `IWebHostEnvironment`(要路径、要文件提供器时用它)。
+
 ### 端点: 宿主管道最后一行 `UseSnowEndpoints()`
 
-映射端点要的是 `IEndpointRouteBuilder`, 模块在服务注册阶段拿不到它 —— 模块只把映射动作交进 `SnowEndpointRouterOptions.EndpointConfigureActions`(与 ABP 的 `AbpEndpointRouterOptions` 同形), 由宿主在管道最后一行 `app.UseSnowEndpoints()` 统一执行:
+映射端点要的是 `IEndpointRouteBuilder`, 模块在服务注册阶段拿不到它 —— 模块只把映射动作交进 `SnowEndpointRouterOptions.EndpointConfigureActions`(与 ABP 的 `AbpEndpointRouterOptions` 同形, 连命名空间都一样: `Microsoft.AspNetCore.Routing`), 由宿主在管道最后一行 `app.UseSnowEndpoints()` 统一执行:
 
 ```csharp
 WebApplication app = builder.Build();
@@ -149,6 +275,14 @@ public override void ConfigureServices(ServiceConfigurationContext context)
 ```
 
 只在单独使用某个包、且不经过统一挂载时, 才需要手写 `app.MapSnowHubs()` / `app.UseSnowSwagger()`。
+
+`UseSnowEndpoints()` 与 ABP 的 `UseConfiguredEndpoints()` 签名一样, 带一个可选参数 —— 想在同一个 `UseEndpoints` 里顺手加几个端点就传进来, 不必再单独写一次 `app.UseEndpoints(...)`:
+
+```csharp
+app.UseSnowEndpoints(endpoints => endpoints.MapGet("/healthz", () => "ok"));
+```
+
+一个模块动作都没登记、又没传额外动作时, 它什么都不做(与 ABP 在 `EndpointConfigureActions` 为空且 `additionalConfigurationAction` 为 null 时直接 `return app` 同义)。
 
 ### 链路标识
 
@@ -194,6 +328,10 @@ public sealed class MyHttpApiHostModule : SnowModule
 - `UseSnowEndpoints()` 执行各模块在 `SnowEndpointRouterOptions.EndpointConfigureActions` 里登记的映射动作(与 ABP 的 `UseConfiguredEndpoints()` 同形); 之前挂的每一层中间件都自动落在端点之前。
 - `DependsOn` 只决定模块加载与初始化顺序(被依赖的先初始化), **不再决定中间件位置** —— 位置由上面这段代码的行序直接决定, 一眼可见, 不需要 `Order`、不登记、不实现接口。
 - 每个 `UseXxx()` 都是包内 `Microsoft/AspNetCore/Builder/` 目录下的扩展方法, 命名空间 `Microsoft.AspNetCore.Builder`(与 ABP 一致: 补全列表里所有 `UseXxx` 在一起)。包的 `UseXxx()` 只负责把原生中间件包一层, 不做幂等判断。
+- 类的归属也照 ABP 分: `InitializeApplicationAsync()` / `InitializeApplication()` / `UseSnowCorrelationId()` 三个都在 `SnowApplicationBuilderExtensions`(对应 ABP 把 `InitializeApplicationAsync` 与 `UseCorrelationId` 一起放在 `AbpApplicationBuilderExtensions`); `UseSnowEndpoints()` 在 `SnowAspNetCoreApplicationBuilderExtensions`(对应 ABP 的 `AbpAspNetCoreApplicationBuilderExtensions.UseConfiguredEndpoints`); 其余能力包的 `UseXxx()` 各自落在自己包的 `Microsoft/AspNetCore/Builder/` 下 —— 与 ABP 的 `AbpAspNetCoreSerilogApplicationBuilderExtensions` / `AbpAspNetCoreMultiTenancyApplicationBuilderExtensions` / `AbpHangfireApplicationBuilderExtensions` 一一对应。
+- 其余类型也按 ABP 的落位规则放进被扩展类型自己的命名空间, 所以 `using` 天然就有、不用额外引 `Snow.*`: `SnowEndpointRouterOptions` / `SnowEndpointRouteBuilderContext` → `Microsoft.AspNetCore.Routing`(`Snow.AspNetCore` 的 `Microsoft/AspNetCore/Routing/`); `SnowAspNetCoreServiceCollectionExtensions.GetHostingEnvironment()` / `TransformSnowClaims()` → `Microsoft.Extensions.DependencyInjection`(`Snow.AspNetCore` 的 `Microsoft/Extensions/DependencyInjection/`)。只有 `SnowAspNetCoreOptions` 留在 `Snow.AspNetCore`, 因为 ABP 那边也没有对应的框架级选项。
+- `ActionDescriptor` 扩展方法叫 `ActionDescriptorExtensions`(类名与 ABP 完全一样, 不带 `Snow` 前缀), 在 `Snow.AspNetCore.Mvc` 的 `Microsoft/AspNetCore/Mvc/Abstractions/`(命名空间 `Microsoft.AspNetCore.Mvc.Abstractions`), 与 ABP 同包同位置(`Volo.Abp.AspNetCore.Mvc`)—— 接线包 `Snow.AspNetCore` 不能反向引用 MVC 包, 这层桥只能落在 MVC 包。七个方法与 ABP 一一对应: `AsControllerActionDescriptor()` / `GetMethodInfo()` / `GetReturnType()` / `HasObjectResult()` / `IsControllerAction()` / `IsPageAction()` / `AsPageAction()`; 它们只做取值, 与 `[DisableSnowFeatures]` 无关。落位规矩: 放进 `Microsoft.*` 命名空间的类型, 类名照抄 ABP(ABP 带 `Abp` 前缀的照旧带, 如 `SnowEndpointRouterOptions` 对 `AbpEndpointRouterOptions`; ABP 不带的也不带), 这样从 ABP 搬过来的代码一行都不用改。
+- 开关判定本身在 `Snow.Core` 的 `SnowFeatureSwitches`(收 `Type?`), 不认识 MVC 类型; 用不到 MVC 的项目直接问它即可, 不必引 `Snow.AspNetCore.Mvc`。
 
 四条顺序约束(实测出来的):
 
@@ -232,9 +370,9 @@ public override void OnApplicationInitialization(ApplicationInitializationContex
 
 - **CORS 就写这里**: 它要"路由之后、认证之前" —— 用全局策略 `app.UseCors("MyPolicy")`, 或在端点级用 `[EnableCors]`(此时写无参 `app.UseCors()` 让中间件按端点策略放行)。
 - 中间件实现本身是原生写法: `app.UseMiddleware<T>()` 或实现 `IMiddleware`; 写在管道里的哪一行只决定位置, 不改变实现方式。
-- 约定式中间件构造器注入的 Scoped 服务实际只建一次(启动期); 需要每请求作用域实例就继承 `SnowMiddlewareBase`(实现 `IMiddleware`, 容器按请求构造), 或用 `InvokeAsync` 参数注入。
+- 约定式中间件构造器注入的 Scoped 服务实际只建一次(启动期); 需要每请求作用域实例就继承 `SnowMiddlewareBase`(命名空间 `Snow.AspNetCore.Middleware`, 实现 `IMiddleware`, 容器按请求构造), 或用 `InvokeAsync` 参数注入。
 - 中间件实现本身是原生写法, 包只负责把它包成 `UseXxx()`。宿主若在两个地方手写同一个 `UseXxx()`, 就会真的挂两遍 —— ASP.NET Core 自己也这样: 微软的 `UseAuthentication()` 连调两次不报错, 只是往 `app.Properties` 记一个 `__AuthenticationMiddlewareSet`。
-- **测试兜底**: `Snow.AspNetCore.Tests` 里九条用例 —— 模块登记的端点动作被执行、服务注册三趟按序、三段初始化按序且收尾段幂等、收尾段先于第一段要炸、关停只跑一次, 外加三条静态资源合并。改管道逻辑前先跑 `dotnet test test/Snow.AspNetCore.Tests`。
+- **测试兜底**: `Snow.AspNetCore.Tests` 里九条用例 —— 模块登记的端点动作被执行、服务注册三趟按序、三段初始化按序且收尾段幂等、收尾段先于第一段要炸、关停只跑一次, 外加四条静态资源合并。改管道逻辑前先跑 `dotnet test test/Snow.AspNetCore.Tests`。
 - 与 ABP 对照: 机制完全相同 —— ABP 的 `AbpAspNetCoreModule` 不挂任何中间件, 整条管道写在宿主启动模块里(模板十几行); 这里也一样, 宿主写、框架不代劳。区别只是 Snow 把 `UseSnowCorrelationId()` 与 `UseSnowEndpoints()` 这类常用动作包成了扩展方法, 宿主少写两行。
 - 与 Spring 对照: Spring 是 `Filter` 集合 + `@Order` 数字做全局排序, 库能自我装配, 代价是每个 filter 都要维护一个**全局**数字、还要知道别人的类名才能 `addFilterBefore`; 这里就是宿主自己的一串 `app.UseXxx()`, 顺序直接是行序, 没有数字。
 
@@ -336,7 +474,19 @@ Hangfire 侧入队直接把 lambda 交给 `Job.FromExpression`, 仪表盘里显�
 
 ## 认证: 一个模块, 一项必填
 
-`Snow.Authentication` 只有一个模块 `SnowAuthenticationModule`, 方案名 `SnowAuthentication`, 处理器是框架自带的
+`Snow.Authentication` 一个包, 包内按职责分三个目录 —— 只分文件位置, 不分包, 命名空间统一 `Snow.Authentication`,
+所以引一个 `Snow.Authentication` 就够, 不存在多引/漏引的问题:
+
+| 目录 | 装什么 |
+| --- | --- |
+| `Abstractions/` | 契约与模型: `ITokenService` / `ITokenSessionStore` / `ITokenKeyProvider`、`TokenKeySet`(密钥与签发凭据)、`TokenSession` / `TokenClientInfo` / `TokenInfo`、`TokenResolver`(从 `Authorization: Bearer` 取令牌)、`SnowAuthenticationOptions`、`TokenException` 三兄弟 |
+| `AspNetCore/` | Web 适配: 把登录态异常翻译成 401/403 的 `TokenExceptionHandling` / `TokenExceptionFilter` / `TokenExceptionMiddleware` 与宿主调的 `UseSnowTokenExceptionHandling()` |
+| 根目录 | 实现与模块: `TokenService`、`OptionsTokenKeyProvider`、`DistributedCacheTokenSessionStore`、`TokenUtil` 门面、注解鉴权(`[TokenCheckLogin]` / `[TokenCheckRole]`)、模块 `SnowAuthenticationModule` |
+
+MVC 宿主什么都不用做: `SnowAuthenticationModule` 自己用 `options.Filters.AddService(typeof(TokenExceptionFilter))` 登记过滤器;
+最小 API 宿主在管道里挂 `UseSnowTokenExceptionHandling()`。
+
+`SnowAuthenticationModule` 的方案名是 `SnowAuthentication`, 处理器是框架自带的
 `JwtBearerHandler` —— 验签、拼 `WWW-Authenticate` 都由框架完成, 本包只补它没有的两件事:
 用 HS256 签发令牌, 以及验签通过后再查一次服务端会话(白名单)。
 
@@ -452,7 +602,7 @@ await tokenService.EnableAsync(42);
 | `TokenNotRoleException` | 403 | 缺少角色 |
 | `TokenDisabledException` | 403 | 账号已被封禁 |
 
-响应体是 `ProblemDetails`(`application/problem+json`)。MVC 宿主由模块自动注册的 `TokenExceptionFilter` 接管;
+响应体是 `ProblemDetails`(`application/problem+json`)。MVC 宿主由 `SnowAuthenticationModule` 自动注册的 `TokenExceptionFilter` 接管(它用 `options.Filters.AddService(typeof(TokenExceptionFilter))` 登记, 生成的是 `ServiceFilterAttribute`, `[DisableSnowFeatures(DisableMvcFilters = true)]` 才摘得掉);
 最小 API 由宿主在管道里 `app.UseSnowTokenExceptionHandling()` 接管(须排在 `UseAuthentication()` 之前) —— 这样 `JwtBearer` 在认证阶段抛的令牌异常也能被它兜住。链路标识放管道最外层, 异常被捕获时链路作用域还活着, 错误响应能带回 `X-Correlation-Id`。
 只拦上面三类, 其它异常原样抛出, 不影响宿主自己的错误处理。
 
@@ -875,11 +1025,35 @@ public class BookAppService
 
 模型校验失败自动回 400 与字段错误列表(`ValidationError`), 等价于 `[ApiController]` 的默认行为。
 
+### 控制器级开关: `[DisableSnowFeatures]`
+
+控制器上加一行 `[DisableSnowFeatures]`, 框架中间件、MVC 过滤器、AOP 拦截器三层一起跳过它 —— 三个开关默认全开(对齐 ABP 的 `DisableAbpFeaturesAttribute`), 只想关一层就显式把另一个写成 `false`:
+
+```csharp
+[DisableSnowFeatures]                            // 三层全跳过
+public class LegacyController : SnowControllerBase { }
+
+[DisableSnowFeatures(DisableMvcFilters = false)]  // 只跳中间件与拦截器, 信封与校验照常
+public class HalfController : SnowControllerBase { }
+```
+
+| 开关 | 关掉什么 | 生效点 |
+| --- | --- | --- |
+| `DisableMiddleware` | 继承 `SnowMiddlewareBase`(`Snow.AspNetCore.Middleware`)的框架中间件(链路标识、日志上下文等) | `SnowMiddlewareBase.ShouldSkipAsync` |
+| `DisableMvcFilters` | 自动校验、模型绑定校验、结果信封、异常翻译、登录态异常 | 动作描述符定型时由 `SnowMvcActionDescriptorProvider` 把五个过滤器整个摘掉, 请求期零判断 |
+| `DisableInterceptors` | AOP 拦截器(审计、缓存等注解) | 约定注册阶段不建代理 |
+
+- 特性在 `Snow.Core`(命名空间 `Snow`), 与 ABP 放在 `Volo.Abp.Core` 同位; 标注控制器的项目不必为了一个特性引用 `Snow.Security`。
+- 判定只认控制器端点: 最小 API、静态文件、健康检查没有 `ControllerActionDescriptor`, 不受开关影响。判定函数收的是 `Type?` 而不是 `ActionDescriptor`, 所以 `Snow.Core` 不必认识 MVC 类型。
+- 摘除机制照抄 ABP 的 `AbpMvcActionDescriptorProvider`: 框架过滤器一律用 `options.Filters.AddService(typeof(X))` 登记, 生成的是 `ServiceFilterAttribute`; 描述符定型后 `SnowMvcActionDescriptorProvider`(Order = -1000 + 10, 与 ABP 的 `AbpMvcActionDescriptorProvider` 同值 —— 排在 MVC 自带描述符提供器的 -1000 之后, 正序 Executing 时后跑、倒序 Executed 时先动手。命名空间 `Snow.AspNetCore.Mvc`, 与包内其余文件一致; ABP 那边写的是 `Volo.Abp.AspNetCore.Mvc.ApplicationModels`, 那个后缀抄自 ASP.NET Core 的 `Microsoft.AspNetCore.Mvc.ApplicationModels.ControllerActionDescriptorProvider`, 表达的是职责而非目录, 所以 Snow 不跟)只摘实现了 `ISnowFilter`(`Snow.AspNetCore.Filters`)的那些。用 `Filters.Add<X>()` 登记会生成 `TypeFilterAttribute`, 摘不掉, 开关对它无效。
+- `DisableInterceptors` 看的是**实现类型**: 标在应用服务类上, 该服务不做代理。自动 API 的 Controller 由应用服务生成, 所以标在服务类上就等于标在 Controller 上; 标在生成出来的 Controller 类上不生效。
+- 建代理这一步在 `Snow.Core` 的约定注册里, 但真正建代理的代码在 `Snow.Aop.Castle`: 约定扫描时读到实现类型上的 `[Interceptor]`(类级 + 方法级, 并尊重 `DisableInterceptors`), 该类型的接口服务类型就换成工厂 lambda, 工厂从容器取 `IAopProxyFactory`; `CastleAopProxyFactory` 自己标着 `[SingletonService]`, 由约定注册扫进容器, 所以宿主只要让启动模块依赖 `SnowAopModule` 就有工厂, 取不到则抛「请让宿主模块依赖 `SnowAopModule`(`Snow.Aop.Castle` 包)以启用 AOP」。只打了拦截器注解、没标服务注解的类型按瞬态登记(做到「一个注解即可用」), 开放泛型直接报错 —— 代理需要具体类型; 实现类自身那条服务类型不换代理(那样会拿到未代理的实例)。内核只认接口 `IAopProxyFactory`(`Snow.Aop`), 换引擎就换它的实现。
+
 ### 接线与配置
 
 ```csharp
 WebApplication app = builder.Build();
-app.Run();   // 管道 + 全部端点(Controller / Hub / 健康检查 / 文档)一次挂完
+await app.InitializeApplicationAsync();   // 三段模块初始化 + 填对象访问器
 app.Run();
 ```
 
@@ -1348,11 +1522,10 @@ git tag v1.2.0 && git push origin v1.2.0
 | --- | --- |
 | `Snow` | 名称占位包: 不含代码, 只引用 `Snow.Core`(与 ABP 的 `Volo.Abp` 同形) |
 | `Snow.Core` | 内核: 模块系统、约定式依赖注入、表达式求值、System 扩展方法 |
-| `Snow.Aop` | AOP 契约: 方法调用上下文、拦截器特性、代理工厂接口(实现见 `Snow.Aop.Castle`) |
 | `Snow.Data` | 数据过滤: 按过滤器类型开关全局过滤(软删除等), 状态按异步调用链隔离 |
 | `Snow.Timing` | 时间: `IClock` 抽象与直接读系统时钟的默认实现 |
 | `Snow.Tracing` | 链路标识: `ICorrelationIdProvider` 与进程内默认实现 |
-| `Snow.AspNetCore` | Web 宿主能力包: `SnowAspNetCoreModule`(HTTP 上下文访问器、Web 对象访问器、包内静态资源合并) + 自动初始化(模块注册 `IStartupFilter`, 驱动模块生命周期; 管道由宿主在启动模块里手写) + 端点路由选项 `SnowEndpointRouterOptions` 与宿主最后一行 `UseSnowEndpoints()`(对应 ABP 的 `AbpEndpointRouterOptions` / `UseConfiguredEndpoints`) + `UseSnowCorrelationId()` 与链路标识中间件 `SnowCorrelationIdMiddleware`(对应 ABP 的 `AbpCorrelationIdMiddleware`) + 应用初始化上下文扩展 `GetApplicationBuilder()` 一族; 不含任何具体后端(EF / Redis / Hangfire / Serilog / MailKit / FluentFTP / ClosedXML / Elsa 由宿主按需引用) |
+| `Snow.AspNetCore` | Web 宿主能力包: `SnowAspNetCoreModule`(HTTP 上下文访问器、Web 对象访问器、包内静态资源合并) + `GetHostingEnvironment()` / `TransformSnowClaims()`(对应 ABP 的 `AbpAspNetCoreServiceCollectionExtensions`) + 宿主显式初始化 `app.InitializeApplicationAsync()`(对应 ABP 的 `AbpApplicationBuilderExtensions.InitializeApplicationAsync`, 驱动模块生命周期; 管道由宿主在启动模块里手写) + 端点路由选项 `SnowEndpointRouterOptions` 与宿主最后一行 `UseSnowEndpoints()`(对应 ABP 的 `AbpEndpointRouterOptions` / `UseConfiguredEndpoints`) + `UseSnowCorrelationId()` 与链路标识中间件 `SnowCorrelationIdMiddleware`(对应 ABP 的 `AbpCorrelationIdMiddleware`) + 应用初始化上下文扩展 `GetApplicationBuilder()` 一族; 不含任何具体后端(EF / Redis / Hangfire / Serilog / MailKit / FluentFTP / ClosedXML / Elsa 由宿主按需引用) |
 | `Snow.AspNetCore.Serilog` | Serilog 集成: 请求级租户/用户/链路标识自动进日志上下文; 已依赖 `Snow.AspNetCore`(与 ABP 的 `Volo.Abp.AspNetCore.Serilog` 依赖 `Volo.Abp.AspNetCore` 同形); 中间件由宿主在管道里调 `UseSnowSerilogEnrichers()` |
 | `Snow.AspNetCore.Mvc` | MVC 与自动 API: 应用服务按约定自动变成 Controller(路由/动词/参数绑定), 统一响应信封 `SnowApiResponse`, 异常与模型校验统一成 400/403/404/500 错误响应 |
 | `Snow.OpenApi` | OpenAPI 文档与调试界面: 官方 Microsoft.AspNetCore.OpenApi 出文档 + Scalar 出界面, 自动收录全部自动 API, 可选 Bearer 认证方案, 自动加载程序集 XML 注释 |
@@ -1412,7 +1585,7 @@ git tag v1.2.0 && git push origin v1.2.0
 | `Snow.Aop.Castle` | AOP 实现: 基于 Castle DynamicProxy 的接口代理与真异步方法拦截 |
 | `Snow.Security` | 当前用户抽象与基于 `ClaimsPrincipal` 的默认实现 |
 | `Snow.Auditing` | 审计: `[Auditing]` 注解采集调用方 / 耗时 / 参数 / 异常, `IAuditPropertySetter` 填实体审计字段; 默认 `NullAuditingStore` 只写调试日志 |
-| `Snow.Authentication` | 认证: 一个模块 `SnowAuthenticationModule`, 处理器是框架自带的 `JwtBearerHandler`。只有 `SecretKey` 必填(`Issuer` / `Audience` / `Expiration` 都有默认值), HS256 签发令牌、会话白名单、滑动续期(一直在用就一直在线)、踢人封禁在线数、注解鉴权、`TokenUtil` 门面 |
+| `Snow.Authentication` | 认证: 一个模块 `SnowAuthenticationModule`(包内分 `Abstractions/` 与 `AspNetCore/` 两个目录, 同包同命名空间), 处理器是框架自带的 `JwtBearerHandler`。只有 `SecretKey` 必填(`Issuer` / `Audience` / `Expiration` 都有默认值), HS256 签发令牌、会话白名单、滑动续期(一直在用就一直在线)、踢人封禁在线数、注解鉴权、`TokenUtil` 门面 |
 | `Snow.Authorization` | 权限: 定义树(自动扫描)、声明式校验器与动态策略(不存授予表), 策略名即权限名, `[Permission("Snow.Orders.Create")]` 直用 |
 | `Snow.Emailing` | 邮件发送契约与配置(默认是静默实现, 不真发) |
 | `Snow.MultiTenancy` | 多租户内核: 租户上下文与切换、租户配置与存储(默认从 `MultiTenancy:Tenants` 读)、解析出资者、租户级设置提供器 `T`, 默认关闭 |

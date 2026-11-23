@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Snow.Modularity;
 
 /// <summary>
-/// 非 Web 宿主的初始化与关停入口:Web 宿主不用调,<c>SnowAspNetCoreModule</c> 注册的启动过滤器会自动驱动同样的阶段
+/// 初始化与关停入口:非 Web 宿主(控制台 / Worker)直接用它;Web 宿主调 <c>app.InitializeApplicationAsync()</c>, 那个扩展方法最终也走这里
 /// </summary>
 public static class ModularityServiceProviderExtensions
 {

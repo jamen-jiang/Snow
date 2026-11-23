@@ -75,6 +75,26 @@ public class SnowAspNetCoreModuleStaticAssetsTests
         Assert.Same(hostProvider, environment.WebRootFileProvider);
     }
 
+    /// <summary>
+    /// 拿不到 Web 宿主环境(非 Web 宿主)时不能静默丢, 但告警口径要与「宿主主动关掉合并」分开
+    /// </summary>
+    [Fact]
+    public void MergeStaticAssets_WithoutWebHostEnvironment_WarnsSeparately()
+    {
+        List<string> warnings = [];
+        ServiceCollection services = new();
+        services.AddSingleton<ILogger<SnowAspNetCoreModule>>(new WarningCollector(warnings));
+        services.Configure<SnowAspNetCoreOptions>(options => options.StaticAssetFileProviders.Add(new NullFileProvider()));
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        new SnowAspNetCoreModule().OnApplicationInitialization(new ApplicationInitializationContext(provider));
+
+        string warning = Assert.Single(warnings);
+        Assert.Contains("不是 Web 应用", warning);
+        Assert.Contains("1 个文件提供器", warning);
+        Assert.DoesNotContain("MergeStaticAssets=false", warning);
+    }
+
     private static ServiceProvider BuildServices(IWebHostEnvironment environment, Action<SnowAspNetCoreOptions> configure, List<string> warnings)
     {
         ServiceCollection services = new();

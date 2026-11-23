@@ -16,7 +16,8 @@ public sealed class SnowAspNetCoreOptions
 
     /// <summary>
     /// 额外静态资源提供器(包内 wwwroot、嵌入式资源等), 启动时合并进 WebRootFileProvider。
-    /// 只能用代码登记(<c>AddSnowStaticAssets</c>), 不参与配置绑定。
+    /// 只能用代码登记(<c>services.Configure&lt;SnowAspNetCoreOptions&gt;(o =&gt; o.StaticAssetFileProviders.Add(provider))</c>),
+    /// 不参与配置绑定。
     /// </summary>
     public IList<IFileProvider> StaticAssetFileProviders { get; } = new List<IFileProvider>();
 }
