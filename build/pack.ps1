@@ -43,14 +43,14 @@ else {
     New-Item -ItemType Directory -Path $Output -Force | Out-Null
 }
 
-# Only the framework projects at the repository root are published;
-# test and sample projects live outside this pattern.
-$projects = Get-ChildItem -Path $root -Directory -Filter "Snow*" |
+# 只打 src/ 下的框架项目; 测试项目在 test/ 下, 不进包。
+$srcRoot = Join-Path $root "src"
+$projects = Get-ChildItem -Path $srcRoot -Directory -Filter "Snow*" |
     Where-Object { Test-Path (Join-Path $_.FullName ($_.Name + ".csproj")) } |
     Sort-Object Name
 
 if ($projects.Count -eq 0) {
-    throw "No packable project found under $root"
+    throw "No packable project found under $srcRoot"
 }
 
 Write-Host "Packing $($projects.Count) project(s) into $Output" -ForegroundColor Cyan

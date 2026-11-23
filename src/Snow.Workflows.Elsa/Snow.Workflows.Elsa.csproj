@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.Workflows.Elsa</RootNamespace>
+    <Description>工作流的 Elsa 3 实现: 接入 Elsa 引擎(内存或 EF Core 持久化)、HTTP 与 API 端点(EnableHttp 时在收尾阶段自动挂载)、按定义或类型启动, 顶替契约包的静默实现</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 引擎核心 + HTTP 端点 + 管理 API -->
+    <PackageReference Include="Elsa" />
+    <PackageReference Include="Elsa.Http" />
+    <PackageReference Include="Elsa.Workflows.Api" />
+    <!-- 持久化: 包内只带 SQLite, 其他数据库由使用方自行加提供程序包并走回调 -->
+    <PackageReference Include="Elsa.Persistence.EFCore" />
+    <PackageReference Include="Elsa.Persistence.EFCore.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Workflows\Snow.Workflows.csproj" />
+  </ItemGroup>
+
+</Project>

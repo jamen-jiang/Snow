@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Snow.AspNetCore</AssemblyName>
+    <PackageId>Snow.AspNetCore</PackageId>
+    <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <!-- 能力包只含模块与扩展方法, 不含静态资源; 关掉 StaticWebAssets 以免 SDK 报 scoped css bundle 缺端点 -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <Description>Web 宿主模块包: 接线层(SnowAspNetCoreModule 提供 HTTP 上下文访问器 / Web 对象访问器 / 包内静态资源合并, 并自动展开整条 HTTP 管道 —— 宿主一行管道与初始化代码都不用写) + 接线所需的 6 个基础模块(审计 / 安全 / 授权 / 工作单元 / 时间 / 链路标识)。其余能力一律由宿主自行引用: 应用层、认证、缓存、分布式锁、后台作业、事件总线、消息、邮件、FTP、HTTP 客户端、Excel、工作流、EntityFrameworkCore 及其第三方实现</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 测试要直接调 internal 的骨架与端点映射方法, 不为此单开一个源文件 -->
+    <InternalsVisibleTo Include="Snow.AspNetCore.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow\Snow.csproj" />
+    <ProjectReference Include="..\Snow.Auditing\Snow.Auditing.csproj" />
+    <ProjectReference Include="..\Snow.Authorization\Snow.Authorization.csproj" />
+    <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />
+    <ProjectReference Include="..\Snow.Timing\Snow.Timing.csproj" />
+    <ProjectReference Include="..\Snow.Tracing\Snow.Tracing.csproj" />
+    <ProjectReference Include="..\Snow.Uow\Snow.Uow.csproj" />
+  </ItemGroup>
+
+</Project>

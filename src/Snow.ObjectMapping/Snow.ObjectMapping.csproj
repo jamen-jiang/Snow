@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Description>对象映射契约: IObjectMapper 与扩展方法、映射异常与静默兜底实现(实现见 Snow.ObjectMapping.Mapster)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+  </ItemGroup>
+
+</Project>

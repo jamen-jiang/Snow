@@ -1,7 +1,9 @@
 <Project>
-  <!-- 与 ABP 同形: 这里只放"按项目性质分流"的判定, 打包元数据统一放在 common.props -->
+  <!-- 与 ABP 同形: 这里只放"按项目性质分流"的判定, 打包元数据统一放在 common.props
+       工程按目录分流: 框架代码在 src/, 测试在 test/。判定走路径里的 /test/ 段,
+       所以测试工程换个前缀名字也照样能认出来 -->
   <PropertyGroup>
-    <IsTestProject Condition="$(MSBuildProjectFullPath.Contains('test')) and ($(MSBuildProjectName.EndsWith('.Tests')) or $(MSBuildProjectName.EndsWith('.TestBase')))">true</IsTestProject>
+    <IsTestProject Condition="$([System.String]::Copy($(MSBuildProjectDirectory)).Replace('\','/').Contains('/test/')) and ($(MSBuildProjectName.EndsWith('.Tests')) or $(MSBuildProjectName.EndsWith('.TestBase')))">true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>

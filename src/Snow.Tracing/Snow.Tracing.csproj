@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.Tracing</RootNamespace>
+    <Description>链路标识: ICorrelationIdProvider 与进程内默认实现, 用于把跨服务日志串起来</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.DistributedLocking</RootNamespace>
+    <Description>分布式锁: 契约 + 默认的进程内实现 + Redisson 式看门狗; Redis 后端见 Snow.DistributedLocking.Redis</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Snow.DistributedLocking.Redis" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Snow.Aop/Snow.Aop.csproj" />
+    <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />
+  </ItemGroup>
+</Project>

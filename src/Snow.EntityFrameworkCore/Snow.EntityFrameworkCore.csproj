@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.EntityFrameworkCore</RootNamespace>
+    <Description>EF Core 集成: DbContext 基类、连接串解析、按作用域共享的 DbContext 提供器与 ABP 式仓储实现</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Data\Snow.Data.csproj" />
+    <ProjectReference Include="..\Snow.Domain\Snow.Domain.csproj" />
+    <ProjectReference Include="..\Snow.EventBus\Snow.EventBus.csproj" />
+    <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />
+    <ProjectReference Include="..\Snow.Uow\Snow.Uow.csproj" />
+  </ItemGroup>
+
+</Project>

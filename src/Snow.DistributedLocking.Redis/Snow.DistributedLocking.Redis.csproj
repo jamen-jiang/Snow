@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.DistributedLocking</RootNamespace>
+    <Description>分布式锁的 Redis 后端: 用 SET NX PX + Lua 脚本自研(无第三方锁库), 支持租期、看门狗续期与安全释放</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Snow.DistributedLocking/Snow.DistributedLocking.csproj" />
+  </ItemGroup>
+</Project>

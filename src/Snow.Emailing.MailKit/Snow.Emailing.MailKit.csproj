@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.Emailing.MailKit</RootNamespace>
+    <Description>邮件发送 MailKit 实现: MimeKit 组装正文与附件, MailKit 的 SmtpClient 走 SSL/STARTTLS 投递, 顶替契约包里的静默实现</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MailKit 自带 MimeKit 依赖, 无需单独引用 -->
+    <PackageReference Include="MailKit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Emailing\Snow.Emailing.csproj" />
+  </ItemGroup>
+
+</Project>

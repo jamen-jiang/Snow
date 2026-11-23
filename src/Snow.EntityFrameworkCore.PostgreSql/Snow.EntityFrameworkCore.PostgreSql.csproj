@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Snow.EntityFrameworkCore</RootNamespace>
+    <Description>PostgreSQL 数据库提供程序: UsePostgreSql 配置扩展与模块(基于 Npgsql 官方提供程序)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.EntityFrameworkCore\Snow.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+</Project>
