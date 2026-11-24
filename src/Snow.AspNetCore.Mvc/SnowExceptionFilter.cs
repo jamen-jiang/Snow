@@ -15,7 +15,7 @@ namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
 /// 把异常翻译成统一错误响应与合适的 HTTP 状态码的过滤器
-/// <para>业务异常(<see cref="SnowBusinessException"/> 及其子类 <see cref="SnowUserFriendlyException"/>)与校验异常按消息返回;
+/// <para>业务异常(<see cref="BusinessException"/> 及其子类 <see cref="UserFriendlyException"/>)与校验异常按消息返回;
 /// 其余异常默认只回"服务器内部错误", 细节靠日志。日志级别取 <see cref="IHasLogLevel"/>。</para>
 /// <para>实现 <see cref="ISnowFilter"/>: 控制器标了 <see cref="DisableSnowFeaturesAttribute"/> 时由
 /// <c>SnowMvcActionDescriptorProvider</c> 在动作描述符定型时把它整个摘掉, 请求期不做判断。</para>
@@ -73,14 +73,22 @@ public sealed class SnowExceptionFilter : IExceptionFilter, ISnowFilter
     {
         switch (exception)
         {
+            // 自带状态码的异常(如领域层的 EntityNotFoundException 声明 404)优先于下面的种类兜底
+            case IHasHttpStatusCode hasStatusCode:
+                return (hasStatusCode.HttpStatusCode, (exception as IHasErrorCode)?.Code ?? "NotFound", exception.Message);
+
             case SnowValidationException validation:
                 return (StatusCodes.Status400BadRequest, "ValidationFailed", validation.Message);
 
-            case SnowUserFriendlyException friendly:
+            case UserFriendlyException friendly:
                 return (StatusCodes.Status400BadRequest, friendly.Code ?? "BusinessError", friendly.Message);
 
-            case SnowBusinessException business:
+            case BusinessException business:
                 return (StatusCodes.Status400BadRequest, business.Code ?? "BusinessError", business.Message);
+
+            // 只实现 IBusinessException 标记接口的第三方业务异常: 同样按 400 处理
+            case IBusinessException businessMarker:
+                return (StatusCodes.Status400BadRequest, businessMarker.Code ?? "BusinessError", exception.Message);
 
             case UnauthorizedAccessException:
                 return (StatusCodes.Status403Forbidden, "Forbidden", "没有访问该资源的权限");

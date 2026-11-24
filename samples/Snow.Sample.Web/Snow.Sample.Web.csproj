@@ -17,6 +17,7 @@
     <ProjectReference Include="..\..\src\Snow.Aop.Castle\Snow.Aop.Castle.csproj" />
     <ProjectReference Include="..\..\src\Snow.Application\Snow.Application.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore\Snow.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.MultiTenancy\Snow.AspNetCore.MultiTenancy.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.Mvc\Snow.AspNetCore.Mvc.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.RateLimiting\Snow.AspNetCore.RateLimiting.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.Serilog\Snow.AspNetCore.Serilog.csproj" />
@@ -35,14 +36,19 @@
     <ProjectReference Include="..\..\src\Snow.Emailing\Snow.Emailing.csproj" />
     <ProjectReference Include="..\..\src\Snow.Emailing.MailKit\Snow.Emailing.MailKit.csproj" />
     <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore\Snow.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore.MySql\Snow.EntityFrameworkCore.MySql.csproj" />
+    <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore.PostgreSql\Snow.EntityFrameworkCore.PostgreSql.csproj" />
     <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore.SqlServer\Snow.EntityFrameworkCore.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore.Sqlite\Snow.EntityFrameworkCore.Sqlite.csproj" />
     <ProjectReference Include="..\..\src\Snow.EventBus\Snow.EventBus.csproj" />
     <ProjectReference Include="..\..\src\Snow.Ftping\Snow.Ftping.csproj" />
     <ProjectReference Include="..\..\src\Snow.Ftping.FluentFTP\Snow.Ftping.FluentFTP.csproj" />
     <ProjectReference Include="..\..\src\Snow.Http.Client\Snow.Http.Client.csproj" />
     <ProjectReference Include="..\..\src\Snow.Json\Snow.Json.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Json.Newtonsoft\Snow.Json.Newtonsoft.csproj" />
     <ProjectReference Include="..\..\src\Snow.Localization\Snow.Localization.csproj" />
     <ProjectReference Include="..\..\src\Snow.Messaging\Snow.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\Snow.MultiTenancy\Snow.MultiTenancy.csproj" />
     <ProjectReference Include="..\..\src\Snow.ObjectMapping\Snow.ObjectMapping.csproj" />
     <ProjectReference Include="..\..\src\Snow.ObjectMapping.Mapster\Snow.ObjectMapping.Mapster.csproj" />
     <ProjectReference Include="..\..\src\Snow.OpenApi\Snow.OpenApi.csproj" />

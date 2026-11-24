@@ -1,26 +1,15 @@
-using Microsoft.Extensions.Logging;
-using Snow.Logging;
+using System;
 
 namespace Snow.Exceptions;
 
 /// <summary>
-/// Snow 框架所有自定义异常的基类(对应 ABP 的 <c>AbpException</c>)
-/// <para>统一携带错误码(<see cref="IHasErrorCode"/>)与日志级别(<see cref="IHasLogLevel"/>)。
-/// 默认 <see cref="LogLevel"/> 为 Error: 说明是程序缺陷或外部依赖故障;
-/// 业务规则不允许的失败请用 <see cref="SnowBusinessException"/>(默认 Warning)。</para>
+/// Snow 框架异常树的根(对应 ABP 的 <c>AbpException</c>): 与基类一样只有三个构造器, 不携带错误码与日志级别。
+/// <para>需要错误码或日志级别的异常自己实现 <c>IHasErrorCode</c>(<c>Code</c>)与 <c>IHasLogLevel</c>(<c>LogLevel</c>),
+/// 取日志级别用 <c>SnowExceptionExtensions.GetLogLevel()</c> 扩展方法(ABP 同款)。
+/// 业务规则不允许的失败请用 <c>BusinessException</c>(业务异常树的根, 直接继承 <c>Exception</c>, 与本类平行)。</para>
 /// </summary>
-public class SnowException : Exception, IHasErrorCode, IHasLogLevel
+public class SnowException : Exception
 {
-    /// <summary>
-    /// 错误码, 客户端据此分支处理
-    /// </summary>
-    public string? Code { get; set; }
-
-    /// <summary>
-    /// 异常处理层写日志用的级别
-    /// </summary>
-    public LogLevel LogLevel { get; set; } = LogLevel.Error;
-
     /// <summary>
     /// 构造器
     /// </summary>
@@ -45,17 +34,5 @@ public class SnowException : Exception, IHasErrorCode, IHasLogLevel
     public SnowException(string? message, Exception? innerException)
         : base(message, innerException)
     {
-    }
-
-    /// <summary>
-    /// 构造器
-    /// </summary>
-    /// <param name="message">异常消息</param>
-    /// <param name="innerException">内部异常</param>
-    /// <param name="logLevel">日志级别</param>
-    public SnowException(string? message, Exception? innerException, LogLevel logLevel)
-        : base(message, innerException)
-    {
-        LogLevel = logLevel;
     }
 }

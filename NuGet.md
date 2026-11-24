@@ -911,6 +911,7 @@ SnowWorkflowResult r2 = await runner.StartAsync<OrderApprovalWorkflow>(input);
 - 运行工作流所需的最小特性集已由模块兜住(UseDefaultFeatures 默认开): 表达式求值、JavaScript 引擎、内存缓存, 以及管理与运行时的缓存。关掉它就得用 options.ConfigureElsa 自己补齐, 否则启动校验服务时缺件。
 - 身份这类带取舍的特性不内置: 需要用户上下文时自己挂 —— options.ConfigureElsa = elsa => elsa.UseIdentity(...); 内置的 UseDevelopmentAdminUserProvider 只适合开发环境。
 - 换 SQL Server / PostgreSQL: 自己加对应的 `Elsa.Persistence.EFCore.*` 包, 再通过 `options.ConfigureWorkflowManagement` / `options.ConfigureWorkflowRuntime` 换提供程序(包内只带 SQLite)。
+- 分布式锁的默认提供者是**文件锁**, Elsa 把根目录写死在内容根下的 `App_Data/locks`, 每次启动自动重建; 它只协调共享同一本地文件系统的进程, 多容器/多机无效。想换位置就在 `options.ConfigureWorkflowRuntime` 里赋 `runtime.DistributedLockProvider = _ => new FileDistributedSynchronizationProvider(new DirectoryInfo(path))`; 想换 Redis/PostgreSQL 等外部锁就赋对应实现。`DistributedLockingOptions` 只有 `LockAcquisitionTimeout` 与 `AllowLocalLockProviderInDistributedRuntime` 两个成员, **没有改目录的选项**。
 - 不引实现包也能启动, 但调用 `ISnowWorkflowRunner` 会立刻抛 `SnowWorkflowException` 并提示装 `Snow.Workflows.Elsa`。
 - 不想挂 HTTP 端点就配 `Workflows:Elsa:EnableHttp=false`(管理 API 仍在); 想挂就按「中间件管道」在 `UseAuthorization()` 之后调 `app.UseSnowWorkflows()`。
 
@@ -964,8 +965,8 @@ public class BookAppService
 
 | 异常 | 状态码 | 错误码 |
 | --- | --- | --- |
-| `SnowUserFriendlyException` | 400 | 异常自带的 `Code`, 未给则 `BusinessError` |
-| `SnowBusinessException`(及其它 `SnowException` 子类带 `Code` 的) | 400 | 异常自带的 `Code`, 未给则 `BusinessError` |
+| `UserFriendlyException` | 400 | 异常自带的 `Code`, 未给则 `BusinessError` |
+| `BusinessException`(以及任何实现了 `IBusinessException` 的异常) | 400 | 异常自带的 `Code`, 未给则 `BusinessError` |
 | `UnauthorizedAccessException` | 403 | `Forbidden` |
 | `KeyNotFoundException` | 404 | `NotFound` |
 | `NotImplementedException` | 501 | `NotImplemented` |
@@ -1236,7 +1237,7 @@ app.UseCors();
 | --- | --- |
 | 参数校验 | `[SnowValidation]` 标在应用服务或方法上, 复杂参数按 DataAnnotations 校验, 有错抛 `SnowValidationException`; 再加 `Snow.Validation.FluentValidation` 则同一处同时跑 FluentValidation 规则 |
 | 对象映射 | 注入 `IObjectMapper`(`Map<OrderDto>(order)` / `Map(order, dto)`); `Snow.ObjectMapping.Mapster` = ABP AutoMapper 的 Mapster 版: `SnowMapsterProfile` + `[SnowAutoMap]` + `AddProfile`/`AddMaps` + `DefaultMaxDepth`/`ValidateMappings` |
-| 异常翻译 | `app.Services.ToErrorResponse(exception)` 得到统一错误对象; 业务异常用 `SnowBusinessException`(或语义更强的 `SnowUserFriendlyException`)可带 `Code` 与附加数据 |
+| 异常翻译 | `app.Services.ToErrorResponse(exception)` 得到统一错误对象; 业务异常用 `BusinessException`(或语义更强的 `UserFriendlyException`)可带 `Code`、`Details` 说明文本, 结构化上下文用 `WithData(键, 值)` |
 | 本地化 | `[LocalizationResource("MyApp")]` 标资源类, 注入 `IStringLocalizer<MyAppResource>` 取字符串 |
 | JSON | 注入 `ISnowJsonSerializer`, 选项与框架其余部分一致, 不要在业务里另建 `JsonSerializerOptions`; `Snow.Json` 自带 System.Text.Json 实现, 要 Newtonsoft 行为再加 `Snow.Json.Newtonsoft` |
 
@@ -1244,12 +1245,14 @@ app.UseCors();
 
 | 类型 | 基类 | 日志级别 | 用途 |
 | --- | --- | --- | --- |
-| `SnowException`(`Snow.Exceptions`) | `Exception` | Error | 框架所有自定义异常的基类, 实现 `IHasErrorCode`(`Code`)与 `IHasLogLevel` |
-| `SnowBusinessException` | `SnowException` | Warning | 业务规则不允许; `Code` + 附加数据(`IHasErrorDetails.Details`, 序列化进错误响应的 `data`) |
-| `SnowUserFriendlyException` | `SnowBusinessException` | Warning | 同上, 语义上承诺消息可直接展示给调用方 |
-| `SnowValidationException` / `SnowJsonException` / `SnowObjectMappingException` / `SnowWorkflowException` / `SnowTenantNotFoundException` / `SnowHttpServiceException` / `SnowInitializationException` | `SnowException` | Error(校验为 Warning) | 各自场景的失败; 有 `Code` 就回给客户端 |
+| `SnowException`(`Snow.Exceptions`) | `Exception` | — | 框架异常树的根(对应 ABP 的 `AbpException`): 只有三个构造器, 不携带错误码与日志级别; 需要它们的子类自己实现 `IHasErrorCode` / `IHasLogLevel`, 取级别用 `GetLogLevel()` 扩展方法; 与 `BusinessException` 树平行 |
+| `BusinessException` | `Exception` | Warning | 业务规则不允许; 直接继承 `Exception`(与 ABP 的 `Volo.Abp.BusinessException` 同形, 不在 `SnowException` 树下); 实现标记接口 `IBusinessException`; 属性 `Code` / `Details`(`string`, 错误说明文本)/ `LogLevel`(默认 Warning), 构造器与 ABP 同形(全部可选); `WithData(键, 值)` 把结构化上下文写进 `Exception.Data`, 序列化进错误响应的 `data` |
+| `UserFriendlyException` | `BusinessException` | Warning | 同上, 语义上承诺消息可直接展示给调用方; 实现标记接口 `IUserFriendlyException` |
+| `DomainException`(`Snow.Domain`) | `BusinessException` | Warning | 领域规则被违反(聚合根/值对象的守卫); 与 ABP 的 `Volo.Abp.Domain.DomainException` 同形, 走 HTTP 得 400 + `Code`, 消息直出 |
+| `EntityNotFoundException`(`Snow.Domain`) | `SnowException` + `IHasHttpStatusCode` | Warning | 仓储 `GetAsync` 找不到实体时抛; 错误码固定 `EntityNotFound`, 自带状态码 404, 消息里带实体类型与主键 |
+| `SnowValidationException` / `SnowJsonException` / `SnowObjectMappingException` / `SnowWorkflowException` / `SnowTenantNotFoundException` / `SnowHttpServiceException` / `SnowInitializationException` | `SnowException` | Error(校验为 Warning) | 各自场景的失败; 需要错误码或非默认级别的子类自行实现 `IHasErrorCode` / `IHasLogLevel`(`SnowValidationException` 就是 Warning) |
 
-异常处理层(中间件 / MVC 过滤器 / 转换器)只按接口取信息: 错误码取 `IHasErrorCode.Code`, 日志级别取 `IHasLogLevel.LogLevel`, 附加数据取 `IHasErrorDetails.Details`, 不再按具体类型硬编码。HTTP 状态码: 校验与业务异常 400, `UnauthorizedAccessException` 403, `KeyNotFoundException` 404, `NotImplementedException` 501, 其余 500(与 ABP 的差异: ABP 把 `IBusinessException` 映射成 403, Snow 用 400, 语义更贴切)。
+异常处理层(中间件 / MVC 过滤器 / 转换器)只按接口取信息: 错误码取 `IHasErrorCode.Code`, 日志级别取 `IHasLogLevel.LogLevel`, 错误说明取 `IHasErrorDetails.Details`(`string`), 结构化上下文取 `Exception.Data`, HTTP 状态码取 `IHasHttpStatusCode.HttpStatusCode`(`Snow.Exceptions`, 与 ABP 最新的同名接口同形, 值是 400 / 404 / 409 这样的数字), 不再按具体类型硬编码。状态码判定顺序是先看 `IHasHttpStatusCode`, 再按种类兜底 —— 校验与业务异常 400, `UnauthorizedAccessException` 403, `KeyNotFoundException` 404, `NotImplementedException` 501, 其余 500(与 ABP 的差异: ABP 把 `IBusinessException` 映射成 403, Snow 用 400, 语义更贴切)。`Snow.Exceptions.IBusinessException`(`IUserFriendlyException` 派生自它)是两个零成员标记接口, 与 ABP 同名接口一一对应: 异常处理层把实现了它们的异常一律当业务失败处理(400 + `Code`), 所以第三方自定义异常只要实现接口、不必继承 `BusinessException`, 也能被正确映射。领域层想自己声明 404 就在异常上实现这个接口, 不必让 `Snow.AspNetCore` 反向依赖 `Snow.Domain`。
 
 ## 多租户
 

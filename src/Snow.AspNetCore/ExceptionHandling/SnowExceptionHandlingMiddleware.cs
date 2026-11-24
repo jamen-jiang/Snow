@@ -93,8 +93,12 @@ public sealed class SnowExceptionHandlingMiddleware
 
     private static int GetStatusCode(Exception exception) => exception switch
     {
+        // 异常自带状态码时以它为准(如 EntityNotFoundException 声明 404), 其余类型再按种类兜底
+        IHasHttpStatusCode hasStatusCode => hasStatusCode.HttpStatusCode,
         SnowValidationException => StatusCodes.Status400BadRequest,
-        SnowBusinessException => StatusCodes.Status400BadRequest,
+        BusinessException => StatusCodes.Status400BadRequest,
+        // 只实现 IBusinessException 标记接口的第三方业务异常: 同样 400
+        IBusinessException => StatusCodes.Status400BadRequest,
         UnauthorizedAccessException => StatusCodes.Status403Forbidden,
         KeyNotFoundException => StatusCodes.Status404NotFound,
         NotImplementedException => StatusCodes.Status501NotImplemented,

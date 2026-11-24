@@ -1,5 +1,6 @@
 using Snow.Aop.Castle;
 using Snow.AspNetCore;
+using Snow.AspNetCore.MultiTenancy;
 using Snow.AspNetCore.Mvc;
 using Snow.AspNetCore.RateLimiting;
 using Snow.AspNetCore.Serilog;
@@ -17,9 +18,11 @@ using Snow.EventBus;
 using Snow.Ftping.FluentFTP;
 using Snow.Http.Client;
 using Snow.Json;
+using Snow.Json.Newtonsoft;
 using Snow.Localization;
 using Snow.Messaging;
 using Snow.Modularity;
+using Snow.MultiTenancy;
 using Snow.ObjectMapping.Mapster;
 using Snow.OpenApi;
 using Snow.Security;
@@ -38,6 +41,7 @@ namespace Snow.Sample.Web;
 [DependsOn(
     typeof(SnowAopModule),
     typeof(SnowAspNetCoreModule),
+    typeof(SnowAspNetCoreMultiTenancyModule),
     typeof(SnowMvcModule),
     typeof(SnowRateLimitingModule),
     typeof(SnowAspNetCoreSerilogModule),
@@ -51,13 +55,18 @@ namespace Snow.Sample.Web;
     typeof(SnowDistributedLockRedisModule),
     typeof(SnowEmailingMailKitModule),
     typeof(SnowEntityFrameworkCoreModule),
+    typeof(SnowEntityFrameworkCoreMySqlModule),
+    typeof(SnowEntityFrameworkCorePostgreSqlModule),
     typeof(SnowEntityFrameworkCoreSqlServerModule),
+    typeof(SnowEntityFrameworkCoreSqliteModule),
     typeof(SnowEventBusModule),
     typeof(SnowFtpingFluentFTPModule),
     typeof(SnowHttpClientModule),
     typeof(SnowJsonModule),
+    typeof(SnowJsonNewtonsoftModule),
     typeof(SnowLocalizationModule),
     typeof(SnowMessagingModule),
+    typeof(SnowMultiTenancyModule),
     typeof(SnowObjectMappingMapsterModule),
     typeof(SnowOpenApiModule),
     typeof(SnowSecurityModule),
@@ -100,16 +109,20 @@ public sealed class SampleModule : SnowModule
         // 6) 认证
         app.UseAuthentication();
 
-        // 7) 授权
+        // 7) 多租户解析: 必须在 UseAuthentication() 之后 —— 路由出资者要读路由值, 当前用户出资者要读已认证主体;
+        //    未启用多租户时中间件原样放行, 零开销
+        app.UseSnowMultiTenancy();
+
+        // 8) 授权
         app.UseAuthorization();
 
-        // 8) 后台作业仪表盘(/hangfire): 授权之后、端点之前 —— 终端分支, 早于授权就对匿名请求可见
+        // 9) 后台作业仪表盘(/hangfire): 授权之后、端点之前 —— 终端分支, 早于授权就对匿名请求可见
         app.UseSnowHangfireDashboard();
 
-        // 9) 工作流 HTTP 端点(/workflows): 同上, 终端分支, 落点必须在授权之后
+        // 10) 工作流 HTTP 端点(/workflows): 同上, 终端分支, 落点必须在授权之后
         app.UseSnowWorkflows();
 
-        // 10) 端点映射: 管道最后一步, 统一展开各模块登记的端点(含 OpenAPI / Scalar 文档)
+        // 11) 端点映射: 管道最后一步, 统一展开各模块登记的端点(含 OpenAPI / Scalar 文档)
         app.UseSnowEndpoints();
     }
 }
