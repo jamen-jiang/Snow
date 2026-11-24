@@ -1,7 +1,7 @@
 #requires -version 5.1
 <#
 .SYNOPSIS
-    Pushes every nupkg from the package folder to a NuGet source.
+    Pushes every nupkg (then its .snupkg symbols) from the package folder to a NuGet source.
 .DESCRIPTION
     - Skips versions already present on the source (--skip-duplicate).
     - Rate limits pushes with a sliding one hour window (nuget.org rejects bursts).
@@ -25,16 +25,20 @@ $ErrorActionPreference = "Stop"
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 if ([string]::IsNullOrWhiteSpace($Packages)) {
-    $Packages = Join-Path $root "nupkg"
+    # 与 build/pack.ps1 的默认输出目录保持一致
+    $Packages = Join-Path $root ".nuget-packages"
 }
 
 if (-not (Test-Path $Packages)) {
     throw "Package folder not found: $Packages"
 }
 
-$files = Get-ChildItem -Path $Packages -Filter "*.nupkg" -File | Sort-Object Name
+# 先 nupkg 再 snupkg: 符号包必须跟在自己的包之后推送
+$nupkgs = Get-ChildItem -Path $Packages -Filter "*.nupkg" -File | Sort-Object Name
+$snupkgs = Get-ChildItem -Path $Packages -Filter "*.snupkg" -File | Sort-Object Name
+$files = @($nupkgs) + @($snupkgs)
 if ($files.Count -eq 0) {
-    throw "No nupkg file found in $Packages"
+    throw "No package file (*.nupkg / *.snupkg) found in $Packages"
 }
 
 $failedFile = Join-Path $root "failed-packages.txt"

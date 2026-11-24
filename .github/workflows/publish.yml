@@ -6,9 +6,11 @@
 #
 # nuget.org 侧要配一条策略 (Trusted Publishing → Add policy):
 #   Repository Owner : jamen-jiang
-#   Repository       : Snow
+#   Repository       : Snow        (必须等于本仓库实际名, origin = jamen-jiang/Snow)
 #   Workflow File    : publish.yml
 #   Environment      : (留空)
+# 注意: 若 nuget.org 控制台的这条策略显示的 Repo 不是 Snow(比如旧名 Rongia),
+#       两边必须改成同一个仓库, 否则 OIDC 的仓库声明对不上, NuGet/login 会失败。
 
 name: publish
 
