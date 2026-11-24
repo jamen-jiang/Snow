@@ -27,7 +27,7 @@ namespace Snow.DistributedLocking;
 /// <para>拿不到锁时抛 <see cref="TimeoutException"/>; <see cref="WaitSeconds"/> 默认 -1 表示<b>一直等待</b>
 /// (对齐 Redisson 的 <c>lock()</c>), 为 0 表示不等待、立即判失败, 正数表示最多等这么多秒。</para>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public sealed class DistributedLockAttribute : InterceptorAttribute
+public sealed class DistributedLockAttribute : SnowInterceptorAttribute
 {
     /// <summary>
     /// 构造器: 可只写 key, 也可只写 <see cref="Prefix"/> 等具名属性
@@ -74,23 +74,23 @@ public sealed class DistributedLockAttribute : InterceptorAttribute
     public bool ThrowOnLost { get; set; }
 
     /// <inheritdoc />
-    public override async Task InvokeAsync(AopMethodInvocation invocation)
+    public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(context);
 
         if (
             !string.IsNullOrWhiteSpace(Condition)
             && !ExpressionEngine.EvaluateBoolean(
                 Condition,
-                ExpressionContextFactory.Create(invocation)
+                ExpressionContextFactory.Create(context)
             )
         )
         {
-            await invocation.ProceedAsync().ConfigureAwait(false);
+            await next(context, cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        string key = ResolveKey(invocation);
+        string key = ResolveKey(context);
         // 不写(-1)或其它负数 = 一直等(对齐 Redisson 的 lock()); 0 = 抢一次; 正数 = 最多等这么多秒
         TimeSpan? timeout =
             WaitSeconds < 0 ? null
@@ -100,10 +100,9 @@ public sealed class DistributedLockAttribute : InterceptorAttribute
 
         // 前缀统一由 DistributedLockOptions.ResolveKey 叠加(本地锁与 Redis 锁都走它), 这里只拼 Prefix 与 Key
         IDistributedLock distributedLock =
-            invocation.ServiceProvider.GetRequiredService<IDistributedLock>();
-        // 被拦截方法的签名里如果有 CancellationToken, 就把它当成「等待可以被叫停」的意思带下去:
+            context.ServiceProvider.GetRequiredService<IDistributedLock>();
+        // cancellationToken 由适配器从方法签名里取出后交给整条链, 所以这里的等待天然可以被叫停:
         // 无限等待没有它就是一个永远退不出来的阻塞
-        CancellationToken cancellationToken = FindCancellationToken(invocation);
         IDistributedLockHandle? handle = await distributedLock
             .TryAcquireAsync(key, timeout, leaseTime, cancellationToken)
             .ConfigureAwait(false);
@@ -124,14 +123,14 @@ public sealed class DistributedLockAttribute : InterceptorAttribute
                     + ", "
                     + reason
                     + ", 方法为 "
-                    + DescribeMethod(invocation)
+                    + DescribeMethod(context)
                     + "。"
             );
         }
 
         try
         {
-            await invocation.ProceedAsync().ConfigureAwait(false);
+            await next(context, cancellationToken).ConfigureAwait(false);
 
             // 续期与丢失判定都在锁实现里完成, 句柄的丢失令牌被取消就说明这把锁已经不是自己的了
             if (ThrowOnLost && handle.IsLockLost)
@@ -141,7 +140,7 @@ public sealed class DistributedLockAttribute : InterceptorAttribute
                     "分布式锁在方法执行期间丢失: 锁 key 为 "
                         + key
                         + ", 方法为 "
-                        + DescribeMethod(invocation)
+                        + DescribeMethod(context)
                         + "。"
                 );
             }
@@ -156,64 +155,47 @@ public sealed class DistributedLockAttribute : InterceptorAttribute
     /// <summary>
     /// 计算最终锁 key: 表达式求值, 空则退回默认 key, 再按需拼前缀
     /// </summary>
-    /// <param name="invocation">方法调用上下文</param>
+    /// <param name="context">方法调用上下文</param>
     /// <returns>锁 key</returns>
-    private string ResolveKey(AopMethodInvocation invocation)
+    private string ResolveKey(AspectContext context)
     {
         string value = string.IsNullOrWhiteSpace(Key)
-            ? BuildDefaultKey(invocation)
-            : ExpressionEngine.EvaluateString(Key, ExpressionContextFactory.Create(invocation));
+            ? BuildDefaultKey(context)
+            : ExpressionEngine.EvaluateString(Key, ExpressionContextFactory.Create(context));
 
         if (string.IsNullOrWhiteSpace(value))
         {
-            value = BuildDefaultKey(invocation);
+            value = BuildDefaultKey(context);
         }
 
         return string.IsNullOrWhiteSpace(Prefix) ? value : Prefix + ":" + value;
     }
 
-    /// <summary>
-    /// 从方法实参里找取消令牌, 找不到就用 <see cref="CancellationToken.None"/>
-    /// </summary>
-    /// <param name="invocation">方法调用上下文</param>
-    /// <returns>方法调用方传入的取消令牌</returns>
-    private static CancellationToken FindCancellationToken(AopMethodInvocation invocation)
-    {
-        foreach (object? argument in invocation.Arguments)
-        {
-            if (argument is CancellationToken token)
-            {
-                return token;
-            }
-        }
-
-        return CancellationToken.None;
-    }
 
     /// <summary>
     /// 默认 key: 「类名_方法名」
     /// </summary>
-    /// <param name="invocation">方法调用上下文</param>
+    /// <param name="context">方法调用上下文</param>
     /// <returns>默认锁 key</returns>
-    private static string BuildDefaultKey(AopMethodInvocation invocation)
+    private static string BuildDefaultKey(AspectContext context)
     {
-        Type? ownerType = invocation.Target?.GetType() ?? invocation.Method.DeclaringType;
+        Type? ownerType = context.TargetObject?.GetType() ?? context.Method.DeclaringType;
 
-        return (ownerType?.Name ?? "unknown") + "_" + invocation.Method.Name;
+        return (ownerType?.Name ?? "unknown") + "_" + context.Method.Name;
     }
 
     /// <summary>
     /// 描述被拦截方法, 用于异常消息
     /// </summary>
-    /// <param name="invocation">方法调用上下文</param>
+    /// <param name="context">方法调用上下文</param>
     /// <returns>类型名.方法名</returns>
-    private static string DescribeMethod(AopMethodInvocation invocation)
+    private static string DescribeMethod(AspectContext context)
     {
         StringBuilder builder = new();
         builder
-            .Append(invocation.Method.DeclaringType?.FullName ?? "unknown")
+            .Append(context.Method.DeclaringType?.FullName ?? "unknown")
             .Append('.')
-            .Append(invocation.Method.Name);
+            .Append(context.Method.Name);
 
         return builder.ToString();
     }

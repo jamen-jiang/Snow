@@ -13,7 +13,6 @@
     <PackageReference Include="Castle.Core" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../Snow.Aop/Snow.Aop.csproj" />
     <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />
   </ItemGroup>
 </Project>

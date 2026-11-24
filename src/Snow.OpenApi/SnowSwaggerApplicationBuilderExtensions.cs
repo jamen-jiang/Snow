@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
+using Snow.DependencyInjection;
 using Snow.Modularity;
 
 namespace Snow.OpenApi;

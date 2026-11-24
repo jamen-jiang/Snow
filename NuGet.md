@@ -1047,7 +1047,10 @@ public class HalfController : SnowControllerBase { }
 - 判定只认控制器端点: 最小 API、静态文件、健康检查没有 `ControllerActionDescriptor`, 不受开关影响。判定函数收的是 `Type?` 而不是 `ActionDescriptor`, 所以 `Snow.Core` 不必认识 MVC 类型。
 - 摘除机制照抄 ABP 的 `AbpMvcActionDescriptorProvider`: 框架过滤器一律用 `options.Filters.AddService(typeof(X))` 登记, 生成的是 `ServiceFilterAttribute`; 描述符定型后 `SnowMvcActionDescriptorProvider`(Order = -1000 + 10, 与 ABP 的 `AbpMvcActionDescriptorProvider` 同值 —— 排在 MVC 自带描述符提供器的 -1000 之后, 正序 Executing 时后跑、倒序 Executed 时先动手。命名空间 `Snow.AspNetCore.Mvc`, 与包内其余文件一致; ABP 那边写的是 `Volo.Abp.AspNetCore.Mvc.ApplicationModels`, 那个后缀抄自 ASP.NET Core 的 `Microsoft.AspNetCore.Mvc.ApplicationModels.ControllerActionDescriptorProvider`, 表达的是职责而非目录, 所以 Snow 不跟)只摘实现了 `ISnowFilter`(`Snow.AspNetCore.Filters`)的那些。用 `Filters.Add<X>()` 登记会生成 `TypeFilterAttribute`, 摘不掉, 开关对它无效。
 - `DisableInterceptors` 看的是**实现类型**: 标在应用服务类上, 该服务不做代理。自动 API 的 Controller 由应用服务生成, 所以标在服务类上就等于标在 Controller 上; 标在生成出来的 Controller 类上不生效。
-- 建代理这一步在 `Snow.Core` 的约定注册里, 但真正建代理的代码在 `Snow.Aop.Castle`: 约定扫描时读到实现类型上的 `[Interceptor]`(类级 + 方法级, 并尊重 `DisableInterceptors`), 该类型的接口服务类型就换成工厂 lambda, 工厂从容器取 `IAopProxyFactory`; `CastleAopProxyFactory` 自己标着 `[SingletonService]`, 由约定注册扫进容器, 所以宿主只要让启动模块依赖 `SnowAopModule` 就有工厂, 取不到则抛「请让宿主模块依赖 `SnowAopModule`(`Snow.Aop.Castle` 包)以启用 AOP」。只打了拦截器注解、没标服务注解的类型按瞬态登记(做到「一个注解即可用」), 开放泛型直接报错 —— 代理需要具体类型; 实现类自身那条服务类型不换代理(那样会拿到未代理的实例)。内核只认接口 `IAopProxyFactory`(`Snow.Aop`), 换引擎就换它的实现。
+- 拦截器的形态与 ASP.NET Core 中间件一致: `abstract Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)`, 调 `await next(context, cancellationToken)` 才走到目标方法(不调即短路, 此时给 `context.ReturnValue` 赋值)。`AspectContext` 是抽象类(形状固定, 由代理工厂决定怎么造), 整条链共享一个实例(实参与返回值的修改对上下层都可见); Snow.Aop.Castle 里的 `DefaultAspectContext` 是包住 Castle 调用信息的默认实现, `next` 由参数传入而不是字段, 所以拦截链能按方法组装一次并缓存, 也不需要任何 `internal` 特权。`cancellationToken` 由适配器取被拦截方法签名里的 `CancellationToken` 参数(没有就是 `None`)交给整条链。
+- 建代理这一步在 `Snow.Core` 的约定注册里, 但真正建代理的代码在 `Snow.Aop.Castle`: 约定扫描时读到实现类型上的 `SnowInterceptorAttribute`(类级 + 方法级, 并尊重 `DisableInterceptors`), 该类型的接口服务类型就换成工厂 lambda, 工厂从容器取 `IAopProxyFactory`; `CastleAopProxyFactory` 自己标着 `[SingletonService]`, 由约定注册扫进容器, 所以宿主只要让启动模块依赖 `SnowAopModule` 就有工厂, 取不到则抛「请让宿主模块依赖 `SnowAopModule`(`Snow.Aop.Castle` 包)以启用 AOP」。只打了拦截器注解、没标服务注解的类型按瞬态登记(做到「一个注解即可用」), 开放泛型直接报错 —— 代理需要具体类型。内核只认接口 `IAopProxyFactory`(定义在 `Snow.Core` 的 `Snow.Aop` 命名空间, 与 ABP 把 `IAbpInterceptor` / `ProxyHelper` 放在 `Volo.Abp.Core` 同理), 换引擎就换它的实现。
+- 类代理(Castle 的 class proxy): 类型既暴露接口又暴露自身、还标了拦截器时, 实现类型自身那条描述符建成类代理, 接口描述符转发到它 —— 解析接口与解析具体类型拿到同一个被代理对象, 没有「按具体类型注入就绕过拦截」的缺口。三个前提: 具体类(`sealed` / `abstract` 建不出来)、有可重写的虚方法(Castle 只拦 `virtual`)、有能从容器解析出参数的公开构造器(取不到就用参数的默认值, 连默认值都没有才抛 `ArgumentException`)。标了拦截器的方法却不是 `virtual`(例如接口方法的非虚实现)时, 建代理当场抛 `ArgumentException` 指出是哪个方法, 不静默放行。类级拦截器覆盖全类, 但 Castle 的类代理只拦 `virtual`, 会被静默跳过的成员在启动时一次性列成告警(每个类型只报一次); `async void` 方法的完成也拦不住(拦截链在方法真正结束之前就收尾), 同样告警一次, 建议改成 `async Task`。既暴露自身、又标了拦截器、却做不出类代理的类型(密封类, 或一个虚方法都没有), 启动期直接抛 `InvalidOperationException`: 否则那条服务没人登记, 直到第一次按具体类型解析才报「没有以 X 注册的服务」; 只按接口解析的类型不受影响, 接口代理照常。拦截器注解标在接口方法上、或标在显式接口实现(`string IFoo.Bar()`)上都生效 —— 约定扫描会看实现类型的非公开方法与它实现的接口, 适配器再顺着接口映射把声明处与实现处的注解一起读出来(声明处在外层)。拦截器清单与拦截链都按「实现类型 + 方法」静态缓存, 瞬态服务反复解析不重复反射。
+- 代理对象的运行时类型是 Castle 生成的子类(命名空间 `Castle.Proxies`), 不是实现类型本身: `service.GetType() == typeof(UserService)`、按具体类型 `as` 转换、拿对象当字典键都会因此失效。要取回原始实例用 `SnowProxyHelper.UnProxy(obj)`: 接口代理沿 `__target` 字段找回实现类型的实例, 类代理本身就是实现类型的子类、只有一份对象, 原样返回(此时 `as` / `is` 判断不受影响, 只有 `GetType()` 的精确比较会看到代理类型), 普通对象原样返回。
 
 ### 接线与配置
 
@@ -1521,7 +1524,7 @@ git tag v1.2.0 && git push origin v1.2.0
 | 包 | 用途 |
 | --- | --- |
 | `Snow` | 名称占位包: 不含代码, 只引用 `Snow.Core`(与 ABP 的 `Volo.Abp` 同形) |
-| `Snow.Core` | 内核: 模块系统、约定式依赖注入、表达式求值、System 扩展方法 |
+| `Snow.Core` | 内核: 模块系统、约定式依赖注入、AOP 拦截契约(`AspectContext` / `AspectDelegate` / `SnowInterceptorAttribute` / `SnowProxyHelper`)、表达式求值、System 扩展方法 |
 | `Snow.Data` | 数据过滤: 按过滤器类型开关全局过滤(软删除等), 状态按异步调用链隔离 |
 | `Snow.Timing` | 时间: `IClock` 抽象与直接读系统时钟的默认实现 |
 | `Snow.Tracing` | 链路标识: `ICorrelationIdProvider` 与进程内默认实现 |

@@ -1,4 +1,4 @@
-namespace Snow;
+namespace Snow.DependencyInjection;
 
 /// <summary>
 /// 对象访问器契约(对应 ABP 的 IObjectAccessor):

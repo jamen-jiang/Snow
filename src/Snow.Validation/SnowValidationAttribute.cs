@@ -10,23 +10,23 @@ namespace Snow.Validation;
 /// <para>简单类型参数(CancellationToken / 值类型 / 字符串等)不校验; 嵌套对象按选项递归。</para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
-public sealed class SnowValidationAttribute : InterceptorAttribute
+public sealed class SnowValidationAttribute : SnowInterceptorAttribute
 {
     /// <inheritdoc />
-    public override async Task InvokeAsync(AopMethodInvocation invocation)
+    public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(context);
 
-        SnowValidationOptions options = invocation.ServiceProvider
+        SnowValidationOptions options = context.ServiceProvider
             .GetRequiredService<IOptions<SnowValidationOptions>>()
             .Value;
 
         if (options.Enabled)
         {
-            ISnowObjectValidator validator = invocation.ServiceProvider.GetRequiredService<ISnowObjectValidator>();
+            ISnowObjectValidator validator = context.ServiceProvider.GetRequiredService<ISnowObjectValidator>();
             List<ValidationResult> errors = new();
 
-            foreach (object? argument in invocation.Arguments)
+            foreach (object? argument in context.Arguments)
             {
                 if (argument is null || argument is CancellationToken || SnowValidationHelper.IsSimpleType(argument.GetType()))
                 {
@@ -42,6 +42,6 @@ public sealed class SnowValidationAttribute : InterceptorAttribute
             }
         }
 
-        await invocation.ProceedAsync().ConfigureAwait(false);
+        await next(context, cancellationToken).ConfigureAwait(false);
     }
 }

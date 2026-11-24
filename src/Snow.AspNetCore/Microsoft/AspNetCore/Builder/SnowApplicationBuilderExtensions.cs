@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Snow;
 using Snow.AspNetCore.Tracing;
+using Snow.DependencyInjection;
 using Snow.Modularity;
 
 namespace Microsoft.AspNetCore.Builder;

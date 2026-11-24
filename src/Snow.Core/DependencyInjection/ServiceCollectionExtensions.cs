@@ -119,7 +119,7 @@ public static class ServiceCollectionExtensions
                 }
 
                 ServiceLifetime? lifetime = GetLifetime(type);
-                InterceptorAttribute[] interceptors = GetInterceptors(type);
+                SnowInterceptorAttribute[] interceptors = GetInterceptors(type);
                 bool hasInterceptors = interceptors.Length > 0 || HasMethodInterceptors(type);
 
                 if (lifetime is null)
@@ -167,12 +167,34 @@ public static class ServiceCollectionExtensions
         // 既暴露接口又暴露自身的类型按"单一契约"处理: 任一服务类型已有登记就整条跳过, 显式登记优先
         bool exposesSelf = candidate.ServiceTypes.Contains(candidate.ImplementationType);
 
-        // 单例/作用域下接口与自身共用一个实例; 瞬态本就每次新建, 不做重定向
+        // 没有拦截器时, 单例/作用域下接口与自身共用一个实例(接口描述符转发到自身); 瞬态本就每次新建, 不做重定向。
+        // 有拦截器时不走这条路: 那时自身是类代理、接口转发到它, 靠类代理保证"解析接口与解析自身是同一个被代理对象";
+        // 类代理建不出来就在下面直接报错, 不用一个裸实例去糊, 否则会变成两个对象、两份状态。
         bool shareInstance = !candidate.HasInterceptors
             && !candidate.ImplementationType.IsGenericTypeDefinition
             && candidate.Lifetime != ServiceLifetime.Transient
             && exposesSelf
             && candidate.ServiceTypes.Length > 1;
+
+        // 类代理只在"实现类型是具体类且至少有一个可重写的虚方法"时建得出来
+        bool classProxyable = candidate.HasInterceptors && CanProxyClass(candidate.ImplementationType);
+
+        // 建得出来才登记自身; 宿主显式登记过的类型按显式登记走(接口仍转发到它)
+        bool classProxied = classProxyable
+            && (candidate.ReplaceServices || !presentServiceTypes.Contains(candidate.ImplementationType));
+
+        if (classProxied)
+        {
+            // 先登记实现类型自身: 它是有拦截器时的唯一实例, 接口描述符随后转发到这里,
+            // 这样解析接口与解析具体类型拿到同一个被代理对象
+            Type proxyImplementationType = candidate.ImplementationType;
+            SnowInterceptorAttribute[] proxyInterceptors = candidate.Interceptors;
+
+            services.Add(new ServiceDescriptor(
+                candidate.ImplementationType,
+                serviceProvider => CreateProxy(serviceProvider, proxyImplementationType, proxyImplementationType, proxyInterceptors),
+                candidate.Lifetime));
+        }
 
         foreach (Type serviceType in candidate.ServiceTypes)
         {
@@ -192,14 +214,47 @@ public static class ServiceCollectionExtensions
 
             if (candidate.HasInterceptors)
             {
-                // 代理只覆盖接口服务类型; 把实现类自身当作服务类型登记会拿到未被代理的实例, 因此跳过
-                if (!serviceType.IsInterface)
+                // 自身服务类型已由上面的类代理登记
+                if (classProxied && serviceType == candidate.ImplementationType)
                 {
                     continue;
                 }
 
+                // 接口转发到类代理: 类代理同时实现这些接口, 解析哪一条都是同一个被代理对象
+                if (classProxied && serviceType.IsInterface)
+                {
+                    Type proxyTargetType = candidate.ImplementationType;
+
+                    services.Add(new ServiceDescriptor(
+                        serviceType,
+                        serviceProvider => serviceProvider.GetRequiredService(proxyTargetType),
+                        candidate.Lifetime));
+                    continue;
+                }
+
+                // 类代理建不出来, 或服务类型既不是接口也不是自身: 按接口代理登记
+                if (!serviceType.IsInterface)
+                {
+                    if (serviceType == candidate.ImplementationType && candidate.HasInterceptors && !classProxyable)
+                    {
+                        // 标了拦截器、又暴露了自身、类代理却建不出来: 这里如果静默跳过, 这条服务就彻底没人登记,
+                        // 编译和启动都看不出问题, 第一次解析才报"没有以类型 X 注册的服务", 所以在注册阶段直接报错
+                        throw new InvalidOperationException(
+                            "类型 " + candidate.ImplementationType.FullName + " 标了拦截器, 又暴露了自身(按具体类型注入), 但它做不了类代理: "
+                                + (candidate.ImplementationType.IsSealed
+                                    ? "它是密封类, Castle 生成的代理类型要继承它, 继承不了。"
+                                    : "它没有任何可重写的虚方法(Castle 的类代理只拦 virtual)。")
+                                + " 两条出路: 一是让类代理建得出来 —— "
+                                + (candidate.ImplementationType.IsSealed ? "先去掉 sealed, " : string.Empty)
+                                + "把要拦的方法改成公开的 virtual(显式接口实现的私有方法要先改成公开虚方法, 注解可以继续留在接口方法上); "
+                                + "二是去掉对自身的暴露, 只按接口解析 —— 接口代理不继承实现类型, 冒充不了具体类型, 兜不住按具体类型注入的调用。");
+                    }
+
+                    continue;
+                }
+
                 Type proxiedImplementationType = candidate.ImplementationType;
-                InterceptorAttribute[] interceptors = candidate.Interceptors;
+                SnowInterceptorAttribute[] interceptors = candidate.Interceptors;
 
                 services.Add(new ServiceDescriptor(
                     serviceType,
@@ -247,23 +302,69 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="type">实现类型</param>
     /// <returns>类级拦截器; 未声明时返回空数组</returns>
-    private static InterceptorAttribute[] GetInterceptors(Type type)
+    private static SnowInterceptorAttribute[] GetInterceptors(Type type)
     {
-        return type.GetCustomAttributes<InterceptorAttribute>(true).ToArray();
+        return type.GetCustomAttributes<SnowInterceptorAttribute>(true).ToArray();
     }
 
     /// <summary>
-    /// 判断类型的 public 实现方法上是否标注了拦截器
+    /// 判断实现类型能否做类代理: 必须是具体类, 且至少有一个可重写的虚方法(Castle 的类代理只拦 virtual)
+    /// </summary>
+    /// <param name="type">实现类型</param>
+    /// <returns>可做类代理时返回 <see langword="true"/></returns>
+    private static bool CanProxyClass(Type type)
+    {
+        if (type.IsSealed || type.IsAbstract)
+        {
+            return false;
+        }
+
+        foreach (MethodInfo method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (method.DeclaringType == typeof(object))
+            {
+                continue;
+            }
+
+            if (method.IsVirtual && !method.IsFinal)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 判断实现方法或它实现的接口方法上是否标注了拦截器
+    /// <para>显式接口实现是 private 方法, 只扫 public 会漏; 注解也可能标在接口方法上(声明处), 实现类型自己看不到,
+    /// 这两种情况漏掉会让服务悄悄注册成不带代理的普通实例, 所以两处都要看。</para>
     /// </summary>
     /// <param name="type">实现类型</param>
     /// <returns>标注了返回 <see langword="true"/></returns>
     private static bool HasMethodInterceptors(Type type)
     {
-        foreach (MethodInfo method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+        foreach (MethodInfo method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
         {
-            if (method.IsDefined(typeof(InterceptorAttribute), true))
+            if (method.IsDefined(typeof(SnowInterceptorAttribute), true))
             {
                 return true;
+            }
+        }
+
+        foreach (Type contract in type.GetInterfaces())
+        {
+            if (!contract.IsVisible)
+            {
+                continue;
+            }
+
+            foreach (MethodInfo method in contract.GetMethods())
+            {
+                if (method.IsDefined(typeof(SnowInterceptorAttribute), true))
+                {
+                    return true;
+                }
             }
         }
 
@@ -279,14 +380,14 @@ public static class ServiceCollectionExtensions
     /// <param name="interceptors">类级拦截器</param>
     /// <returns>代理对象</returns>
     /// <exception cref="InvalidOperationException">容器中缺少 <see cref="IAopProxyFactory"/></exception>
-    private static object CreateProxy(IServiceProvider serviceProvider, Type implementationType, Type serviceType, InterceptorAttribute[] interceptors)
+    private static object CreateProxy(IServiceProvider serviceProvider, Type implementationType, Type serviceType, SnowInterceptorAttribute[] interceptors)
     {
         IAopProxyFactory? factory = serviceProvider.GetService<IAopProxyFactory>();
 
         if (factory is null)
         {
             throw new InvalidOperationException(
-                "类型 " + implementationType.FullName + " 标注了 [" + nameof(InterceptorAttribute) +
+                "类型 " + implementationType.FullName + " 标注了 [" + nameof(SnowInterceptorAttribute) +
                 "], 但容器中没有 " + nameof(IAopProxyFactory) + "; 请让宿主模块依赖 SnowAopModule(Snow.Aop.Castle 包)以启用 AOP。");
         }
 
@@ -384,6 +485,6 @@ public static class ServiceCollectionExtensions
         ServiceLifetime Lifetime,
         Type[] ServiceTypes,
         bool ReplaceServices,
-        InterceptorAttribute[] Interceptors,
+        SnowInterceptorAttribute[] Interceptors,
         bool HasInterceptors);
 }

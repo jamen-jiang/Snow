@@ -13,5 +13,5 @@ public interface IAopProxyFactory
     /// <param name="serviceType">暴露的接口服务类型</param>
     /// <param name="interceptors">类级拦截器, 按外层到内层排列</param>
     /// <returns>代理对象</returns>
-    object CreateProxy(IServiceProvider serviceProvider, Type implementationType, Type serviceType, InterceptorAttribute[] interceptors);
+    object CreateProxy(IServiceProvider serviceProvider, Type implementationType, Type serviceType, SnowInterceptorAttribute[] interceptors);
 }

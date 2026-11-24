@@ -31,7 +31,7 @@ namespace Snow.Caching;
 /// <para><see cref="Key"/> / <see cref="Condition"/> / <see cref="Unless"/> 按 C# 表达式交给 <see cref="ExpressionEngine"/> 求值(可用参数名 / p0 / a0 / root.methodName / root.args)。</para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public sealed class CacheableAttribute : InterceptorAttribute
+public sealed class CacheableAttribute : SnowInterceptorAttribute
 {
     /// <summary>
     /// 构造器: 给缓存区名
@@ -75,12 +75,12 @@ public sealed class CacheableAttribute : InterceptorAttribute
     public int ExpirationSeconds { get; set; }
 
     /// <inheritdoc />
-    public override async Task InvokeAsync(AopMethodInvocation invocation)
+    public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
     {
-        Type? payloadType = ResolvePayloadType(invocation.Method.ReturnType);
+        Type? payloadType = ResolvePayloadType(context.Method.ReturnType);
         if (payloadType is null)
         {
-            await invocation.ProceedAsync().ConfigureAwait(false);
+            await next(context, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -88,36 +88,36 @@ public sealed class CacheableAttribute : InterceptorAttribute
             !string.IsNullOrWhiteSpace(Condition)
             && !ExpressionEngine.EvaluateBoolean(
                 Condition,
-                ExpressionContextFactory.Create(invocation)
+                ExpressionContextFactory.Create(context)
             )
         )
         {
-            await invocation.ProceedAsync().ConfigureAwait(false);
+            await next(context, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         BclDistributedCache cache =
-            invocation.ServiceProvider.GetRequiredService<BclDistributedCache>();
-        DistributedCacheOptions options = invocation
+            context.ServiceProvider.GetRequiredService<BclDistributedCache>();
+        DistributedCacheOptions options = context
             .ServiceProvider.GetRequiredService<IOptions<DistributedCacheOptions>>()
             .Value;
-        ILogger? logger = invocation
+        ILogger? logger = context
             .ServiceProvider.GetService<ILoggerFactory>()
             ?.CreateLogger<CacheableAttribute>();
         string cacheName = CacheName;
-        string key = ResolveKey(invocation);
+        string key = ResolveKey(context);
 
         object? cached = await GetAsync(cache, options, logger, cacheName, payloadType, key)
             .ConfigureAwait(false);
         if (cached is not null)
         {
-            invocation.ReturnValue = cached;
+            context.ReturnValue = cached;
             return;
         }
 
-        await invocation.ProceedAsync().ConfigureAwait(false);
+        await next(context, cancellationToken).ConfigureAwait(false);
 
-        object? value = invocation.ReturnValue;
+        object? value = context.ReturnValue;
         if (value is null)
         {
             return;
@@ -127,7 +127,7 @@ public sealed class CacheableAttribute : InterceptorAttribute
             !string.IsNullOrWhiteSpace(Unless)
             && ExpressionEngine.EvaluateBoolean(
                 Unless,
-                ExpressionContextFactory.Create(invocation, value, true)
+                ExpressionContextFactory.Create(context, value, true)
             )
         )
         {
@@ -210,31 +210,31 @@ public sealed class CacheableAttribute : InterceptorAttribute
         { }
     }
 
-    private string ResolveKey(AopMethodInvocation invocation)
+    private string ResolveKey(AspectContext context)
     {
         if (!string.IsNullOrWhiteSpace(Key))
         {
             return ExpressionEngine.EvaluateString(
                 Key,
-                ExpressionContextFactory.Create(invocation)
+                ExpressionContextFactory.Create(context)
             );
         }
 
         StringBuilder builder = new();
         builder
-            .Append(invocation.Method.DeclaringType?.FullName ?? "unknown")
+            .Append(context.Method.DeclaringType?.FullName ?? "unknown")
             .Append('.')
-            .Append(invocation.Method.Name)
+            .Append(context.Method.Name)
             .Append('(');
 
-        for (int index = 0; index < invocation.Arguments.Length; index++)
+        for (int index = 0; index < context.Arguments.Length; index++)
         {
             if (index > 0)
             {
                 builder.Append(',');
             }
 
-            builder.Append(invocation.Arguments[index]);
+            builder.Append(context.Arguments[index]);
         }
 
         return builder.Append(')').ToString();

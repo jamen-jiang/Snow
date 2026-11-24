@@ -1,4 +1,4 @@
-namespace Snow;
+namespace Snow.DependencyInjection;
 
 /// <summary>
 /// 对象访问器的默认实现: 只是一个可读写的字段, 由宿主在构建完成后填值

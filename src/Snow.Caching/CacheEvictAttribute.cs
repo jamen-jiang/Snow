@@ -28,7 +28,7 @@ namespace Snow.Caching;
 /// <para><see cref="Key"/> / <see cref="Condition"/> 按 C# 表达式交给 <see cref="ExpressionEngine"/> 求值。</para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-public sealed class CacheEvictAttribute : InterceptorAttribute
+public sealed class CacheEvictAttribute : SnowInterceptorAttribute
 {
     /// <summary>
     /// 构造器: 给缓存区名
@@ -73,28 +73,28 @@ public sealed class CacheEvictAttribute : InterceptorAttribute
     public bool BeforeInvocation { get; set; }
 
     /// <inheritdoc />
-    public override async Task InvokeAsync(AopMethodInvocation invocation)
+    public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
     {
-        BclDistributedCache cache = invocation.ServiceProvider.GetRequiredService<BclDistributedCache>();
-        DistributedCacheOptions options = invocation.ServiceProvider.GetRequiredService<IOptions<DistributedCacheOptions>>().Value;
-        ILogger? logger = invocation.ServiceProvider.GetService<ILoggerFactory>()?.CreateLogger<CacheEvictAttribute>();
+        BclDistributedCache cache = context.ServiceProvider.GetRequiredService<BclDistributedCache>();
+        DistributedCacheOptions options = context.ServiceProvider.GetRequiredService<IOptions<DistributedCacheOptions>>().Value;
+        ILogger? logger = context.ServiceProvider.GetService<ILoggerFactory>()?.CreateLogger<CacheEvictAttribute>();
 
         if (BeforeInvocation)
         {
-            await EvictAsync(cache, options, logger, invocation).ConfigureAwait(false);
+            await EvictAsync(cache, options, logger, context).ConfigureAwait(false);
         }
 
-        await invocation.ProceedAsync().ConfigureAwait(false);
+        await next(context, cancellationToken).ConfigureAwait(false);
 
         if (!BeforeInvocation)
         {
-            await EvictAsync(cache, options, logger, invocation).ConfigureAwait(false);
+            await EvictAsync(cache, options, logger, context).ConfigureAwait(false);
         }
     }
 
-    private async Task EvictAsync(BclDistributedCache cache, DistributedCacheOptions options, ILogger? logger, AopMethodInvocation invocation)
+    private async Task EvictAsync(BclDistributedCache cache, DistributedCacheOptions options, ILogger? logger, AspectContext context)
     {
-        if (!string.IsNullOrWhiteSpace(Condition) && !ExpressionEngine.EvaluateBoolean(Condition, ExpressionContextFactory.Create(invocation)))
+        if (!string.IsNullOrWhiteSpace(Condition) && !ExpressionEngine.EvaluateBoolean(Condition, ExpressionContextFactory.Create(context)))
         {
             return;
         }
@@ -113,7 +113,7 @@ public sealed class CacheEvictAttribute : InterceptorAttribute
             }
 
             string version = await DistributedCacheKey.ReadVersionAsync(cache, CacheName, CancellationToken.None).ConfigureAwait(false);
-            string key = ExpressionEngine.EvaluateString(Key, ExpressionContextFactory.Create(invocation));
+            string key = ExpressionEngine.EvaluateString(Key, ExpressionContextFactory.Create(context));
 
             await cache.RemoveAsync(DistributedCacheKey.DataKey(CacheName, options.KeyPrefix, version, key)).ConfigureAwait(false);
         }

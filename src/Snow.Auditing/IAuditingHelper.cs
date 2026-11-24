@@ -24,9 +24,9 @@ public interface IAuditingHelper
     /// <summary>
     /// 按一次调用创建审计动作
     /// </summary>
-    /// <param name="invocation">方法调用上下文</param>
+    /// <param name="context">方法调用上下文</param>
     /// <returns>审计动作</returns>
-    AuditLogActionInfo CreateAuditLogActionInfo(AopMethodInvocation invocation);
+    AuditLogActionInfo CreateAuditLogActionInfo(AspectContext context);
 
     /// <summary>
     /// 刷新 HTTP 相关字段(方法执行完后状态码才确定)

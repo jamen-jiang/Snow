@@ -10,42 +10,42 @@ public static class ExpressionContextFactory
     /// <summary>
     /// 构造表达式上下文(不带 result, 用于入参类表达式)
     /// </summary>
-    /// <param name="invocation">方法调用上下文</param>
+    /// <param name="context">方法调用上下文</param>
     /// <returns>表达式上下文</returns>
-    public static ExpressionContext Create(AopMethodInvocation invocation)
+    public static ExpressionContext Create(AspectContext context)
     {
-        return Create(invocation, null, false);
+        return Create(context, null, false);
     }
 
     /// <summary>
     /// 构造表达式上下文: 塞入参数名 / p{i} / a{i} 与 root, 需要时附带 result
     /// </summary>
-    /// <param name="invocation">方法调用上下文</param>
+    /// <param name="context">方法调用上下文</param>
     /// <param name="result">目标方法的返回值</param>
     /// <param name="hasResult">是否暴露 result 变量</param>
     /// <returns>表达式上下文</returns>
-    public static ExpressionContext Create(AopMethodInvocation invocation, object? result, bool hasResult)
+    public static ExpressionContext Create(AspectContext context, object? result, bool hasResult)
     {
-        ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(context);
 
-        ExpressionContext context = new(new ExpressionRoot(invocation.Method.Name, invocation.Method, invocation.Target, invocation.Arguments));
+        ExpressionContext expressionContext = new(new ExpressionRoot(context.Method.Name, context.Method, context.TargetObject, context.Arguments));
 
-        for (int index = 0; index < invocation.Arguments.Length; index++)
+        for (int index = 0; index < context.Arguments.Length; index++)
         {
-            context.SetVariable("p" + index, invocation.Arguments[index]);
-            context.SetVariable("a" + index, invocation.Arguments[index]);
+            expressionContext.SetVariable("p" + index, context.Arguments[index]);
+            expressionContext.SetVariable("a" + index, context.Arguments[index]);
         }
 
-        foreach (KeyValuePair<string, object?> pair in invocation.ArgumentsDictionary)
+        foreach (KeyValuePair<string, object?> pair in context.ArgumentsDictionary)
         {
-            context.SetVariable(pair.Key, pair.Value);
+            expressionContext.SetVariable(pair.Key, pair.Value);
         }
 
         if (hasResult)
         {
-            context.SetVariable("result", result);
+            expressionContext.SetVariable("result", result);
         }
 
-        return context;
+        return expressionContext;
     }
 }

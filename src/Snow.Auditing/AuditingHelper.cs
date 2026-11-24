@@ -102,15 +102,15 @@ public sealed class AuditingHelper : IAuditingHelper
     }
 
     /// <inheritdoc />
-    public AuditLogActionInfo CreateAuditLogActionInfo(AopMethodInvocation invocation)
+    public AuditLogActionInfo CreateAuditLogActionInfo(AspectContext context)
     {
-        ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(context);
 
         return new AuditLogActionInfo
         {
-            ServiceName = invocation.Method.DeclaringType?.FullName,
-            MethodName = invocation.Method.Name,
-            Parameters = SerializeParameters(invocation),
+            ServiceName = context.Method.DeclaringType?.FullName,
+            MethodName = context.Method.Name,
+            Parameters = SerializeParameters(context),
             ExecutionTime = _clock.Now,
         };
     }
@@ -158,18 +158,18 @@ public sealed class AuditingHelper : IAuditingHelper
         return false;
     }
 
-    private string? SerializeParameters(AopMethodInvocation invocation)
+    private string? SerializeParameters(AspectContext context)
     {
-        ParameterInfo[] parameters = invocation.Method.GetParameters();
+        ParameterInfo[] parameters = context.Method.GetParameters();
         if (parameters.Length == 0)
         {
             return null;
         }
 
         Dictionary<string, object?> arguments = new(parameters.Length, StringComparer.Ordinal);
-        for (int index = 0; index < parameters.Length && index < invocation.Arguments.Length; index++)
+        for (int index = 0; index < parameters.Length && index < context.Arguments.Length; index++)
         {
-            object? value = invocation.Arguments[index];
+            object? value = context.Arguments[index];
 
             // 取消令牌没有审计价值, 序列化出来也是一串内部字段
             if (value is CancellationToken)

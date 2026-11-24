@@ -20,7 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Snow.Aop\Snow.Aop.csproj" />
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\Snow.Domain\Snow.Domain.csproj" />
     <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />

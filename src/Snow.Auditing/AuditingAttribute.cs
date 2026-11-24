@@ -15,23 +15,23 @@ namespace Snow.Auditing;
 /// <para>捕获异常后照常抛出, 不影响业务语义; 保存失败由 <see cref="IAuditingManager"/> 吞掉并记错误日志。</para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
-public sealed class AuditingAttribute : InterceptorAttribute
+public sealed class AuditingAttribute : SnowInterceptorAttribute
 {
     /// <inheritdoc />
-    public override async Task InvokeAsync(AopMethodInvocation invocation)
+    public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(context);
 
-        IAuditingHelper helper = invocation.ServiceProvider.GetRequiredService<IAuditingHelper>();
-        if (!helper.ShouldSaveAudit(invocation.Method))
+        IAuditingHelper helper = context.ServiceProvider.GetRequiredService<IAuditingHelper>();
+        if (!helper.ShouldSaveAudit(context.Method))
         {
-            await invocation.ProceedAsync().ConfigureAwait(false);
+            await next(context, cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        IAuditingManager auditingManager = invocation.ServiceProvider.GetRequiredService<IAuditingManager>();
+        IAuditingManager auditingManager = context.ServiceProvider.GetRequiredService<IAuditingManager>();
         AuditLogInfo logInfo = helper.CreateAuditLogInfo();
-        AuditLogActionInfo actionInfo = helper.CreateAuditLogActionInfo(invocation);
+        AuditLogActionInfo actionInfo = helper.CreateAuditLogActionInfo(context);
         logInfo.Actions.Add(actionInfo);
 
         using IAuditLogScope scope = auditingManager.BeginScope(logInfo);
@@ -39,7 +39,7 @@ public sealed class AuditingAttribute : InterceptorAttribute
         Stopwatch stopwatch = Stopwatch.StartNew();
         try
         {
-            await invocation.ProceedAsync().ConfigureAwait(false);
+            await next(context, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -56,7 +56,7 @@ public sealed class AuditingAttribute : InterceptorAttribute
             // 状态码在方法执行完后才确定, 这里再刷一次 HTTP 字段
             helper.FillHttpContext(logInfo);
 
-            await auditingManager.SaveAsync().ConfigureAwait(false);
+            await auditingManager.SaveAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

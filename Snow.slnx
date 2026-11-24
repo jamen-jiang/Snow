@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Snow/Snow.csproj" />
-    <Project Path="src/Snow.Aop/Snow.Aop.csproj" />
     <Project Path="src/Snow.Aop.Castle/Snow.Aop.Castle.csproj" />
     <Project Path="src/Snow.Application/Snow.Application.csproj" />
     <Project Path="src/Snow.AspNetCore/Snow.AspNetCore.csproj" />

@@ -9,7 +9,7 @@ namespace Snow.Uow;
 /// <para>用法: <c>[Transactional] public virtual async Task CreateAsync(...)</c> 或标在接口实现类上。</para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
-public sealed class TransactionalAttribute : InterceptorAttribute
+public sealed class TransactionalAttribute : SnowInterceptorAttribute
 {
     /// <summary>
     /// 是否开启数据库事务(默认开启); 设为 false 表示只借用工作单元做统一保存, 不包事务
@@ -22,11 +22,11 @@ public sealed class TransactionalAttribute : InterceptorAttribute
     public bool RequiresNew { get; set; }
 
     /// <inheritdoc />
-    public override async Task InvokeAsync(AopMethodInvocation invocation)
+    public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(invocation);
+        ArgumentNullException.ThrowIfNull(context);
 
-        IUnitOfWorkManager unitOfWorkManager = invocation.ServiceProvider.GetRequiredService<IUnitOfWorkManager>();
+        IUnitOfWorkManager unitOfWorkManager = context.ServiceProvider.GetRequiredService<IUnitOfWorkManager>();
 
         IUnitOfWork? parent = unitOfWorkManager.Current;
         bool ownsUnitOfWork = parent is null || !parent.IsActive || RequiresNew;
@@ -39,7 +39,7 @@ public sealed class TransactionalAttribute : InterceptorAttribute
 
         try
         {
-            await invocation.ProceedAsync();
+            await next(context, cancellationToken);
 
             // 只有最外层提交: 嵌套调用把提交权交给调用方
             if (ownsUnitOfWork)
@@ -65,7 +65,7 @@ public sealed class TransactionalAttribute : InterceptorAttribute
                 // 强制新开时把环境工作单元还给外层
                 if (parent is not null)
                 {
-                    invocation.ServiceProvider.GetService<IUnitOfWorkAccessor>()?.SetUnitOfWork(parent);
+                    context.ServiceProvider.GetService<IUnitOfWorkAccessor>()?.SetUnitOfWork(parent);
                 }
             }
         }
