@@ -18,6 +18,7 @@ public sealed class OptionsTokenKeyProvider : ITokenKeyProvider
     private TokenKeySet? _cached;
 
     /// <inheritdoc />
+    /// <param name="options">选项</param>
     public TokenKeySet Resolve(SnowAuthenticationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);

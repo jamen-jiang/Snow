@@ -10,6 +10,7 @@ public abstract class DomainEvent : IDomainEvent
     /// <summary>
     /// 初始化领域事件,记录来源聚合根、事件类型与当前时间
     /// </summary>
+    /// <param name="aggregateRoot">聚合根</param>
     protected DomainEvent(IAggregateRoot aggregateRoot)
     {
         AggregateRoot = aggregateRoot;

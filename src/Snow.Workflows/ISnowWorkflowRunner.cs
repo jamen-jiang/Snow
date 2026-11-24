@@ -31,6 +31,9 @@ public static class SnowWorkflowRunnerExtensions
     /// <summary>
     /// 启动一个以代码定义的工作流类型。
     /// </summary>
+    /// <param name="runner">工作流运行器</param>
+    /// <param name="input">输入, 可为 null</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public static Task<SnowWorkflowResult> StartAsync<TWorkflow>(this ISnowWorkflowRunner runner, IDictionary<string, object?>? input = null, CancellationToken cancellationToken = default)
         where TWorkflow : class
         => runner.StartAsync(typeof(TWorkflow), input, cancellationToken);

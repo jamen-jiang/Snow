@@ -64,6 +64,9 @@ public sealed class SnowExceptionHandlingMiddleware
     /// <summary>
     /// 记日志, 但日志系统本身出问题(比如没权限写 Windows 事件日志)不能影响错误响应
     /// </summary>
+    /// <param name="exception">异常</param>
+    /// <param name="error">错误信息, 可为 null</param>
+    /// <param name="template">日志模板</param>
     private void TryLog(Exception exception, SnowRemoteServiceErrorInfo? error, string template)
     {
         try

@@ -68,6 +68,7 @@ internal sealed class AopInterceptorAdapter : IInterceptor
     }
 
     /// <inheritdoc />
+    /// <param name="invocation">Castle 调用信息</param>
     public void Intercept(IInvocation invocation)
     {
         MethodInfo method = invocation.MethodInvocationTarget ?? invocation.Method;

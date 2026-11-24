@@ -54,20 +54,28 @@ public sealed class NewtonsoftJsonSerializer : ISnowJsonSerializer
     public JsonSerializerSettings Settings => _settings;
 
     /// <inheritdoc />
+    /// <param name="value">值</param>
+    /// <param name="type">类型, 可为 null</param>
     public string Serialize(object? value, Type? type = null)
         => JsonConvert.SerializeObject(value, type ?? value?.GetType() ?? typeof(object), _settings);
 
     /// <inheritdoc />
+    /// <param name="value">值</param>
+    /// <param name="type">类型, 可为 null</param>
     public byte[] SerializeToUtf8Bytes(object? value, Type? type = null)
         => Encoding.UTF8.GetBytes(Serialize(value, type));
 
     /// <inheritdoc />
+    /// <param name="json">JSON 字符串</param>
     public T? Deserialize<T>(string json) => JsonConvert.DeserializeObject<T>(json, _settings);
 
     /// <inheritdoc />
+    /// <param name="json">JSON 字符串</param>
+    /// <param name="type">类型, 可为 null</param>
     public object? Deserialize(string json, Type type) => JsonConvert.DeserializeObject(json, type, _settings);
 
     /// <inheritdoc />
+    /// <param name="stream">流</param>
     public T? Deserialize<T>(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);

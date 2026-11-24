@@ -17,6 +17,9 @@ namespace Snow.EventBus.EventHandlers;
 public sealed class TaskWhenAllEventHandlerPublisher : IEventHandlerPublisher
 {
     /// <inheritdoc />
+    /// <param name="handlerExecutors">事件处理器集合</param>
+    /// <param name="event">事件对象</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task PublishAsync(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event,
         CancellationToken cancellationToken)
     {

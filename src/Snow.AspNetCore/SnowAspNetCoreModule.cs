@@ -7,9 +7,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Snow.AspNetCore.Authorization;
 using Snow.AspNetCore.ExceptionHandling;
 using Snow.Authorization;
 using Snow.DependencyInjection;
+using Snow.ExceptionHandling;
 using Snow.Modularity;
 using Snow.Security;
 using Snow.Tracing;
@@ -63,6 +65,7 @@ public sealed class SnowAspNetCoreModule : SnowModule
     }
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -84,6 +87,10 @@ public sealed class SnowAspNetCoreModule : SnowModule
         // 异常 → 错误信封的转换器: 由 UseSnowExceptionHandling() 中间件消费(对应 ABP 的 AspNetCore.ExceptionHandling 子模块)
         context.Services.AddSingleton<IExceptionToErrorInfoConverter, DefaultExceptionToErrorInfoConverter>();
 
+        // 异常通知器 / 状态码解析器 / 授权异常处理器均由 [TransientService] 注解约定注册, 这里只登记对应的选项对象
+        context.Services.AddOptions<SnowExceptionHttpStatusCodeOptions>();
+        context.Services.AddOptions<SnowExceptionHandlingOptions>();
+
         if (context.Configuration.GetSection("ExceptionHandling").Exists())
         {
             Configure<SnowExceptionHandlingOptions>(context.Configuration.GetSection("ExceptionHandling"));
@@ -91,6 +98,7 @@ public sealed class SnowAspNetCoreModule : SnowModule
     }
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void OnApplicationInitialization(ApplicationInitializationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

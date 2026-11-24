@@ -20,4 +20,14 @@ public sealed class SnowJsonOptions
     /// 是否允许注释与尾随逗号, 默认允许
     /// </summary>
     public bool AllowComments { get; set; } = true;
+
+    /// <summary>
+    /// 输入日期时间格式集合, 为空时按 ISO/系统默认解析
+    /// </summary>
+    public List<string> InputDateTimeFormats { get; set; } = new();
+
+    /// <summary>
+    /// 输出日期时间格式, 为空时输出 ISO 格式
+    /// </summary>
+    public string? OutputDateTimeFormat { get; set; }
 }

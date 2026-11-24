@@ -21,6 +21,7 @@ public abstract class RemoteDynamicClaimsPrincipalContributorBase<TContributor, 
     protected virtual bool LogExceptionDetails => true;
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public virtual async Task ContributeAsync(SnowClaimsPrincipalContributorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

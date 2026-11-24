@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
+using Snow.AspNetCore.ExceptionHandling;
 using Snow.AspNetCore.Filters;
+using Snow.DependencyInjection;
 
 namespace Snow.AspNetCore.Mvc;
 
@@ -15,42 +17,52 @@ namespace Snow.AspNetCore.Mvc;
 /// <para>实现 <see cref="ISnowFilter"/>: 控制器标了 <see cref="DisableSnowFeaturesAttribute"/> 时由
 /// <c>SnowMvcActionDescriptorProvider</c> 在动作描述符定型时把它整个摘掉, 请求期不做判断。</para>
 /// </summary>
+[TransientService]
 public sealed class SnowModelStateInvalidFilter : IActionFilter, ISnowFilter
 {
-    private readonly SnowMvcOptions _options;
+    private readonly SnowAspNetCoreMvcOptions _options;
 
     /// <summary>
     /// 构造器
     /// </summary>
     /// <param name="options">MVC 选项</param>
-    public SnowModelStateInvalidFilter(IOptions<SnowMvcOptions> options)
+    public SnowModelStateInvalidFilter(IOptions<SnowAspNetCoreMvcOptions> options)
     {
         _options = options.Value;
     }
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public void OnActionExecuting(ActionExecutingContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!_options.AutoModelStateValidation || context.ModelState.IsValid)
+        if (!_options.AutoModelValidation || context.ModelState.IsValid)
         {
             return;
         }
 
-        IDictionary<string, string[]> errors = context.ModelState
+        Dictionary<string, string[]> errors = context.ModelState
             .Where(entry => entry.Value is { Errors.Count: > 0 })
             .ToDictionary(
                 entry => entry.Key,
                 entry => entry.Value!.Errors.Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "参数不合法" : error.ErrorMessage).ToArray());
 
-        context.Result = new ObjectResult(SnowApiResponse.Fail("ValidationError", "请求参数校验失败", validationErrors: errors))
+        SnowRemoteServiceErrorInfo errorInfo = new()
+        {
+            Code = "ValidationError",
+            Message = "请求参数校验失败",
+            ValidationErrors = errors,
+        };
+
+        context.Result = new ObjectResult(new SnowRemoteServiceErrorResponse(errorInfo))
         {
             StatusCode = StatusCodes.Status400BadRequest,
         };
     }
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public void OnActionExecuted(ActionExecutedContext context)
     {
     }

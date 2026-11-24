@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\Snow.AspNetCore\Snow.AspNetCore.csproj" />
+    <ProjectReference Include="..\Snow.Json\Snow.Json.csproj" />
     <ProjectReference Include="..\Snow.Validation\Snow.Validation.csproj" />
   </ItemGroup>
 

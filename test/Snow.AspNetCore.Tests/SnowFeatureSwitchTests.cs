@@ -119,7 +119,7 @@ public class SnowFeatureSwitchTests
         ActionExecutingContext context = CreateActionExecutingContext(typeof(MarkedController));
         context.ModelState.AddModelError("Name", "必填");
 
-        new SnowModelStateInvalidFilter(Microsoft.Extensions.Options.Options.Create(new SnowMvcOptions())).OnActionExecuting(context);
+        new SnowModelStateInvalidFilter(Microsoft.Extensions.Options.Options.Create(new SnowAspNetCoreMvcOptions())).OnActionExecuting(context);
 
         Assert.NotNull(context.Result);
     }

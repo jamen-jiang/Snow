@@ -5,12 +5,18 @@ namespace Snow.Emailing;
 /// </summary>
 public enum EmailPriority
 {
-    /// <summary>低</summary>
+    /// <summary>
+    /// 低
+    /// </summary>
     Low = 0,
 
-    /// <summary>普通</summary>
+    /// <summary>
+    /// 普通
+    /// </summary>
     Normal = 1,
 
-    /// <summary>高</summary>
+    /// <summary>
+    /// 高
+    /// </summary>
     High = 2
 }

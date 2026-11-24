@@ -12,6 +12,7 @@ namespace Snow.Emailing.MailKit;
 public sealed class SnowEmailingMailKitModule : SnowModule
 {
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

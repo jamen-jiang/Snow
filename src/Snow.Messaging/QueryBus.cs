@@ -27,6 +27,8 @@ public class QueryBus : IQueryBus
     }
 
     /// <inheritdoc />
+    /// <param name="query">查询对象</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<TResponse> QueryAsync<TResponse>(IQuery<TResponse> query, CancellationToken cancellationToken = default)
     {
         if (query == null)

@@ -16,7 +16,7 @@ namespace Snow.OpenApi;
 /// OpenAPI 文档模块: 用官方生成器产出文档, Scalar 提供调试界面
 /// <para>对应 ABP 的 Volo.Abp.Swashbuckle, 只是把 Swashbuckle 换成 Microsoft.AspNetCore.OpenApi + Scalar。</para>
 /// </summary>
-[DependsOn(typeof(Snow.AspNetCore.Mvc.SnowMvcModule))]
+[DependsOn(typeof(Snow.AspNetCore.Mvc.SnowAspNetCoreMvcModule))]
 public sealed class SnowOpenApiModule : SnowModule
 {
 

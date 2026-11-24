@@ -12,17 +12,28 @@ public sealed class NullObjectMapper : IObjectMapper
     private const string Message = "对象映射未执行: 当前是静默实现, 请引入 Snow.ObjectMapping.Mapster 包。";
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
     public TDestination? Map<TDestination>(object? source) => throw new SnowObjectMappingException(Message);
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
     public TDestination? Map<TSource, TDestination>(TSource? source) => throw new SnowObjectMappingException(Message);
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
+    /// <param name="destination">目标流</param>
     public TDestination? Map<TSource, TDestination>(TSource? source, TDestination? destination) => throw new SnowObjectMappingException(Message);
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
+    /// <param name="sourceType">源类型</param>
+    /// <param name="destinationType">目标类型</param>
     public object? Map(object? source, Type sourceType, Type destinationType) => throw new SnowObjectMappingException(Message);
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
+    /// <param name="destination">目标流</param>
+    /// <param name="sourceType">源类型</param>
+    /// <param name="destinationType">目标类型</param>
     public object? Map(object? source, object? destination, Type sourceType, Type destinationType) => throw new SnowObjectMappingException(Message);
 }

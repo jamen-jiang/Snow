@@ -15,7 +15,7 @@ public static class SnowMvcServiceCollectionExtensions
     /// <param name="services">服务集合</param>
     /// <param name="configure">选项配置动作</param>
     /// <returns>服务集合本身, 便于链式调用</returns>
-    public static IServiceCollection AddSnowMvc(this IServiceCollection services, Action<SnowMvcOptions> configure)
+    public static IServiceCollection AddSnowMvc(this IServiceCollection services, Action<SnowAspNetCoreMvcOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);

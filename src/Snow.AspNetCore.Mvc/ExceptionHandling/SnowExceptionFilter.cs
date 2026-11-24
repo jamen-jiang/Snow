@@ -1,110 +1,146 @@
 using System;
-using System.Collections.Generic;
+using System.Text;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Snow;
+using Snow.AspNetCore.ExceptionHandling;
 using Snow.AspNetCore.Filters;
-using Snow.Exceptions;
-using Snow.Logging;
-using Snow.Validation;
+using Snow.Authorization;
+using Snow.DependencyInjection;
+using Snow.ExceptionHandling;
+using Snow.Http;
+using Snow.Json;
 
-namespace Snow.AspNetCore.Mvc;
+namespace Snow.AspNetCore.Mvc.ExceptionHandling;
 
 /// <summary>
-/// 把异常翻译成统一错误响应与合适的 HTTP 状态码的过滤器
-/// <para>业务异常(<see cref="BusinessException"/> 及其子类 <see cref="UserFriendlyException"/>)与校验异常按消息返回;
-/// 其余异常默认只回"服务器内部错误", 细节靠日志。日志级别取 <see cref="IHasLogLevel"/>。</para>
-/// <para>实现 <see cref="ISnowFilter"/>: 控制器标了 <see cref="DisableSnowFeaturesAttribute"/> 时由
-/// <c>SnowMvcActionDescriptorProvider</c> 在动作描述符定型时把它整个摘掉, 请求期不做判断。</para>
+/// 异常过滤器(对应 ABP 的 <c>AbpExceptionFilter</c>): 把控制器抛出的异常翻译成统一的远端错误响应。
+/// <para>流程与 ABP 一致: <see cref="ShouldHandleException"/> 判定是否接管 → <see cref="HandleAndWrapException"/> 通知订阅者、
+/// 设置错误格式响应头与状态码、把结果换成 <see cref="SnowRemoteServiceErrorResponse"/>; 授权异常交给授权异常处理器。</para>
 /// </summary>
-public sealed class SnowExceptionFilter : IExceptionFilter, ISnowFilter
+[TransientService]
+public class SnowExceptionFilter : IAsyncExceptionFilter, ISnowFilter
 {
-    private readonly SnowMvcOptions _options;
-    private readonly ILogger<SnowExceptionFilter> _logger;
-
-    /// <summary>
-    /// 构造器
-    /// </summary>
-    /// <param name="options">MVC 选项</param>
-    /// <param name="logger">日志</param>
-    public SnowExceptionFilter(IOptions<SnowMvcOptions> options, ILogger<SnowExceptionFilter> logger)
+    /// <inheritdoc />
+    public virtual async Task OnExceptionAsync(ExceptionContext context)
     {
-        _options = options.Value;
-        _logger = logger;
+        if (!ShouldHandleException(context))
+        {
+            LogException(context, out _);
+            return;
+        }
+
+        await HandleAndWrapException(context);
     }
 
-    /// <inheritdoc />
-    public void OnException(ExceptionContext context)
+    /// <summary>
+    /// 判断本过滤器是否应接管这个异常
+    /// </summary>
+    /// <param name="context">异常上下文</param>
+    protected virtual bool ShouldHandleException(ExceptionContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
-
-        Exception exception = context.Exception;
-        (int statusCode, string code, string message) = Translate(exception);
-
-        LogLevel level = ResolveLogLevel(exception, statusCode);
-        if (level >= LogLevel.Error)
+        if (context.ExceptionHandled)
         {
-            _logger.LogError(exception, "请求处理失败: {Message}", exception.Message);
+            return false;
+        }
+
+        if (context.ActionDescriptor.IsControllerAction() && context.ActionDescriptor.HasObjectResult())
+        {
+            return true;
+        }
+
+        if (context.HttpContext.Request.CanAccept(MimeTypes.Application.Json))
+        {
+            return true;
+        }
+
+        if (context.HttpContext.Request.IsAjax())
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 通知订阅者并把异常包装成统一错误响应
+    /// </summary>
+    /// <param name="context">异常上下文</param>
+    protected virtual async Task HandleAndWrapException(ExceptionContext context)
+    {
+        LogException(context, out var remoteServiceErrorInfo);
+
+        await context.HttpContext.RequestServices
+            .GetRequiredService<IExceptionNotifier>()
+            .NotifyAsync(new ExceptionNotificationContext(context.Exception));
+
+        if (context.Exception is SnowAuthorizationException)
+        {
+            await context.HttpContext.RequestServices
+                .GetRequiredService<ISnowAuthorizationExceptionHandler>()
+                .HandleAsync(context.Exception.As<SnowAuthorizationException>(), context.HttpContext);
         }
         else
         {
-            _logger.Log(level, "请求被拒绝({StatusCode}): {Message}", statusCode, exception.Message);
+            if (!context.HttpContext.Response.HasStarted)
+            {
+                context.HttpContext.Response.Headers.Append(SnowHttpConsts.SnowErrorFormat, "true");
+                context.HttpContext.Response.StatusCode = (int)context.HttpContext.RequestServices
+                    .GetRequiredService<IHttpExceptionStatusCodeFinder>()
+                    .GetStatusCode(context.HttpContext, context.Exception);
+            }
+            else
+            {
+                var logger = context.HttpContext.RequestServices.GetService<ILogger<SnowExceptionFilter>>()
+                    ?? NullLogger<SnowExceptionFilter>.Instance;
+                logger.LogWarning("HTTP response has already started, cannot set headers and status code!");
+            }
+
+            context.Result = new ObjectResult(new SnowRemoteServiceErrorResponse(remoteServiceErrorInfo));
         }
 
-        string? details = _options.IncludeExceptionMessage ? exception.ToString() : null;
-
-        context.Result = new ObjectResult(SnowApiResponse.Fail(code, message, details))
-        {
-            StatusCode = statusCode,
-        };
         context.ExceptionHandled = true;
     }
 
-    private static LogLevel ResolveLogLevel(Exception exception, int statusCode) => exception switch
+    /// <summary>
+    /// 转换异常并记录日志
+    /// </summary>
+    /// <param name="context">异常上下文</param>
+    /// <param name="remoteServiceErrorInfo">转换出的远端错误信息</param>
+    protected virtual void LogException(ExceptionContext context, out SnowRemoteServiceErrorInfo remoteServiceErrorInfo)
     {
-        IHasLogLevel hasLogLevel => hasLogLevel.LogLevel,
-        _ => statusCode >= StatusCodes.Status500InternalServerError ? LogLevel.Error : LogLevel.Warning,
-    };
+        var exceptionHandlingOptions = context.HttpContext.RequestServices
+            .GetRequiredService<IOptions<SnowExceptionHandlingOptions>>()
+            .Value;
+        var exceptionToErrorInfoConverter = context.HttpContext.RequestServices
+            .GetRequiredService<IExceptionToErrorInfoConverter>();
 
-    private (int StatusCode, string Code, string Message) Translate(Exception exception)
-    {
-        switch (exception)
+        remoteServiceErrorInfo = exceptionToErrorInfoConverter.Convert(context.Exception, options =>
         {
-            // 自带状态码的异常(如领域层的 EntityNotFoundException 声明 404)优先于下面的种类兜底
-            case IHasHttpStatusCode hasStatusCode:
-                return (hasStatusCode.HttpStatusCode, (exception as IHasErrorCode)?.Code ?? "NotFound", exception.Message);
+            options.SendExceptionsDetailsToClients = exceptionHandlingOptions.SendExceptionsDetailsToClients;
+            options.SendStackTraceToClients = exceptionHandlingOptions.SendStackTraceToClients;
+            options.SendExceptionDataToClientTypes = exceptionHandlingOptions.SendExceptionDataToClientTypes;
+        });
 
-            case SnowValidationException validation:
-                return (StatusCodes.Status400BadRequest, "ValidationFailed", validation.Message);
+        var sb = new StringBuilder();
+        sb.AppendLine($"---------- {nameof(SnowRemoteServiceErrorInfo)} ----------");
+        sb.AppendLine(context.HttpContext.RequestServices
+            .GetRequiredService<ISnowJsonSerializer>()
+            .Serialize(remoteServiceErrorInfo, indented: true));
 
-            case UserFriendlyException friendly:
-                return (StatusCodes.Status400BadRequest, friendly.Code ?? "BusinessError", friendly.Message);
-
-            case BusinessException business:
-                return (StatusCodes.Status400BadRequest, business.Code ?? "BusinessError", business.Message);
-
-            // 只实现 IBusinessException 标记接口的第三方业务异常: 同样按 400 处理
-            case IBusinessException businessMarker:
-                return (StatusCodes.Status400BadRequest, businessMarker.Code ?? "BusinessError", exception.Message);
-
-            case UnauthorizedAccessException:
-                return (StatusCodes.Status403Forbidden, "Forbidden", "没有访问该资源的权限");
-
-            case KeyNotFoundException:
-                return (StatusCodes.Status404NotFound, "NotFound", exception.Message);
-
-            case NotImplementedException:
-                return (StatusCodes.Status501NotImplemented, "NotImplemented", "该功能尚未实现");
-
-            case ArgumentException or InvalidOperationException:
-                return (StatusCodes.Status400BadRequest, "InvalidArgument", exception.Message);
-
-            default:
-                return (StatusCodes.Status500InternalServerError, "InternalError",
-                    _options.IncludeExceptionMessage ? exception.Message : "服务器内部错误");
+        if (exceptionHandlingOptions.ShouldLogException(context.Exception))
+        {
+            var logger = context.HttpContext.RequestServices.GetService<ILogger<SnowExceptionFilter>>()
+                ?? NullLogger<SnowExceptionFilter>.Instance;
+            var logLevel = context.Exception.GetLogLevel();
+            logger.LogWithLevel(logLevel, sb.ToString());
+            logger.LogException(context.Exception, logLevel);
         }
     }
 }

@@ -42,7 +42,7 @@ namespace Snow.Sample.Web;
     typeof(SnowAopModule),
     typeof(SnowAspNetCoreModule),
     typeof(SnowAspNetCoreMultiTenancyModule),
-    typeof(SnowMvcModule),
+    typeof(SnowAspNetCoreMvcModule),
     typeof(SnowRateLimitingModule),
     typeof(SnowAspNetCoreSerilogModule),
     typeof(SnowSignalRModule),
@@ -79,6 +79,7 @@ namespace Snow.Sample.Web;
 public sealed class SampleModule : SnowModule
 {
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void OnApplicationInitialization(ApplicationInitializationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

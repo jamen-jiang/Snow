@@ -21,6 +21,7 @@ public sealed class MapsterObjectMapper : IObjectMapper
     }
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
     public TDestination? Map<TDestination>(object? source)
     {
         if (source is null)
@@ -32,6 +33,7 @@ public sealed class MapsterObjectMapper : IObjectMapper
     }
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
     public TDestination? Map<TSource, TDestination>(TSource? source)
     {
         if (source is null)
@@ -43,6 +45,8 @@ public sealed class MapsterObjectMapper : IObjectMapper
     }
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
+    /// <param name="destination">目标流</param>
     public TDestination? Map<TSource, TDestination>(TSource? source, TDestination? destination)
     {
         if (source is null)
@@ -56,6 +60,9 @@ public sealed class MapsterObjectMapper : IObjectMapper
     }
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
+    /// <param name="sourceType">源类型</param>
+    /// <param name="destinationType">目标类型</param>
     public object? Map(object? source, Type sourceType, Type destinationType)
     {
         ArgumentNullException.ThrowIfNull(sourceType);
@@ -70,6 +77,10 @@ public sealed class MapsterObjectMapper : IObjectMapper
     }
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
+    /// <param name="destination">目标流</param>
+    /// <param name="sourceType">源类型</param>
+    /// <param name="destinationType">目标类型</param>
     public object? Map(object? source, object? destination, Type sourceType, Type destinationType)
     {
         ArgumentNullException.ThrowIfNull(sourceType);

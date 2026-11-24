@@ -30,6 +30,7 @@ public class SnowClaimsTransformation : IClaimsTransformation
     }
 
     /// <inheritdoc />
+    /// <param name="principal">当前主体</param>
     public virtual Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
     {
         ArgumentNullException.ThrowIfNull(principal);

@@ -34,6 +34,10 @@ public interface ITokenService
     /// <summary>
     /// 登录: 只给用户Id, 账号与名称默认取用户Id(附加声明里若带账号/名称则以它为准)
     /// </summary>
+    /// <param name="userId">用户 ID</param>
+    /// <param name="claims">附加声明, 可为 null</param>
+    /// <param name="clientInfo">客户端信息, 可为 null</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<string> LoginAsync(
         long userId,
         IEnumerable<KeyValuePair<string, string>>? claims = null,
@@ -45,11 +49,15 @@ public interface ITokenService
     /// 校验令牌: 签名、签发者、受众都通过且会话仍在有效期内, 返回主体; 否则 null
     /// <para>每次请求一次缓存读, 读的是会话键; 校验通过就写回续期(顺带刷新缓存键 TTL), 所以每次访问都有一次写。</para>
     /// </summary>
+    /// <param name="token">令牌</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<ClaimsPrincipal?> ValidateAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 登出: 删掉当前令牌的会话。重复调用无副作用
     /// </summary>
+    /// <param name="token">令牌</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task LogoutAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -63,38 +71,52 @@ public interface ITokenService
     /// <summary>
     /// 是否已登录(令牌有效且会话存在)
     /// </summary>
+    /// <param name="token">令牌</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<bool> IsLoginAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 取登录Id, 未登录或已过期返回 null
     /// </summary>
+    /// <param name="token">令牌</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<long?> GetLoginIdAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 取会话, 未登录返回 null
     /// </summary>
+    /// <param name="token">令牌</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<TokenSession?> GetSessionAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 取令牌信息, 无效返回 null
     /// </summary>
+    /// <param name="token">令牌</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<TokenInfo?> GetTokenInfoAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 取某账号的全部会话(设备列表: jti、登录时间、当前到期时间、IP、设备)
     /// </summary>
+    /// <param name="userId">用户 ID</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<IReadOnlyList<TokenSession>> GetSessionsAsync(long userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 踢人: 删掉该账号全部会话, 现有令牌立即失效
     /// <para>改密码、改角色、被管理员禁用等场景都应调用它, 否则旧令牌会靠滑动续期一直有效下去。</para>
     /// </summary>
+    /// <param name="userId">用户 ID</param>
+    /// <param name="cancellationToken">取消令牌</param>
     /// <returns>被踢下线的会话数量</returns>
     Task<int> KickoutAsync(long userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 查在线数量
     /// </summary>
+    /// <param name="userId">用户 ID</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<int> GetOnlineCountAsync(long userId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -109,15 +131,21 @@ public interface ITokenService
     /// <summary>
     /// 解除封禁(已删掉的会话不会因此复活, 需要重新登录)
     /// </summary>
+    /// <param name="userId">用户 ID</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task EnableAsync(long userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 是否处于封禁中
     /// </summary>
+    /// <param name="userId">用户 ID</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<bool> IsDisabledAsync(long userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 剩余封禁时长: 未封禁 null, 永久 <see cref="TimeSpan.MaxValue"/>
     /// </summary>
+    /// <param name="userId">用户 ID</param>
+    /// <param name="cancellationToken">取消令牌</param>
     Task<TimeSpan?> GetDisableRemainingAsync(long userId, CancellationToken cancellationToken = default);
 }

@@ -12,6 +12,7 @@ public static class EnumExtensions
     /// <summary>
     /// 获取枚举成员的描述:取 Description 特性值,没有时退回成员名
     /// </summary>
+    /// <param name="value">值</param>
     public static string GetDescription<TEnum>(this TEnum value) where TEnum : struct, Enum
     {
         var field = typeof(TEnum).GetField(value.ToString(), BindingFlags.Public | BindingFlags.Static);

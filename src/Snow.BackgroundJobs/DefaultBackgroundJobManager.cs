@@ -33,18 +33,27 @@ public sealed class DefaultBackgroundJobManager : IBackgroundJobManager
     }
 
     /// <inheritdoc />
+    /// <param name="job">作业表达式</param>
+    /// <param name="delay">延迟时间, 可为 null</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<string> EnqueueAsync(Expression<Action> job, TimeSpan? delay = null, CancellationToken cancellationToken = default)
     {
         return EnqueueCoreAsync(job, delay, cancellationToken);
     }
 
     /// <inheritdoc />
+    /// <param name="job">作业表达式</param>
+    /// <param name="delay">延迟时间, 可为 null</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<string> EnqueueAsync(Expression<Func<Task>> job, TimeSpan? delay = null, CancellationToken cancellationToken = default)
     {
         return EnqueueCoreAsync(job, delay, cancellationToken);
     }
 
     /// <inheritdoc />
+    /// <param name="job">作业表达式</param>
+    /// <param name="delay">延迟时间, 可为 null</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<string> EnqueueAsync<TService>(Expression<Action<TService>> job, TimeSpan? delay = null, CancellationToken cancellationToken = default)
         where TService : class
     {
@@ -52,6 +61,9 @@ public sealed class DefaultBackgroundJobManager : IBackgroundJobManager
     }
 
     /// <inheritdoc />
+    /// <param name="job">作业表达式</param>
+    /// <param name="delay">延迟时间, 可为 null</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<string> EnqueueAsync<TService>(Expression<Func<TService, Task>> job, TimeSpan? delay = null, CancellationToken cancellationToken = default)
         where TService : class
     {
@@ -98,6 +110,7 @@ public sealed class DefaultBackgroundJobManager : IBackgroundJobManager
     /// 把表达式拆成可持久化的"服务类型 + 方法 + 参数值"
     /// <para>参数在入队这一刻求值: 之后闭包里的变量再变也不影响已入队的任务。</para>
     /// </summary>
+    /// <param name="job">作业表达式</param>
     private static (Type ServiceType, MethodInfo Method, object?[] Arguments) Resolve(LambdaExpression job)
     {
         if (job.Body is not MethodCallExpression call)

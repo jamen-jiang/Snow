@@ -29,6 +29,7 @@ public class CorrelationIdProvider : ICorrelationIdProvider
     }
 
     /// <inheritdoc />
+    /// <param name="correlationId">关联 ID</param>
     public virtual IDisposable Change(string? correlationId)
     {
         string? parent = Get();

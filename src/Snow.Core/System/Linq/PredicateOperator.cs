@@ -7,13 +7,19 @@ namespace System.Linq;
 
 // 以下代码取自 https://github.com/scottksmith95/LINQKit 项目。
 
-/// <summary> 谓词组合方式 </summary>
+/// <summary>
+/// 谓词组合方式
+/// </summary>
 public enum PredicateOperator
 {
-    /// <summary> 或 </summary>
+    /// <summary>
+    /// 或
+    /// </summary>
     Or,
 
-    /// <summary> 与 </summary>
+    /// <summary>
+    /// 与
+    /// </summary>
     And
 }
 
@@ -48,19 +54,25 @@ public static class PredicateBuilder
         }
     }
 
-    /// <summary> 创建一个还没开始的表达式容器, 可以带上初始表达式。 </summary>
+    /// <summary>
+    /// 创建一个还没开始的表达式容器, 可以带上初始表达式。
+    /// </summary>
     public static ExpressionStarter<T> New<T>(Expression<Func<T, bool>>? expr = null)
     {
         return new ExpressionStarter<T>(expr);
     }
 
-    /// <summary> 创建一个表达式容器, 并指定在表达式还没开始时用恒真还是恒假的占位表达式。 </summary>
+    /// <summary>
+    /// 创建一个表达式容器, 并指定在表达式还没开始时用恒真还是恒假的占位表达式。
+    /// </summary>
     public static ExpressionStarter<T> New<T>(bool defaultExpression)
     {
         return new ExpressionStarter<T>(defaultExpression);
     }
 
-    /// <summary> 用 OrElse 把两个表达式拼成"或"的关系。 </summary>
+    /// <summary>
+    /// 用 OrElse 把两个表达式拼成"或"的关系。
+    /// </summary>
     public static Expression<Func<T, bool>> Or<T>(this Expression<Func<T, bool>> expr1,
         Expression<Func<T, bool>> expr2)
     {
@@ -68,7 +80,9 @@ public static class PredicateBuilder
         return Expression.Lambda<Func<T, bool>>(Expression.OrElse(expr1.Body, expr2Body!), expr1.Parameters);
     }
 
-    /// <summary> 用 AndAlso 把两个表达式拼成"与"的关系。 </summary>
+    /// <summary>
+    /// 用 AndAlso 把两个表达式拼成"与"的关系。
+    /// </summary>
     public static Expression<Func<T, bool>> And<T>(this Expression<Func<T, bool>> expr1,
         Expression<Func<T, bool>> expr2)
     {
@@ -111,7 +125,9 @@ public static class PredicateBuilder
 /// <typeparam name="T">谓词接受的参数类型</typeparam>
 public class ExpressionStarter<T>
 {
-    /// <summary> 默认用恒假表达式占位。 </summary>
+    /// <summary>
+    /// 默认用恒假表达式占位。
+    /// </summary>
     public ExpressionStarter() : this(false)
     {
     }
@@ -141,22 +157,32 @@ public class ExpressionStarter<T>
         _predicate = exp;
     }
 
-    /// <summary>真正使用的谓词: 已经开始就用 _predicate, 否则退回默认表达式。</summary>
+    /// <summary>
+    /// 真正使用的谓词: 已经开始就用 _predicate, 否则退回默认表达式。
+    /// </summary>
     private Expression<Func<T, bool>> Predicate =>
         ((IsStarted || !UseDefaultExpression) ? _predicate : DefaultExpression)!;
 
     private Expression<Func<T, bool>>? _predicate;
 
-    /// <summary>表达式是否已经开始。</summary>
+    /// <summary>
+    /// 表达式是否已经开始。
+    /// </summary>
     public bool IsStarted => _predicate != null;
 
-    /// <summary>是否配置了默认表达式(只有默认表达式不为 null 时才生效)。 </summary>
+    /// <summary>
+    /// 是否配置了默认表达式(只有默认表达式不为 null 时才生效)。
+    /// </summary>
     public bool UseDefaultExpression => DefaultExpression != null;
 
-    /// <summary>默认表达式 </summary>
+    /// <summary>
+    /// 默认表达式
+    /// </summary>
     public Expression<Func<T, bool>>? DefaultExpression { get; set; }
 
-    /// <summary>设置第一个表达式, 容器只能开始一次。</summary>
+    /// <summary>
+    /// 设置第一个表达式, 容器只能开始一次。
+    /// </summary>
     /// <param name="exp">第一个表达式</param>
     public Expression<Func<T, bool>> Start(Expression<Func<T, bool>> exp)
     {
@@ -168,19 +194,25 @@ public class ExpressionStarter<T>
         return _predicate = exp;
     }
 
-    /// <summary>拼一个"或"上去</summary>
+    /// <summary>
+    /// 拼一个"或"上去
+    /// </summary>
     public Expression<Func<T, bool>> Or(Expression<Func<T, bool>> expr2)
     {
         return (IsStarted) ? _predicate = Predicate.Or(expr2) : Start(expr2);
     }
 
-    /// <summary>拼一个"与"上去</summary>
+    /// <summary>
+    /// 拼一个"与"上去
+    /// </summary>
     public Expression<Func<T, bool>> And(Expression<Func<T, bool>> expr2)
     {
         return (IsStarted) ? _predicate = Predicate.And(expr2) : Start(expr2);
     }
 
-    /// <summary> 输出谓词的字符串形式 </summary>
+    /// <summary>
+    /// 输出谓词的字符串形式
+    /// </summary>
     public override string? ToString()
     {
         return Predicate?.ToString();
@@ -222,7 +254,9 @@ public class ExpressionStarter<T>
 
 #if !(NET35)
 
-    /// <summary>把当前谓词编译成可执行委托。</summary>
+    /// <summary>
+    /// 把当前谓词编译成可执行委托。
+    /// </summary>
     public Func<T, bool> Compile()
     {
         return Predicate.Compile();
@@ -230,10 +264,14 @@ public class ExpressionStarter<T>
 #endif
 
 #if !(NET35 || WINDOWS_APP || NETSTANDARD || PORTABLE || PORTABLE40 || UAP)
-        /// <summary>按给定的调试信息生成器编译当前谓词。</summary>
+        /// <summary>
+        /// 按给定的调试信息生成器编译当前谓词。
+        /// </summary>
         public Func<T, bool> Compile(DebugInfoGenerator debugInfoGenerator) { return Predicate.Compile(debugInfoGenerator); }
 
-        /// <summary>用新的主体和参数生成一个新表达式。</summary>
+        /// <summary>
+        /// 用新的主体和参数生成一个新表达式。
+        /// </summary>
         public Expression<Func<T, bool>> Update(Expression body, IEnumerable<ParameterExpression> parameters) { return Predicate.Update(body, parameters); }
 #endif
 
@@ -241,27 +279,41 @@ public class ExpressionStarter<T>
 
     #region Implement LamdaExpression methods and properties
 
-    /// <summary>当前谓词的表达式主体。</summary>
+    /// <summary>
+    /// 当前谓词的表达式主体。
+    /// </summary>
     public Expression Body => Predicate.Body;
 
 
-    /// <summary>当前谓词的节点类型。</summary>
+    /// <summary>
+    /// 当前谓词的节点类型。
+    /// </summary>
     public ExpressionType NodeType => Predicate.NodeType;
 
-    /// <summary>当前谓词的参数列表。</summary>
+    /// <summary>
+    /// 当前谓词的参数列表。
+    /// </summary>
     public ReadOnlyCollection<ParameterExpression> Parameters => Predicate.Parameters;
 
-    /// <summary>当前谓词的静态类型。</summary>
+    /// <summary>
+    /// 当前谓词的静态类型。
+    /// </summary>
     public Type Type => Predicate.Type;
 
 #if !(NET35)
-    /// <summary>当前谓词的名字。</summary>
+    /// <summary>
+    /// 当前谓词的名字。
+    /// </summary>
     public string? Name => Predicate.Name;
 
-    /// <summary>当前谓词的返回类型。</summary>
+    /// <summary>
+    /// 当前谓词的返回类型。
+    /// </summary>
     public Type ReturnType => Predicate.ReturnType;
 
-    /// <summary>当前谓词是否标记为尾调用。</summary>
+    /// <summary>
+    /// 当前谓词是否标记为尾调用。
+    /// </summary>
     public bool TailCall => Predicate.TailCall;
 #endif
 
@@ -270,7 +322,9 @@ public class ExpressionStarter<T>
     #region Implement Expression methods and properties
 
 #if !(NET35)
-    /// <summary>当前谓词能否被化简。</summary>
+    /// <summary>
+    /// 当前谓词能否被化简。
+    /// </summary>
     public virtual bool CanReduce => Predicate.CanReduce;
 #endif
 

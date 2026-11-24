@@ -58,7 +58,7 @@ public static class ActionDescriptorExtensions
     /// <returns>是对象结果返回 <see langword="true"/></returns>
     public static bool HasObjectResult(this ActionDescriptor actionDescriptor)
     {
-        return SnowActionResultHelper.IsObjectResult(actionDescriptor.GetReturnType());
+        return ActionResultHelper.IsObjectResult(actionDescriptor.GetReturnType());
     }
 
     /// <summary>

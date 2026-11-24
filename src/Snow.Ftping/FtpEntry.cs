@@ -5,13 +5,19 @@ namespace Snow.Ftping;
 /// </summary>
 public enum FtpEntryType
 {
-    /// <summary>文件</summary>
+    /// <summary>
+    /// 文件
+    /// </summary>
     File,
 
-    /// <summary>目录</summary>
+    /// <summary>
+    /// 目录
+    /// </summary>
     Directory,
 
-    /// <summary>软链接</summary>
+    /// <summary>
+    /// 软链接
+    /// </summary>
     Link
 }
 

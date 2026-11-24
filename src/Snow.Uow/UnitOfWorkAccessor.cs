@@ -14,6 +14,7 @@ public sealed class UnitOfWorkAccessor : IUnitOfWorkAccessor
     public IUnitOfWork? Current => _current.Value;
 
     /// <inheritdoc />
+    /// <param name="unitOfWork">工作单元</param>
     public void SetUnitOfWork(IUnitOfWork? unitOfWork)
     {
         _current.Value = unitOfWork;

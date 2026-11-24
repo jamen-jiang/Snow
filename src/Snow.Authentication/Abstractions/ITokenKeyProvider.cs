@@ -9,5 +9,6 @@ public interface ITokenKeyProvider
     /// <summary>
     /// 解析密钥; 配置有错直接抛 <see cref="InvalidOperationException"/>, 在启动阶段就暴露
     /// </summary>
+    /// <param name="options">选项</param>
     TokenKeySet Resolve(SnowAuthenticationOptions options);
 }

@@ -21,15 +21,18 @@ public interface ITimezoneProvider
     /// <summary>
     /// Windows 时区 ID 转 IANA 时区名
     /// </summary>
+    /// <param name="windowsTimeZoneId">Windows 时区 ID</param>
     string WindowsToIana(string windowsTimeZoneId);
 
     /// <summary>
     /// IANA 时区名转 Windows 时区 ID
     /// </summary>
+    /// <param name="ianaTimeZoneName">IANA 时区名</param>
     string IanaToWindows(string ianaTimeZoneName);
 
     /// <summary>
     /// 按 Windows 或 IANA 时区 ID 取 <see cref="TimeZoneInfo"/>
     /// </summary>
+    /// <param name="windowsOrIanaTimeZoneId">Windows 或 IANA 时区 ID</param>
     TimeZoneInfo GetTimeZoneInfo(string windowsOrIanaTimeZoneId);
 }

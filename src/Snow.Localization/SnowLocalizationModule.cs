@@ -13,6 +13,7 @@ namespace Snow.Localization;
 public sealed class SnowLocalizationModule : SnowModule
 {
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

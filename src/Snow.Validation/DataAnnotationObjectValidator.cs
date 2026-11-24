@@ -21,6 +21,7 @@ public sealed class DataAnnotationObjectValidator : ISnowObjectValidator
     public DataAnnotationObjectValidator(IOptions<SnowValidationOptions> options) => _options = options;
 
     /// <inheritdoc />
+    /// <param name="instance">实例</param>
     public IReadOnlyList<ValidationResult> Validate(object instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
@@ -31,6 +32,7 @@ public sealed class DataAnnotationObjectValidator : ISnowObjectValidator
     }
 
     /// <inheritdoc />
+    /// <param name="instance">实例</param>
     public void ValidateAndThrow(object instance)
     {
         IReadOnlyList<ValidationResult> errors = Validate(instance);

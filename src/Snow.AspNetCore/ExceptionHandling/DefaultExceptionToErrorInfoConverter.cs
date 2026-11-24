@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -23,12 +24,32 @@ public sealed class DefaultExceptionToErrorInfoConverter : IExceptionToErrorInfo
     public DefaultExceptionToErrorInfoConverter(IOptions<SnowExceptionHandlingOptions> options) => _options = options;
 
     /// <inheritdoc />
-    public SnowRemoteServiceErrorInfo Convert(Exception exception)
+    /// <param name="exception">异常</param>
+    public SnowRemoteServiceErrorInfo Convert(Exception exception) => Convert(exception, null);
+
+    /// <inheritdoc />
+    /// <param name="exception">异常</param>
+    /// <param name="optionsAction">选项配置回调, 可为 null</param>
+    public SnowRemoteServiceErrorInfo Convert(Exception exception, Action<SnowExceptionHandlingOptions>? optionsAction)
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        SnowExceptionHandlingOptions options = _options.Value;
+        SnowExceptionHandlingOptions options = new();
+        CopyOptions(_options.Value, options);
+        optionsAction?.Invoke(options);
 
+        return ConvertCore(exception, options);
+    }
+
+    private static void CopyOptions(SnowExceptionHandlingOptions source, SnowExceptionHandlingOptions target)
+    {
+        target.SendExceptionDetailsToClients = source.SendExceptionDetailsToClients;
+        target.SendStackTraceToClients = source.SendStackTraceToClients;
+        target.SendExceptionDataToClientTypes = source.SendExceptionDataToClientTypes;
+    }
+
+    private SnowRemoteServiceErrorInfo ConvertCore(Exception exception, SnowExceptionHandlingOptions options)
+    {
         return exception switch
         {
             // 自带状态码的异常(领域层的 EntityNotFoundException 等): 用它自己的错误码与消息
@@ -49,22 +70,22 @@ public sealed class DefaultExceptionToErrorInfoConverter : IExceptionToErrorInfo
             {
                 Code = friendly.Code ?? "BusinessError",
                 Message = friendly.Message,
-                Details = friendly.Details ?? (options.SendExceptionDetailsToClients ? SafeToString(friendly) : null),
+                Details = friendly.Details ?? (options.SendExceptionDetailsToClients ? SafeToString(friendly, options) : null),
                 Data = ToData(exception),
             },
             BusinessException business => new SnowRemoteServiceErrorInfo
             {
                 Code = business.Code ?? "BusinessError",
                 Message = business.Message,
-                Details = business.Details ?? (options.SendExceptionDetailsToClients ? SafeToString(business) : null),
+                Details = business.Details ?? (options.SendExceptionDetailsToClients ? SafeToString(business, options) : null),
                 Data = ToData(exception),
             },
             // 只实现 IBusinessException 标记接口的第三方业务异常: 与 BusinessException 同样按业务失败处理
-            IBusinessException businessMarker => new SnowRemoteServiceErrorInfo
+            IBusinessException => new SnowRemoteServiceErrorInfo
             {
-                Code = businessMarker.Code ?? "BusinessError",
+                Code = (exception as IHasErrorCode)?.Code ?? "BusinessError",
                 Message = exception.Message,
-                Details = businessMarker.Details ?? (options.SendExceptionDetailsToClients ? SafeToString(exception) : null),
+                Details = (exception as IHasErrorDetails)?.Details ?? (options.SendExceptionDetailsToClients ? SafeToString(exception, options) : null),
                 Data = ToData(exception),
             },
             UnauthorizedAccessException => new SnowRemoteServiceErrorInfo
@@ -86,7 +107,7 @@ public sealed class DefaultExceptionToErrorInfoConverter : IExceptionToErrorInfo
             {
                 Code = "InvalidArgument",
                 Message = exception.Message,
-                Details = options.SendExceptionDetailsToClients ? SafeToString(exception) : null,
+                Details = options.SendExceptionDetailsToClients ? SafeToString(exception, options) : null,
             },
             // 其余 Snow 框架异常: 有错误码就用错误码; Warning 及以下说明是预期内的失败, 消息可回
             SnowException snow => new SnowRemoteServiceErrorInfo
@@ -95,13 +116,13 @@ public sealed class DefaultExceptionToErrorInfoConverter : IExceptionToErrorInfo
                 Message = options.SendExceptionDetailsToClients || exception.GetLogLevel() <= LogLevel.Warning
                     ? snow.Message
                     : "服务器内部错误",
-                Details = options.SendExceptionDetailsToClients ? SafeToString(snow) : null,
+                Details = options.SendExceptionDetailsToClients ? SafeToString(snow, options) : null,
             },
             _ => new SnowRemoteServiceErrorInfo
             {
                 Code = (exception as IHasErrorCode)?.Code ?? "InternalError",
                 Message = options.SendExceptionDetailsToClients ? exception.Message : "服务器内部错误",
-                Details = options.SendExceptionDetailsToClients ? SafeToString(exception) : null,
+                Details = options.SendExceptionDetailsToClients ? SafeToString(exception, options) : null,
             },
         };
     }
@@ -145,6 +166,6 @@ public sealed class DefaultExceptionToErrorInfoConverter : IExceptionToErrorInfo
         return data;
     }
 
-    private string SafeToString(Exception exception)
-        => _options.Value.SendStackTraceToClients ? exception.ToString() : exception.GetType().FullName + ": " + exception.Message;
+    private static string SafeToString(Exception exception, SnowExceptionHandlingOptions options)
+        => options.SendStackTraceToClients ? exception.ToString() : exception.GetType().FullName + ": " + exception.Message;
 }

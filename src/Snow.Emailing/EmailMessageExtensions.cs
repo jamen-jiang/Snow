@@ -8,7 +8,9 @@ namespace Snow.Emailing;
 /// </summary>
 public static class EmailMessageExtensions
 {
-    /// <summary>设置发件人</summary>
+    /// <summary>
+    /// 设置发件人
+    /// </summary>
     public static EmailMessage From(this EmailMessage message, string address, string? displayName = null)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -16,7 +18,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>追加收件人(支持逗号分隔多个)</summary>
+    /// <summary>
+    /// 追加收件人(支持逗号分隔多个)
+    /// </summary>
     public static EmailMessage To(this EmailMessage message, string addresses)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -24,7 +28,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>追加抄送人(支持逗号分隔多个)</summary>
+    /// <summary>
+    /// 追加抄送人(支持逗号分隔多个)
+    /// </summary>
     public static EmailMessage Cc(this EmailMessage message, string addresses)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -32,7 +38,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>追加密送人(支持逗号分隔多个)</summary>
+    /// <summary>
+    /// 追加密送人(支持逗号分隔多个)
+    /// </summary>
     public static EmailMessage Bcc(this EmailMessage message, string addresses)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -40,7 +48,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>追加回复地址(支持逗号分隔多个)</summary>
+    /// <summary>
+    /// 追加回复地址(支持逗号分隔多个)
+    /// </summary>
     public static EmailMessage ReplyTo(this EmailMessage message, string addresses)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -48,7 +58,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>设置标题</summary>
+    /// <summary>
+    /// 设置标题
+    /// </summary>
     public static EmailMessage Subject(this EmailMessage message, string subject)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -56,7 +68,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>设置 HTML 正文</summary>
+    /// <summary>
+    /// 设置 HTML 正文
+    /// </summary>
     public static EmailMessage Html(this EmailMessage message, string html)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -64,7 +78,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>设置纯文本正文</summary>
+    /// <summary>
+    /// 设置纯文本正文
+    /// </summary>
     public static EmailMessage Text(this EmailMessage message, string text)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -72,7 +88,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>设置正文; 按 <see cref="EmailOptions.IsBodyHtml"/> 落到 HTML 或纯文本</summary>
+    /// <summary>
+    /// 设置正文; 按 <see cref="EmailOptions.IsBodyHtml"/> 落到 HTML 或纯文本
+    /// </summary>
     /// <param name="message">邮件</param>
     /// <param name="content">正文</param>
     /// <param name="isBodyHtml">是否按 HTML 处理; 默认 true</param>
@@ -91,7 +109,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>追加内存附件</summary>
+    /// <summary>
+    /// 追加内存附件
+    /// </summary>
     public static EmailMessage Attach(this EmailMessage message, string fileName, byte[] data, string? contentType = null)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -99,7 +119,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>追加惰性流附件</summary>
+    /// <summary>
+    /// 追加惰性流附件
+    /// </summary>
     public static EmailMessage Attach(this EmailMessage message, string fileName, Func<Stream> openStream, string? contentType = null)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -107,14 +129,18 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>追加已打开的流作为附件(投递时读取)</summary>
+    /// <summary>
+    /// 追加已打开的流作为附件(投递时读取)
+    /// </summary>
     public static EmailMessage Attach(this EmailMessage message, string fileName, Stream stream, string? contentType = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
         return message.Attach(fileName, () => stream, contentType);
     }
 
-    /// <summary>追加自定义邮件头</summary>
+    /// <summary>
+    /// 追加自定义邮件头
+    /// </summary>
     public static EmailMessage Header(this EmailMessage message, string name, string value)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -122,7 +148,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>设置优先级</summary>
+    /// <summary>
+    /// 设置优先级
+    /// </summary>
     public static EmailMessage Priority(this EmailMessage message, EmailPriority priority)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -130,7 +158,9 @@ public static class EmailMessageExtensions
         return message;
     }
 
-    /// <summary>设置单封超时</summary>
+    /// <summary>
+    /// 设置单封超时
+    /// </summary>
     public static EmailMessage Timeout(this EmailMessage message, TimeSpan timeout)
     {
         ArgumentNullException.ThrowIfNull(message);

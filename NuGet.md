@@ -260,7 +260,7 @@ WebApplication app = builder.Build();
 app.Run();   // 端点由启动模块最后一行 app.UseSnowEndpoints() 映射
 ```
 
-`SnowMvcModule` 声明 `MapControllers()`, `SnowSignalRModule` 声明 Hub 映射, `SnowOpenApiModule` 声明文档端点 —— 三个模块都在自己的 `ConfigureServices` 里写一句 `Configure<SnowEndpointRouterOptions>(...)`, 宿主最后一行 `UseSnowEndpoints()` 统一执行。这就是 ABP 的 `UseConfiguredEndpoints()` 机制本身。
+`SnowAspNetCoreMvcModule` 声明 `MapControllers()`, `SnowSignalRModule` 声明 Hub 映射, `SnowOpenApiModule` 声明文档端点 —— 三个模块都在自己的 `ConfigureServices` 里写一句 `Configure<SnowEndpointRouterOptions>(...)`, 宿主最后一行 `UseSnowEndpoints()` 统一执行。这就是 ABP 的 `UseConfiguredEndpoints()` 机制本身。
 
 **端点与中间件是两件事**: 中间件由宿主在管道里按行序挂, 端点位置唯一(永远是最后), 所以模块只需要声明映射动作。宿主挂的每一层都自动落在端点之前。
 
@@ -917,10 +917,10 @@ SnowWorkflowResult r2 = await runner.StartAsync<OrderApprovalWorkflow>(input);
 
 ## MVC 与自动 API
 
-`SnowMvcModule` 把应用服务按约定直接暴露成 Controller, 服务端不用写任何 Controller 类(对应 ABP 的 `AbpAspNetCoreMvcModule` + 自动 API)。整个机制三件事: 应用服务登记成 Controller(特性提供器)、路由与动词按约定算(应用模型约定)、结果与异常统一成信封(全局过滤器)。
+`SnowAspNetCoreMvcModule` 把应用服务按约定直接暴露成 Controller, 服务端不用写任何 Controller 类(对应 ABP 的 `AbpAspNetCoreMvcModule` + 自动 API)。整个机制三件事: 应用服务登记成 Controller(特性提供器)、路由与动词按约定算(应用模型约定)、结果与异常统一成信封(全局过滤器)。
 
 ```csharp
-[DependsOn(typeof(SnowMvcModule))]
+[DependsOn(typeof(SnowAspNetCoreMvcModule))]
 public sealed class MyHttpApiHostModule : SnowModule { }
 ```
 
@@ -940,7 +940,7 @@ public class BookAppService
 | 环节 | 规则 |
 | --- | --- |
 | 控制器名 | 类名去掉后缀 `ApplicationService` / `AppService` / `Service` 后转 kebab-case(`BookAppService` → `book`) |
-| 控制器路径 | `RootPath`(默认 `api/app`) + `/` + 控制器名, 即 `api/app/book` |
+| 控制器路径 | `{apiPrefix}`(默认 `api`) + `/` + `RootPath`(默认 `app`) + `/` + 控制器名, 即 `api/app/book` |
 | GET 列表 | `GetList` / `GetAll` / `GetPaged` / `List` → `GET api/app/book` |
 | GET 单条 | `Get` / `Find` / `Load`, 且有唯一的简单类型参数 `id` → `GET api/app/book/{id}`; 否则 → `GET api/app/book/{方法名 kebab}` |
 | 新增 | `Create` / `Add` / `Insert` / `Post` → `POST api/app/book` |
@@ -950,18 +950,16 @@ public class BookAppService
 
 参数绑定: 名为 `id` 的简单类型走路由; 复杂类型走请求体; 其余简单类型走查询串; `CancellationToken` 忽略。简单类型含 primitive、enum、string、decimal、Guid、各种日期时间类型、TimeSpan、Uri。
 
-### 统一响应信封
+### 错误响应信封
 
-默认把返回值包成 `SnowApiResponse`(对应 ABP 的 `RemoteServiceResponse`):
+控制器正常返回值保持原样, 不再包一层成功信封(ABP vNext 的 `Volo.Abp.AspNetCore.Mvc` 也没有成功包装过滤器)。异常与模型校验失败时统一返回 `SnowRemoteServiceErrorResponse`:
 
 ```json
-{ "success": true, "result": { "id": "...", "title": "..." }, "error": null }
-{ "success": false, "result": null,
-  "error": { "code": "ValidationError", "message": "请求参数校验失败",
+{ "error": { "code": "ValidationError", "message": "请求参数校验失败",
              "details": null, "validationErrors": { "title": ["不能为空"] } } }
 ```
 
-单个类或方法要原样返回(不包装)加 `[SnowWrapResult(false)]`。异常按类型翻译:
+异常按类型翻译:
 
 | 异常 | 状态码 | 错误码 |
 | --- | --- | --- |
@@ -971,7 +969,7 @@ public class BookAppService
 | `KeyNotFoundException` | 404 | `NotFound` |
 | `NotImplementedException` | 501 | `NotImplemented` |
 | `ArgumentException` / `InvalidOperationException` | 400 | `InvalidArgument` |
-| 其余 | 500 | `InternalError`(消息固定"服务器内部错误", 除非打开 `IncludeExceptionMessage`) |
+| 其余 | 500 | `InternalError`(消息默认"服务器内部错误", 细节由 `ExceptionHandling:SendExceptionDetailsToClients` 控制) |
 
 模型校验失败自动回 400 与字段错误列表(`ValidationError`), 等价于 `[ApiController]` 的默认行为。
 
@@ -990,7 +988,7 @@ public class HalfController : SnowControllerBase { }
 | 开关 | 关掉什么 | 生效点 |
 | --- | --- | --- |
 | `DisableMiddleware` | 继承 `SnowMiddlewareBase`(`Snow.AspNetCore.Middleware`)的框架中间件(链路标识、日志上下文等) | `SnowMiddlewareBase.ShouldSkipAsync` |
-| `DisableMvcFilters` | 自动校验、模型绑定校验、结果信封、异常翻译、登录态异常 | 动作描述符定型时由 `SnowMvcActionDescriptorProvider` 把五个过滤器整个摘掉, 请求期零判断 |
+| `DisableMvcFilters` | 自动校验、模型绑定校验、异常翻译、登录态异常 | 动作描述符定型时由 `SnowMvcActionDescriptorProvider` 把框架过滤器整个摘掉, 请求期零判断 |
 | `DisableInterceptors` | AOP 拦截器(缓存等注解) | 约定注册阶段不建代理 |
 
 - 特性在 `Snow.Core`(命名空间 `Snow`), 与 ABP 放在 `Volo.Abp.Core` 同位; 标注控制器的项目不必为了一个特性引用 `Snow.Security`。
@@ -1013,10 +1011,7 @@ app.Run();
 ```json
 {
   "Mvc": {
-    "RootPath": "api/app",
-    "WrapResultByDefault": true,
-    "IncludeExceptionMessage": false,
-    "AutoModelStateValidation": true
+    "AutoModelValidation": true
   }
 }
 ```
@@ -1026,7 +1021,7 @@ app.Run();
 ## OpenAPI 文档与调试界面
 
 `SnowOpenApiModule` 用官方 `Microsoft.AspNetCore.OpenApi` 生成文档, 用 Scalar 提供调试界面(对位 ABP 的 `Volo.Abp.Swashbuckle`)。
-自动带上全部自动 API 的路径, 可选加 Bearer 认证方案, 并自动把 XML 注释贴成接口说明。依赖 `SnowMvcModule`。
+自动带上全部自动 API 的路径, 可选加 Bearer 认证方案, 并自动把 XML 注释贴成接口说明。依赖 `SnowAspNetCoreMvcModule`。
 
 ```csharp
 [DependsOn(typeof(SnowOpenApiModule))]
@@ -1375,7 +1370,7 @@ public class Order
 
 - `Snow.Validation`: DataAnnotations 校验 + `[SnowValidation]` 方法级拦截
 - `Snow.Validation.FluentValidation`(对应 ABP 的 Volo.Abp.FluentValidation): 实现 `AbstractValidator<T>` 即自动登记, 规则与 ABP 的 `AbpFluentValidationConventionalRegistrar` 一致 —— 瞬态生命周期, 同时暴露具体校验器类型与 `IValidator<T>`(可以直接注入 `CreateOrderDtoValidator`), 标了 `[DisableConventionalRegistration]` 的跳过, 也可用 `AddSnowFluentValidation(o => { o.ScanValidators = false; o.ValidatorTypes.Add(typeof(XxxValidator)); })` 只点名登记; 并把 `ISnowObjectValidator` 换成"先 DataAnnotations 再 FluentValidation, 错误合成一份"的管线
-- MVC 侧的自动校验不另建包: `SnowObjectValidationActionFilter` 就在 `Snow.AspNetCore.Mvc` 里(对应 ABP 把 `AbpValidationActionFilter` 放在 Volo.Abp.AspNetCore.Mvc)。它用 `ISnowObjectValidator` 校验 Controller(含自动 API)的复杂参数, 不通过直接返回 400 + `SnowApiResponse.Fail("ValidationError", ...)`, 过滤器顺序 -1000(最前), 开关是 `Mvc:AutoModelStateValidation`。因此换成 FluentValidation 后 MVC 侧行为自动跟着变, 不需要再加任何包。
+- MVC 侧的自动校验不另建包: `SnowValidationActionFilter` 就在 `Snow.AspNetCore.Mvc` 里(对应 ABP 把 `AbpValidationActionFilter` 放在 Volo.Abp.AspNetCore.Mvc)。它用 `IModelStateValidator` 校验 ModelState, 再用 `IMethodInvocationValidator` 校验 Controller(含自动 API)的复杂参数, 不通过抛 `SnowValidationException`, 由统一异常处理转成 400 + `ValidationError`, 过滤器顺序 -1000(最前), 开关是 `Mvc:AutoModelValidation`。因此换成 FluentValidation 后 MVC 侧行为自动跟着变, 不需要再加任何包。
 
 ```csharp
 [DependsOn(typeof(SnowValidationFluentValidationModule))]
@@ -1390,7 +1385,7 @@ public sealed class CreateOrderDtoValidator : AbstractValidator<CreateOrderDto>
 }
 ```
 
-配置节: `Validation:FluentValidation`(`Enabled` / `ScanValidators` / `ValidateDataAnnotations`)。MVC 自动校验的开关在 `Mvc:AutoModelStateValidation`。
+配置节: `Validation:FluentValidation`(`Enabled` / `ScanValidators` / `ValidateDataAnnotations`)。MVC 自动校验的开关在 `Mvc:AutoModelValidation`。
 
 ### JSON(默认 System.Text.Json, 可换 Newtonsoft.Json)
 
@@ -1463,7 +1458,7 @@ git tag v1.2.0 && git push origin v1.2.0
 | `Snow.Tracing` | 链路标识: `ICorrelationIdProvider` 与进程内默认实现 |
 | `Snow.AspNetCore` | Web 宿主能力包: `SnowAspNetCoreModule`(HTTP 上下文访问器、Web 对象访问器、包内静态资源合并) + `GetHostingEnvironment()` / `TransformSnowClaims()`(对应 ABP 的 `AbpAspNetCoreServiceCollectionExtensions`) + 宿主显式初始化 `app.InitializeApplicationAsync()`(对应 ABP 的 `AbpApplicationBuilderExtensions.InitializeApplicationAsync`, 驱动模块生命周期; 管道由宿主在启动模块里手写) + 端点路由选项 `SnowEndpointRouterOptions` 与宿主最后一行 `UseSnowEndpoints()`(对应 ABP 的 `AbpEndpointRouterOptions` / `UseConfiguredEndpoints`) + `UseSnowCorrelationId()` 与链路标识中间件 `SnowCorrelationIdMiddleware`(对应 ABP 的 `AbpCorrelationIdMiddleware`) + 应用初始化上下文扩展 `GetApplicationBuilder()` 一族; 不含任何具体后端(EF / Redis / Hangfire / Serilog / MailKit / FluentFTP / ClosedXML / Elsa 由宿主按需引用) |
 | `Snow.AspNetCore.Serilog` | Serilog 集成: 请求级租户/用户/链路标识自动进日志上下文; 已依赖 `Snow.AspNetCore`(与 ABP 的 `Volo.Abp.AspNetCore.Serilog` 依赖 `Volo.Abp.AspNetCore` 同形); 中间件由宿主在管道里调 `UseSnowSerilogEnrichers()` |
-| `Snow.AspNetCore.Mvc` | MVC 与自动 API: 应用服务按约定自动变成 Controller(路由/动词/参数绑定), 统一响应信封 `SnowApiResponse`, 异常与模型校验统一成 400/403/404/500 错误响应 |
+| `Snow.AspNetCore.Mvc` | MVC 与远程服务约定: 实现 `IRemoteService` / 标 `[RemoteService]` 的 Controller 按约定生成路由与动词(路由/动词/参数绑定), 正常返回值不包装, 异常与模型校验统一成 400/403/404/500 错误响应 |
 | `Snow.OpenApi` | OpenAPI 文档与调试界面: 官方 Microsoft.AspNetCore.OpenApi 出文档 + Scalar 出界面, 自动收录全部自动 API, 可选 Bearer 认证方案, 自动加载程序集 XML 注释 |
 | `Snow.AspNetCore.SignalR` | SignalR: `SnowHub` 基类与 `[SnowHub]` 路径注解, Hub 自动扫描, `MapSnowHubs()` 挂端点 |
 | `Snow.AspNetCore.RateLimiting` | 限流: 对微软自带 `AddRateLimiter`/`UseRateLimiter` 的薄封装(`UseSnowRateLimiting()`, 宿主在管道里调, 须在 `UseRouting()` 之后), 无自有选项 |

@@ -1,116 +1,65 @@
-using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.ApplicationParts;
+using Microsoft.AspNetCore.Mvc.DataAnnotations;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Snow.DependencyInjection;
+using Snow.AspNetCore.Mvc.DataAnnotations;
+using Snow.AspNetCore.Mvc.Json;
+using Snow.Json;
 using Snow.Modularity;
 using Snow.Validation;
 
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
-/// MVC 与自动 API 模块: 应用服务按约定自动暴露成 Controller
-/// <para>对应 ABP 的 <c>AbpAspNetCoreMvcModule</c>。三件事: 把应用服务登记成 Controller(特性提供器)、
-/// 按约定算路由与动词(应用模型约定)、统一结果与异常响应(全局过滤器)。</para>
+/// MVC 与自动 API 模块
+/// <para>对应 ABP 的 <c>AbpAspNetCoreMvcModule</c>。三件事: 给远程服务控制器按约定算路由与动词(应用模型约定)、
+/// 统一异常响应(全局过滤器)、统一参数与模型校验。</para>
 /// <para>依赖 <see cref="SnowAspNetCoreModule"/>: 自动 API 跑在它提供的 HTTP 上下文之上。</para>
 /// <para>依赖 <see cref="SnowValidationModule"/>: 自动校验过滤器用 <see cref="ISnowObjectValidator"/> 跑 DataAnnotations 与 FluentValidation,
 /// 与 ABP 把 <c>AbpValidationActionFilter</c> 放在 Volo.Abp.AspNetCore.Mvc 里同形 —— 校验只有一个包, 不需要 AspNetCore 后缀的校验包。</para>
 /// <para>端点与 ABP 一样由模块声明(AbpEndpointRouterOptions.EndpointConfigureActions 同形的 SnowEndpointRouterOptions),
 /// 框架在全部模块初始化完成之后统一映射, 宿主不用写 <c>MapControllers()</c>。</para>
 /// </summary>
-[DependsOn(typeof(SnowAspNetCoreModule), typeof(SnowValidationModule))]
-public sealed class SnowMvcModule : SnowModule
+[DependsOn(typeof(SnowAspNetCoreModule), typeof(SnowValidationModule), typeof(SnowJsonModule))]
+public sealed class SnowAspNetCoreMvcModule : SnowModule
 {
     /// <inheritdoc />
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        context.Services.Configure<SnowMvcOptions>(options => context.Configuration.GetSection("Mvc").Bind(options));
+        context.Services.Configure<SnowAspNetCoreMvcOptions>(options => context.Configuration.GetSection("Mvc").Bind(options));
 
-        // 注册期快照: 建约定时就要有最终的值; 过滤器仍从 IOptions 读同一份配置
-        SnowMvcOptions effective = context.Services.GetOptions<SnowMvcOptions>();
+        // 框架过滤器统一用 [TransientService] 注解自动登记; SnowMvcOptionsExtensions 里只生成 ServiceFilterAttribute 从容器取实例
 
-        // AddService 登记过滤器要求容器里真有这个服务: 自己先登记一遍(与 ABP 在 AbpAspNetCoreMvcModule 里逐个登记过滤器同理)
-        context.Services.AddScoped<SnowObjectValidationActionFilter>();
-        context.Services.AddTransient<SnowModelStateInvalidFilter>();
-        context.Services.AddTransient<SnowResultFilter>();
-        context.Services.AddTransient<SnowExceptionFilter>();
-
-        // 关掉 [ApiController] 自带的 ModelState 过滤器, 统一由下面两个过滤器出 SnowApiResponse 格式的错误
+        // 关掉 [ApiController] 自带的 ModelState 过滤器, 统一由 SnowValidationActionFilter 处理模型校验
         context.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
 
-        // 框架过滤器一律 AddService 登记: 这样生成的是 ServiceFilterAttribute,
-        // SnowMvcActionDescriptorProvider 才认得出来并能在控制器关掉特性时把它摘掉(Add<T>() 生成 TypeFilterAttribute, 摘不掉)
-        IMvcBuilder builder = context.Services.AddControllers(options =>
-        {
-            options.Filters.AddService<SnowObjectValidationActionFilter>(-1000);
-            options.Filters.AddService(typeof(SnowModelStateInvalidFilter));
-            options.Filters.AddService(typeof(SnowResultFilter));
-            options.Filters.AddService(typeof(SnowExceptionFilter));
-        });
+        // 对应 ABP: 先建 MVC Core, 再统一应用 SnowMvcOptionsExtensions.AddSnow
+        var mvcCoreBuilder = context.Services.AddMvcCore();
+        context.Services.ExecutePreConfiguredActions(mvcCoreBuilder);
+        mvcCoreBuilder.AddSnowJson();
+
+        IMvcBuilder builder = context.Services.AddControllers();
+        context.Services.AddSnowOptions<MvcOptions>()
+            .Configure<IServiceProvider>((mvcOptions, serviceProvider) =>
+            {
+                mvcOptions.AddSnow(context.Services);
+            });
+
+        // DataAnnotations 适配器: 对应 ABP 的 AbpValidationAttributeAdapterProvider, 支持动态长度/范围与枚举本地化
+        context.Services.Replace(ServiceDescriptor.Singleton<IValidationAttributeAdapterProvider, SnowValidationAttributeAdapterProvider>());
+        context.Services.AddSingleton<ValidationAttributeAdapterProvider>();
 
         // 动作描述符定型后摘掉框架过滤器, 对应 ABP 的 AbpMvcActionDescriptorProvider
         context.Services.TryAddEnumerable(ServiceDescriptor.Transient<IActionDescriptorProvider, SnowMvcActionDescriptorProvider>());
-
-        builder.AddMvcOptions(options =>
-            options.Conventions.Add(new SnowApplicationServiceConvention(effective)));
-
-        RegisterApplicationServiceControllers(context, builder);
 
         // 端点映射交给统一挂载: 与 ABP 的 EndpointConfigureActions 同形
         Configure<SnowEndpointRouterOptions>(options =>
             options.EndpointConfigureActions.Add(endpointContext => endpointContext.Endpoints.MapControllers()));
     }
-
-    private static void RegisterApplicationServiceControllers(ServiceConfigurationContext context, IMvcBuilder builder)
-    {
-        ApplicationPartManager partManager = context.Services.GetSingletonInstance<ApplicationPartManager>();
-        partManager.FeatureProviders.Add(new SnowApplicationServiceControllerFeatureProvider());
-
-        // 应用服务散落在各模块程序集里, 必须先把这些程序集登记成应用部件, 特性提供器才扫得到
-        foreach (Assembly assembly in GetModuleAssemblies(context.Services))
-        {
-            bool exists = partManager.ApplicationParts
-                .OfType<AssemblyPart>()
-                .Any(part => part.Assembly == assembly);
-
-            if (!exists)
-            {
-                partManager.ApplicationParts.Add(new AssemblyPart(assembly));
-            }
-        }
-
-        // 由容器激活 Controller: 应用服务是自己的类, 默认激活器只会找无参构造器
-        builder.AddControllersAsServices();
-    }
-
-    private static IEnumerable<Assembly> GetModuleAssemblies(IServiceCollection services)
-    {
-        HashSet<Assembly> assemblies = [];
-
-        IModuleContainer? container = services.GetSingletonInstanceOrNull<IModuleContainer>();
-        if (container is not null)
-        {
-            foreach (SnowModuleDescriptor module in container.Modules)
-            {
-                assemblies.Add(module.Type.Assembly);
-            }
-        }
-
-        Assembly? entryAssembly = Assembly.GetEntryAssembly();
-        if (entryAssembly is not null)
-        {
-            assemblies.Add(entryAssembly);
-        }
-
-        assemblies.Add(typeof(SnowMvcModule).Assembly);
-        return assemblies;
-    }
-
 }

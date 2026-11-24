@@ -10,17 +10,23 @@ namespace Snow.MultiTenancy;
 public sealed class NullTenantStore : ITenantStore
 {
     /// <inheritdoc />
+    /// <param name="id">标识</param>
+    /// <param name="name">名称</param>
     public Task<TenantConfiguration?> FindAsync(Guid? id, string? name = null) => Task.FromResult<TenantConfiguration?>(null);
 
     /// <inheritdoc />
+    /// <param name="id">标识</param>
     public Task<TenantConfiguration?> FindAsync(Guid id) => Task.FromResult<TenantConfiguration?>(null);
 
     /// <inheritdoc />
+    /// <param name="name">名称</param>
     public Task<TenantConfiguration?> FindAsync(string name) => Task.FromResult<TenantConfiguration?>(null);
 
     /// <inheritdoc />
+    /// <param name="id">标识</param>
     public Task<TenantConfiguration> GetAsync(Guid id) => throw new SnowTenantNotFoundException(id, null);
 
     /// <inheritdoc />
+    /// <param name="name">名称</param>
     public Task<TenantConfiguration> GetAsync(string name) => throw new SnowTenantNotFoundException(null, name);
 }

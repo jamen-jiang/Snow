@@ -43,6 +43,7 @@ public sealed class SnowAuthenticationModule : SnowModule
     public const string SchemeName = "SnowAuthentication";
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -107,6 +108,7 @@ public sealed class SnowAuthenticationModule : SnowModule
     }
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void OnApplicationInitialization(ApplicationInitializationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

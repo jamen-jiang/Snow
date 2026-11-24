@@ -33,6 +33,7 @@ public sealed class FluentValidationObjectValidator : ISnowObjectValidator
     }
 
     /// <inheritdoc />
+    /// <param name="instance">实例</param>
     public IReadOnlyList<ValidationResult> Validate(object instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
@@ -49,6 +50,7 @@ public sealed class FluentValidationObjectValidator : ISnowObjectValidator
     }
 
     /// <inheritdoc />
+    /// <param name="instance">实例</param>
     public void ValidateAndThrow(object instance)
     {
         IReadOnlyList<ValidationResult> errors = Validate(instance);

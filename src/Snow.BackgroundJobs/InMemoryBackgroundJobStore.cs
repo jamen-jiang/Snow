@@ -34,6 +34,8 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
     public int Count => _jobs.Count;
 
     /// <inheritdoc />
+    /// <param name="jobInfo">后台作业信息</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task InsertAsync(BackgroundJobInfo jobInfo, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(jobInfo);
@@ -44,6 +46,8 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
     }
 
     /// <inheritdoc />
+    /// <param name="maxResultCount">最大返回数量</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<List<BackgroundJobInfo>> GetWaitingJobsAsync(int maxResultCount, CancellationToken cancellationToken = default)
     {
         DateTime now = _clock.UtcNow;
@@ -61,6 +65,8 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
     }
 
     /// <inheritdoc />
+    /// <param name="jobInfo">后台作业信息</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task UpdateAsync(BackgroundJobInfo jobInfo, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(jobInfo);
@@ -71,6 +77,8 @@ public sealed class InMemoryBackgroundJobStore : IBackgroundJobStore
     }
 
     /// <inheritdoc />
+    /// <param name="jobId">作业 ID</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task DeleteAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         _jobs.TryRemove(jobId, out _);

@@ -47,6 +47,7 @@ public sealed class TokenPolicyProvider : IAuthorizationPolicyProvider
     public Task<AuthorizationPolicy?> GetFallbackPolicyAsync() => _fallback.GetFallbackPolicyAsync();
 
     /// <inheritdoc />
+    /// <param name="policyName">策略名</param>
     public async Task<AuthorizationPolicy?> GetPolicyAsync(string policyName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyName);

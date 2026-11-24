@@ -119,9 +119,56 @@ public static class TypeHelper
     }
 
     /// <summary>
+    /// 判断类型是否为 .NET 的基础类型(可包含可空包装, 可选包含枚举), 对应 ABP 的 TypeHelper.IsPrimitiveExtended。
+    /// </summary>
+    /// <param name="type">要判断的类型</param>
+    /// <param name="includeNullables">是否把 Nullable&lt;T&gt; 按其内部类型判断</param>
+    /// <param name="includeEnums">是否把枚举也当作基础类型</param>
+    /// <returns>是基础类型返回 true</returns>
+    public static bool IsPrimitiveExtended(Type type, bool includeNullables = true, bool includeEnums = false)
+    {
+        if (IsPrimitiveExtendedInternal(type, includeEnums))
+        {
+            return true;
+        }
+
+        return includeNullables &&
+               IsNullable(type) &&
+               type.GenericTypeArguments.Length > 0 &&
+               IsPrimitiveExtendedInternal(type.GenericTypeArguments[0], includeEnums);
+    }
+
+    /// <summary>
+    /// 判断类型本身(不展开可空包装)是否为基础类型。
+    /// </summary>
+    /// <param name="type">要判断的类型</param>
+    /// <param name="includeEnums">是否把枚举也当作基础类型</param>
+    /// <returns>是基础类型返回 true</returns>
+    private static bool IsPrimitiveExtendedInternal(Type type, bool includeEnums)
+    {
+        if (type.IsPrimitive)
+        {
+            return true;
+        }
+
+        if (includeEnums && type.IsEnum)
+        {
+            return true;
+        }
+
+        return type == typeof(string) ||
+               type == typeof(decimal) ||
+               type == typeof(DateTime) ||
+               type == typeof(DateTimeOffset) ||
+               type == typeof(DateOnly) ||
+               type == typeof(TimeOnly) ||
+               type == typeof(TimeSpan) ||
+               type == typeof(Guid);
+    }
+
+    /// <summary>
     /// 如果类型是可空值类型, 就取出它的第一个泛型参数(即被包裹的那个类型), 否则原样返回。
     /// </summary>
-    /// <param name="t">要处理的类型</param>
     public static Type GetFirstGenericArgumentIfNullable(this Type t)
     {
         if (t.GetGenericArguments().Length > 0 && t.GetGenericTypeDefinition() == typeof(Nullable<>))

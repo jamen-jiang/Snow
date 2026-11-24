@@ -38,18 +38,25 @@ public sealed class HangfireBackgroundJobScheduler : IBackgroundJobScheduler
     }
 
     /// <inheritdoc />
+    /// <param name="id">标识</param>
+    /// <param name="cron">cron 表达式</param>
+    /// <param name="job">作业表达式</param>
     public void ScheduleRecurring<TService>(string id, string cron, Expression<Action<TService>> job)
     {
         AddOrUpdate(id, cron, Job.FromExpression(job));
     }
 
     /// <inheritdoc />
+    /// <param name="id">标识</param>
+    /// <param name="cron">cron 表达式</param>
+    /// <param name="job">作业表达式</param>
     public void ScheduleRecurring<TService>(string id, string cron, Expression<Func<TService, Task>> job)
     {
         AddOrUpdate(id, cron, Job.FromExpression(job));
     }
 
     /// <inheritdoc />
+    /// <param name="id">标识</param>
     public void DeleteRecurring(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -58,12 +65,14 @@ public sealed class HangfireBackgroundJobScheduler : IBackgroundJobScheduler
     }
 
     /// <inheritdoc />
+    /// <param name="job">作业表达式</param>
     public void TriggerOnce<TService>(Expression<Action<TService>> job)
     {
         _backgroundJobClient.Create(Job.FromExpression(job), new EnqueuedState());
     }
 
     /// <inheritdoc />
+    /// <param name="job">作业表达式</param>
     public void TriggerOnce<TService>(Expression<Func<TService, Task>> job)
     {
         _backgroundJobClient.Create(Job.FromExpression(job), new EnqueuedState());

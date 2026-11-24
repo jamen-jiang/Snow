@@ -27,6 +27,8 @@ public class CommandBus : ICommandBus
     }
 
     /// <inheritdoc />
+    /// <param name="command">命令对象</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<TResponse> SendAsync<TResponse>(ICommand<TResponse> command, CancellationToken cancellationToken = default)
     {
         if (command == null)
@@ -47,6 +49,8 @@ public class CommandBus : ICommandBus
     }
 
     /// <inheritdoc />
+    /// <param name="command">命令对象</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task SendAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
         where TCommand : ICommand
     {

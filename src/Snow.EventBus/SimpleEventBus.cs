@@ -30,6 +30,8 @@ public sealed class SimpleEventBus : IEventBus
     }
 
     /// <inheritdoc />
+    /// <param name="event">事件对象</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task PublishAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default) where TEvent : IEvent
     {
         ArgumentNullException.ThrowIfNull(@event);

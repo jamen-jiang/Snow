@@ -73,6 +73,8 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="path">路径</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<byte[]?> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -89,6 +91,8 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="path">路径</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public async Task<Stream> OpenReadAsync(string path, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -108,6 +112,9 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="remotePath">远程路径</param>
+    /// <param name="destination">目标流</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task DownloadAsync(string remotePath, Stream destination, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
@@ -131,6 +138,10 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="remotePath">远程路径</param>
+    /// <param name="localPath">本地路径</param>
+    /// <param name="overwrite">已存在时是否覆盖</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
@@ -152,6 +163,10 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="source">源对象</param>
+    /// <param name="remotePath">远程路径</param>
+    /// <param name="overwrite">已存在时是否覆盖</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task UploadAsync(Stream source, string remotePath, bool overwrite = true, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -173,6 +188,10 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="localPath">本地路径</param>
+    /// <param name="remotePath">远程路径</param>
+    /// <param name="overwrite">已存在时是否覆盖</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
@@ -199,6 +218,8 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="path">路径</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task DeleteFileAsync(string path, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -215,6 +236,9 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="path">路径</param>
+    /// <param name="recursive">是否递归</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task DeleteDirectoryAsync(string path, bool recursive = false, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -240,6 +264,8 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="path">路径</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -248,6 +274,10 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="sourcePath">源路径</param>
+    /// <param name="destinationPath">目标路径</param>
+    /// <param name="overwrite">已存在时是否覆盖</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task MoveFileAsync(string sourcePath, string destinationPath, bool overwrite = true, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -266,6 +296,9 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="path">路径</param>
+    /// <param name="newName">新名称</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task RenameAsync(string path, string newName, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -277,6 +310,8 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     }
 
     /// <inheritdoc />
+    /// <param name="path">路径</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

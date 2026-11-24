@@ -38,12 +38,14 @@ public class SnowClaimsPrincipalFactory : ISnowClaimsPrincipalFactory
     }
 
     /// <inheritdoc />
+    /// <param name="existsClaimsPrincipal">已有主体, 可为 null</param>
     public virtual async Task<ClaimsPrincipal> CreateAsync(ClaimsPrincipal? existsClaimsPrincipal = null)
     {
         return await InternalCreateAsync(Options, existsClaimsPrincipal, false);
     }
 
     /// <inheritdoc />
+    /// <param name="existsClaimsPrincipal">已有主体, 可为 null</param>
     public virtual async Task<ClaimsPrincipal> CreateDynamicAsync(ClaimsPrincipal? existsClaimsPrincipal = null)
     {
         return await InternalCreateAsync(Options, existsClaimsPrincipal, true);

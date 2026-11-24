@@ -23,6 +23,8 @@ public sealed class NullEmailSender : IEmailSender
     }
 
     /// <inheritdoc />
+    /// <param name="message">消息</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -39,6 +41,8 @@ public sealed class NullEmailSender : IEmailSender
     }
 
     /// <inheritdoc />
+    /// <param name="configure">配置回调</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public Task SendAsync(Action<EmailMessage> configure, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(configure);
@@ -49,6 +53,8 @@ public sealed class NullEmailSender : IEmailSender
     }
 
     /// <inheritdoc />
+    /// <param name="messages">邮件消息集合</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public async Task SendManyAsync(IEnumerable<EmailMessage> messages, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);

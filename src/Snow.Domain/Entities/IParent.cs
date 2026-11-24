@@ -20,5 +20,6 @@ public interface IParent : IEntity
     /// <summary>
     /// 重设层级路径(由层级编排逻辑调用)
     /// </summary>
+    /// <param name="parentPath">父路径</param>
     void ChangeParentPath(string? parentPath);
 }

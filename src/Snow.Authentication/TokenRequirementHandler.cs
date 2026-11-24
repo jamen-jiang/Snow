@@ -12,6 +12,8 @@ namespace Snow.Authentication;
 public sealed class TokenRequirementHandler : AuthorizationHandler<TokenRequirement>
 {
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
+    /// <param name="requirement">令牌要求</param>
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, TokenRequirement requirement)
     {
         switch (requirement.Kind)

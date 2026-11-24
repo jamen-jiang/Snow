@@ -32,18 +32,21 @@ public class TZConvertTimezoneProvider : ITimezoneProvider
     }
 
     /// <inheritdoc />
+    /// <param name="windowsTimeZoneId">Windows 时区 ID</param>
     public virtual string WindowsToIana(string windowsTimeZoneId)
     {
         return TZConvert.WindowsToIana(windowsTimeZoneId);
     }
 
     /// <inheritdoc />
+    /// <param name="ianaTimeZoneName">IANA 时区名</param>
     public virtual string IanaToWindows(string ianaTimeZoneName)
     {
         return TZConvert.IanaToWindows(ianaTimeZoneName);
     }
 
     /// <inheritdoc />
+    /// <param name="windowsOrIanaTimeZoneId">Windows 或 IANA 时区 ID</param>
     public virtual TimeZoneInfo GetTimeZoneInfo(string windowsOrIanaTimeZoneId)
     {
         return TZConvert.GetTimeZoneInfo(windowsOrIanaTimeZoneId);

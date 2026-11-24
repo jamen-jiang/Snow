@@ -59,19 +59,27 @@ public sealed class SystemTextJsonSerializer : ISnowJsonSerializer
     public JsonSerializerOptions Options => _options;
 
     /// <inheritdoc />
+    /// <param name="value">值</param>
+    /// <param name="type">类型, 可为 null</param>
     public string Serialize(object? value, Type? type = null)
         => JsonSerializer.Serialize(value, type ?? value?.GetType() ?? typeof(object), _options);
 
     /// <inheritdoc />
+    /// <param name="value">值</param>
+    /// <param name="type">类型, 可为 null</param>
     public byte[] SerializeToUtf8Bytes(object? value, Type? type = null)
         => JsonSerializer.SerializeToUtf8Bytes(value, type ?? value?.GetType() ?? typeof(object), _options);
 
     /// <inheritdoc />
+    /// <param name="json">JSON 字符串</param>
     public T? Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, _options);
 
     /// <inheritdoc />
+    /// <param name="json">JSON 字符串</param>
+    /// <param name="type">类型, 可为 null</param>
     public object? Deserialize(string json, Type type) => JsonSerializer.Deserialize(json, type, _options);
 
     /// <inheritdoc />
+    /// <param name="stream">流</param>
     public T? Deserialize<T>(Stream stream) => JsonSerializer.Deserialize<T>(stream, _options);
 }

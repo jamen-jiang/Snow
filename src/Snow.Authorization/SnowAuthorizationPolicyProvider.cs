@@ -46,6 +46,7 @@ public sealed class SnowAuthorizationPolicyProvider : IAuthorizationPolicyProvid
     public Task<AuthorizationPolicy?> GetFallbackPolicyAsync() => _fallbackPolicyProvider.GetFallbackPolicyAsync();
 
     /// <inheritdoc />
+    /// <param name="policyName">策略名</param>
     public async Task<AuthorizationPolicy?> GetPolicyAsync(string policyName)
     {
         if (_cache.TryGetValue(policyName, out AuthorizationPolicy? cached))

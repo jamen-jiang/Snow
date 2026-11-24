@@ -9,12 +9,14 @@ public static class ServiceDescriptorExtensions
     /// <summary>
     /// 取归一化后的实现实例。
     /// </summary>
+    /// <param name="descriptor">服务描述符</param>
     public static object? NormalizedImplementationInstance(this ServiceDescriptor descriptor)
         => descriptor.IsKeyedService ? descriptor.KeyedImplementationInstance : descriptor.ImplementationInstance;
 
     /// <summary>
     /// 取归一化后的实现类型。
     /// </summary>
+    /// <param name="descriptor">服务描述符</param>
     public static Type? NormalizedImplementationType(this ServiceDescriptor descriptor)
         => descriptor.IsKeyedService ? descriptor.KeyedImplementationType : descriptor.ImplementationType;
 }

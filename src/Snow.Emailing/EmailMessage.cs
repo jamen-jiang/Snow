@@ -11,36 +11,58 @@ public sealed class EmailMessage
     /// </summary>
     public EmailAddress? From { get; set; }
 
-    /// <summary>收件人</summary>
+    /// <summary>
+    /// 收件人
+    /// </summary>
     public List<EmailAddress> To { get; } = [];
 
-    /// <summary>抄送</summary>
+    /// <summary>
+    /// 抄送
+    /// </summary>
     public List<EmailAddress> Cc { get; } = [];
 
-    /// <summary>密送</summary>
+    /// <summary>
+    /// 密送
+    /// </summary>
     public List<EmailAddress> Bcc { get; } = [];
 
-    /// <summary>回复地址</summary>
+    /// <summary>
+    /// 回复地址
+    /// </summary>
     public List<EmailAddress> ReplyTo { get; } = [];
 
-    /// <summary>标题</summary>
+    /// <summary>
+    /// 标题
+    /// </summary>
     public string Subject { get; set; } = string.Empty;
 
-    /// <summary>纯文本正文</summary>
+    /// <summary>
+    /// 纯文本正文
+    /// </summary>
     public string? TextBody { get; set; }
 
-    /// <summary>HTML 正文; 与 <see cref="TextBody"/> 同时给则按 multipart/alternative 投递</summary>
+    /// <summary>
+    /// HTML 正文; 与 <see cref="TextBody"/> 同时给则按 multipart/alternative 投递
+    /// </summary>
     public string? HtmlBody { get; set; }
 
-    /// <summary>附件</summary>
+    /// <summary>
+    /// 附件
+    /// </summary>
     public List<EmailAttachment> Attachments { get; } = [];
 
-    /// <summary>自定义邮件头(键不区分大小写)</summary>
+    /// <summary>
+    /// 自定义邮件头(键不区分大小写)
+    /// </summary>
     public Dictionary<string, string> Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>优先级</summary>
+    /// <summary>
+    /// 优先级
+    /// </summary>
     public EmailPriority Priority { get; set; } = EmailPriority.Normal;
 
-    /// <summary>单封超时; 为空则用 <see cref="EmailOptions.Timeout"/></summary>
+    /// <summary>
+    /// 单封超时; 为空则用 <see cref="EmailOptions.Timeout"/>
+    /// </summary>
     public TimeSpan? Timeout { get; set; }
 }

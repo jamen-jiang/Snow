@@ -22,6 +22,9 @@ public sealed class TransactionalAttribute : SnowInterceptorAttribute
     public bool RequiresNew { get; set; }
 
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
+    /// <param name="next">后续执行委托</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);

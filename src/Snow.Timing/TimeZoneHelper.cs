@@ -13,6 +13,7 @@ public static class TimeZoneHelper
     /// <summary>
     /// 把时区列表转成「名称 (偏移)」的形式
     /// </summary>
+    /// <param name="timezones">时区集合</param>
     public static List<NameValue> GetTimezones(List<NameValue> timezones)
     {
         return timezones
@@ -24,6 +25,7 @@ public static class TimeZoneHelper
     /// <summary>
     /// 取时区相对 UTC 的偏移文本, 如 <c>+08:00</c>
     /// </summary>
+    /// <param name="timeZoneInfo">时区信息</param>
     public static string GetTimezoneOffset(TimeZoneInfo timeZoneInfo)
     {
         if (timeZoneInfo.BaseUtcOffset < TimeSpan.Zero)

@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Timing\Snow.Timing.csproj" />
   </ItemGroup>
 
 </Project>

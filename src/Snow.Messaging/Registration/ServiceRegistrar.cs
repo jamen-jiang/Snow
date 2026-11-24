@@ -74,6 +74,11 @@ public static class ServiceRegistrar
     /// <summary>
     /// 把实现了指定开放接口的类型登记到容器
     /// </summary>
+    /// <param name="openRequestInterface">开放泛型接口</param>
+    /// <param name="services">服务集合</param>
+    /// <param name="assembliesToScan">要扫描的程序集</param>
+    /// <param name="addIfAlreadyExists">已存在时是否重复添加</param>
+    /// <param name="cancellationToken">取消令牌</param>
     private static void ConnectImplementationsToTypesClosing(Type openRequestInterface,
         IServiceCollection services,
         IEnumerable<Assembly> assembliesToScan,

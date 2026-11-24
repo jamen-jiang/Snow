@@ -28,6 +28,10 @@ public abstract class EventHandlerWrapper
 public sealed class EventHandlerWrapperImpl<TEvent> : EventHandlerWrapper where TEvent : IEvent
 {
     /// <inheritdoc />
+    /// <param name="event">事件对象</param>
+    /// <param name="serviceProvider">服务提供者</param>
+    /// <param name="publishAsync">事件发布委托</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public override Task HandleAsync(IEvent @event, IServiceProvider serviceProvider,
         Func<IEnumerable<EventHandlerExecutor>, IEvent, CancellationToken, Task> publishAsync,
         CancellationToken cancellationToken)

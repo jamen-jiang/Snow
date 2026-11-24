@@ -29,6 +29,8 @@ public sealed class TenantConfigurationProvider : ITenantConfigurationProvider
     }
 
     /// <inheritdoc />
+    /// <param name="saveResolveResult">是否缓存解析结果</param>
+    /// <param name="cancellationToken">取消令牌</param>
     public async Task<TenantConfiguration?> GetAsync(bool saveResolveResult = false, CancellationToken cancellationToken = default)
     {
         TenantResolveResult result = await _resolver.ResolveTenantIdOrNameAsync().ConfigureAwait(false);

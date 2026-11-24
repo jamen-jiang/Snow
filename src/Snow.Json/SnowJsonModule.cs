@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.Modularity;
+using Snow.Timing;
 
 namespace Snow.Json;
 
@@ -9,9 +10,11 @@ namespace Snow.Json;
 /// <para>本包自带 System.Text.Json 实现, 默认就生效; 要换 Newtonsoft.Json 再装 Snow.Json.Newtonsoft。</para>
 /// <para>公共开关读 <c>Json</c> 节。</para>
 /// </summary>
+[DependsOn(typeof(SnowTimingModule))]
 public sealed class SnowJsonModule : SnowModule
 {
     /// <inheritdoc />
+    /// <param name="context">上下文</param>
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

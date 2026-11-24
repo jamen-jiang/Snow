@@ -13,6 +13,9 @@ public static class SnowLoggerExtensions
     /// <summary>
     /// 按指定级别写一条消息。
     /// </summary>
+    /// <param name="logger">日志器</param>
+    /// <param name="logLevel">日志级别</param>
+    /// <param name="message">消息</param>
     public static void LogWithLevel(this ILogger logger, LogLevel logLevel, string message)
     {
         switch (logLevel)
@@ -29,6 +32,10 @@ public static class SnowLoggerExtensions
     /// <summary>
     /// 按指定级别写一条带异常的消息。
     /// </summary>
+    /// <param name="logger">日志器</param>
+    /// <param name="logLevel">日志级别</param>
+    /// <param name="message">消息</param>
+    /// <param name="exception">异常</param>
     public static void LogWithLevel(this ILogger logger, LogLevel logLevel, string message, Exception exception)
     {
         switch (logLevel)
@@ -45,6 +52,9 @@ public static class SnowLoggerExtensions
     /// <summary>
     /// 记录一个异常: 级别默认取 <see cref="IHasLogLevel.LogLevel"/>, 否则按 Error。
     /// </summary>
+    /// <param name="logger">日志器</param>
+    /// <param name="ex">异常</param>
+    /// <param name="level">日志级别, 可为 null</param>
     public static void LogException(this ILogger logger, Exception ex, LogLevel? level = null)
     {
         LogLevel selectedLevel = level ?? (ex is IHasLogLevel hasLogLevel ? hasLogLevel.LogLevel : LogLevel.Error);
