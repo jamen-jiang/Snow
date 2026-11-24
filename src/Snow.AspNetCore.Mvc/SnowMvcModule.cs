@@ -31,11 +31,10 @@ public sealed class SnowMvcModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        SnowMvcOptions effective = BuildOptions(context.Services);
-        context.Services.AddSingleton(effective);
+        context.Services.Configure<SnowMvcOptions>(options => context.Configuration.GetSection("Mvc").Bind(options));
 
-        // 过滤器从 IOptions 读配置, 所以把生效后的选项写回选项管道
-        context.Services.Configure<SnowMvcOptions>(options => CopyTo(effective, options));
+        // 注册期快照: 建约定时就要有最终的值; 过滤器仍从 IOptions 读同一份配置
+        SnowMvcOptions effective = context.Services.GetOptions<SnowMvcOptions>();
 
         // AddService 登记过滤器要求容器里真有这个服务: 自己先登记一遍(与 ABP 在 AbpAspNetCoreMvcModule 里逐个登记过滤器同理)
         context.Services.AddScoped<SnowObjectValidationActionFilter>();
@@ -114,27 +113,4 @@ public sealed class SnowMvcModule : SnowModule
         return assemblies;
     }
 
-    private static SnowMvcOptions BuildOptions(IServiceCollection services)
-    {
-        SnowMvcOptions options = new();
-
-        IConfigurationSection section = services.GetConfiguration().GetSection("Mvc");
-        if (section.Exists())
-        {
-            section.Bind(options);
-        }
-
-        SnowMvcOptionsSetup? setup = services.GetSingletonInstanceOrNull<SnowMvcOptionsSetup>();
-        setup?.Apply(options);
-
-        return options;
-    }
-
-    private static void CopyTo(SnowMvcOptions source, SnowMvcOptions target)
-    {
-        target.RootPath = source.RootPath;
-        target.WrapResultByDefault = source.WrapResultByDefault;
-        target.IncludeExceptionMessage = source.IncludeExceptionMessage;
-        target.AutoModelStateValidation = source.AutoModelStateValidation;
-    }
 }

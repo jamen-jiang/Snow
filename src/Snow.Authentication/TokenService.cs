@@ -1,3 +1,4 @@
+using Snow.Security.Claims;
 using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
@@ -41,9 +42,9 @@ public sealed class TokenService : ITokenService
         JwtRegisteredClaimNames.Nbf,
         JwtRegisteredClaimNames.Iss,
         JwtRegisteredClaimNames.Aud,
-        UserClaimTypes.UserId,
-        UserClaimTypes.UserName,
-        UserClaimTypes.Name,
+        SnowClaimTypes.UserId,
+        SnowClaimTypes.UserName,
+        SnowClaimTypes.Name,
     };
 
     /// <summary>
@@ -86,8 +87,8 @@ public sealed class TokenService : ITokenService
 
         // 只枚举一次: 调用方可能传惰性序列
         List<KeyValuePair<string, string>> list = [.. claims];
-        string account = FindValue(list, UserClaimTypes.UserName) ?? userName;
-        string name = FindValue(list, UserClaimTypes.Name) ?? userName;
+        string account = FindValue(list, SnowClaimTypes.UserName) ?? userName;
+        string name = FindValue(list, SnowClaimTypes.Name) ?? userName;
         return LoginAsync(userId, account, name, list, clientInfo, cancellationToken);
     }
 
@@ -108,12 +109,12 @@ public sealed class TokenService : ITokenService
         DateTimeOffset expiresAt = now.Add(options.Expiration);
         string jti = Guid.NewGuid().ToString("N");
 
-        // 三条标准声明固定前置, 与 UserClaimTypes 的读取口径一致; jti 用于把令牌对回会话
+        // 三条标准声明固定前置, 与 SnowClaimTypes 的读取口径一致; jti 用于把令牌对回会话
         List<Claim> tokenClaims =
         [
-            new Claim(UserClaimTypes.UserId, loginId),
-            new Claim(UserClaimTypes.UserName, userName),
-            new Claim(UserClaimTypes.Name, name),
+            new Claim(SnowClaimTypes.UserId, loginId),
+            new Claim(SnowClaimTypes.UserName, userName),
+            new Claim(SnowClaimTypes.Name, name),
             new Claim(JwtRegisteredClaimNames.Jti, jti),
         ];
 
@@ -193,7 +194,7 @@ public sealed class TokenService : ITokenService
     public async Task<long?> GetLoginIdAsync(string token, CancellationToken cancellationToken = default)
     {
         CheckResult result = await CheckAsync(token, loadSession: false, cancellationToken);
-        return result.Identity is null ? null : ParseLoginId(result.Identity.FindFirst(UserClaimTypes.UserId)?.Value);
+        return result.Identity is null ? null : ParseLoginId(result.Identity.FindFirst(SnowClaimTypes.UserId)?.Value);
     }
 
     /// <inheritdoc />
@@ -431,8 +432,8 @@ public sealed class TokenService : ITokenService
             IssuerSigningKeys = keys.ValidationKeys,
             // 白名单严格钉死 HS256: 少了这一步就有算法混淆攻击(把 alg 改成 none 或另一种算法再签一份)
             ValidAlgorithms = keys.ValidAlgorithms,
-            NameClaimType = UserClaimTypes.UserName,
-            RoleClaimType = UserClaimTypes.Role,
+            NameClaimType = SnowClaimTypes.UserName,
+            RoleClaimType = SnowClaimTypes.Role,
         };
 
         return new Settings(options, keys, validationParameters);

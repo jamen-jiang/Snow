@@ -22,14 +22,9 @@ public sealed class SnowRateLimitingModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        SnowRateLimitingOptionsSetup? setup = context.Services
-            .Where(descriptor => descriptor.ServiceType == typeof(SnowRateLimitingOptionsSetup))
-            .Select(descriptor => descriptor.ImplementationInstance)
-            .OfType<SnowRateLimitingOptionsSetup>()
-            .FirstOrDefault();
-
-        // 即使宿主没有追加任何配置也登记一次, 使 UseRateLimiter 与 [EnableRateLimiting] 可用
-        context.Services.AddRateLimiter(limiter => setup?.Apply(limiter));
+        // 宿主用 AddSnowRateLimiting 追加的配置走标准 Options 管道(PostConfigure), 在 AddRateLimiter 之后结算。
+        // 这里登记一次空动作, 使 UseRateLimiter 与 [EnableRateLimiting] 可用。
+        context.Services.AddRateLimiter(_ => { });
     }
 
 }

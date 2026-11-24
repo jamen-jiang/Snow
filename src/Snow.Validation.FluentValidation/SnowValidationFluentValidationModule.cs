@@ -20,21 +20,8 @@ public sealed class SnowValidationFluentValidationModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        SnowFluentValidationOptions options = new();
-        IConfigurationSection section = context.Configuration.GetSection("Validation:FluentValidation");
-
-        if (section.Exists())
-        {
-            section.Bind(options);
-        }
-
-        SnowFluentValidationOptionsSetup? setup = context.Services
-            .Where(descriptor => descriptor.ServiceType == typeof(SnowFluentValidationOptionsSetup))
-            .Select(descriptor => descriptor.ImplementationInstance)
-            .OfType<SnowFluentValidationOptionsSetup>()
-            .FirstOrDefault();
-
-        setup?.Apply(options);
+        context.Services.Configure<SnowFluentValidationOptions>(options => context.Configuration.GetSection("Validation:FluentValidation").Bind(options));
+        SnowFluentValidationOptions options = context.Services.GetOptions<SnowFluentValidationOptions>();
 
         if (!options.Enabled)
         {

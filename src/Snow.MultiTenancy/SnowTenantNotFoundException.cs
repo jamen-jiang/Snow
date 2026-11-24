@@ -1,9 +1,11 @@
+using Snow.Exceptions;
+
 namespace Snow.MultiTenancy;
 
 /// <summary>
 /// 租户不存在异常
 /// </summary>
-public sealed class SnowTenantNotFoundException : Exception
+public sealed class SnowTenantNotFoundException : SnowException
 {
     /// <summary>
     /// 构造器

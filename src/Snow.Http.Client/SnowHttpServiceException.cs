@@ -1,11 +1,12 @@
 using System.Net;
+using Snow.Exceptions;
 
 namespace Snow.Http.Client;
 
 /// <summary>
 /// 声明式 HTTP 接口调用失败(非 2xx 响应, 或契约定义错误)
 /// </summary>
-public sealed class SnowHttpServiceException : Exception
+public sealed class SnowHttpServiceException : SnowException
 {
     /// <summary>
     /// 构造器

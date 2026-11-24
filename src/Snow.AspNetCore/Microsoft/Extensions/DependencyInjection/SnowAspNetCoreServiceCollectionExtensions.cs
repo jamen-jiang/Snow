@@ -31,7 +31,7 @@ public static class SnowAspNetCoreServiceCollectionExtensions
     /// 把外部令牌里的标准声明名(sub / role / email / name / family_name / given_name)映射成本框架的声明名
     /// <para>对应 ABP 的 <c>TransformAbpClaims()</c>: 登记一个 <see cref="IClaimsTransformation"/>,
     /// 认证中间件在认证完成后调用它, 于是 <c>context.User</c> 上同时有原始声明与映射后的声明,
-    /// <see cref="Snow.Security.UserClaimTypes"/> 那套读取口径(OIDC / 第三方 IdP 签发的令牌)因此能直接用。</para>
+    /// <see cref="Snow.Security.Claims.SnowClaimTypes"/> 那套读取口径(OIDC / 第三方 IdP 签发的令牌)因此能直接用。</para>
     /// <para>只登记不启用任何中间件, 也不改已有声明; 不需要映射就不要调。</para>
     /// </summary>
     /// <param name="services">服务集合</param>

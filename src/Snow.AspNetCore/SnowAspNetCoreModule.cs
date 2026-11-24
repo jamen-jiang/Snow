@@ -7,14 +7,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Snow.Auditing;
+using Snow.AspNetCore.ExceptionHandling;
 using Snow.Authorization;
 using Snow.DependencyInjection;
 using Snow.Modularity;
 using Snow.Security;
-using Snow.Timing;
 using Snow.Tracing;
 using Snow.Uow;
+using Snow.Validation;
 
 namespace Snow.AspNetCore;
 
@@ -29,19 +29,19 @@ namespace Snow.AspNetCore;
 /// <c>app.UseSnowEndpoints()</c> 映射端点 —— 与 ABP 模板的 <c>await app.InitializeApplicationAsync()</c> 同理。</para>
 /// <para>本模块只负责: 上下文访问器、对象访问器、端点选项容器、静态资源合并。</para>
 /// <para>依赖 <see cref="SnowSecurityModule"/>: 当前主体以 <c>HttpContext.User</c> 为准, 需要它的上下文访问器。</para>
-/// <para>依赖列表参照 ABP 的 <c>AbpAspNetCoreModule</c>: 安全、授权、审计、工作单元在这里。
+/// <para>依赖列表参照 ABP 的 <c>AbpAspNetCoreModule</c>: 安全、授权、工作单元在这里。
 /// 其余能力模块(缓存 / 分布式锁 / 后台作业 / 事件总线 / 消息 / 邮件 / FTP / HTTP 客户端)只随包提供契约,
 /// 由宿主在自己的模块里按需 <c>DependsOn</c> —— 与 ABP 把 Caching / EventBus / BackgroundJobs 留给宿主声明同理。
 /// </para>
 /// <para>认证模块(<c>SnowAuthenticationModule</c>)故意不在此列: 它需要 JWT 参数, 属于应用层选型, 与 ABP 把 <c>Volo.Abp.AspNetCore.Authentication.JwtBearer</c> 单列同理。</para>
+/// <para><b>与 ABP 的依赖差异</b>: ABP 的 <c>AbpAspNetCoreModule</c> 未在 <c>[DependsOn]</c> 里直接声明 Timing/Tracing。Snow 此处也不声明 <c>SnowTimingModule</c> —— 本包代码不使用任何时间抽象, 需要时间的宿主自己声明; <c>SnowTracingModule</c> 则保留显式声明, 因为本包的 <c>SnowCorrelationIdMiddleware</c> 直接使用 <c>Snow.Tracing.ICorrelationIdProvider</c>, 显式声明才能让 <c>UseSnowCorrelationId()</c> 开箱可用。</para>
 /// </summary>
 [DependsOn(
-    typeof(SnowAuditingModule),
     typeof(SnowSecurityModule),
     typeof(SnowAuthorizationModule),
     typeof(SnowUowModule),
-    typeof(SnowTimingModule),
-    typeof(SnowTracingModule)
+    typeof(SnowTracingModule),
+    typeof(SnowValidationModule)
 )]
 public sealed class SnowAspNetCoreModule : SnowModule
 {
@@ -80,6 +80,14 @@ public sealed class SnowAspNetCoreModule : SnowModule
         context.Services.AddOptions<SnowEndpointRouterOptions>();
 
         Configure<SnowAspNetCoreOptions>(context.Services.GetConfiguration().GetSection("Snow"));
+
+        // 异常 → 错误信封的转换器: 由 UseSnowExceptionHandling() 中间件消费(对应 ABP 的 AspNetCore.ExceptionHandling 子模块)
+        context.Services.AddSingleton<IExceptionToErrorInfoConverter, DefaultExceptionToErrorInfoConverter>();
+
+        if (context.Configuration.GetSection("ExceptionHandling").Exists())
+        {
+            Configure<SnowExceptionHandlingOptions>(context.Configuration.GetSection("ExceptionHandling"));
+        }
     }
 
     /// <inheritdoc />

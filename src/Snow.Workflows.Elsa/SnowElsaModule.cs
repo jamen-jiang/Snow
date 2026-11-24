@@ -25,17 +25,8 @@ public sealed class SnowElsaModule : SnowModule
     {
         IServiceCollection services = context.Services;
 
-        SnowElsaOptions options = new();
-        IConfigurationSection section = services.GetConfiguration().GetSection("Workflows:Elsa");
-        if (section.Exists())
-        {
-            section.Bind(options);
-        }
-
-        SnowElsaOptionsSetup? setup = services
-            .FirstOrDefault(descriptor => descriptor.ServiceType == typeof(SnowElsaOptionsSetup))
-            ?.ImplementationInstance as SnowElsaOptionsSetup;
-        setup?.Apply(options);
+        services.Configure<SnowElsaOptions>(options => services.GetConfiguration().GetSection("Workflows:Elsa").Bind(options));
+        SnowElsaOptions options = services.GetOptions<SnowElsaOptions>();
 
         // 收尾阶段挂中间件要读 EnableHttp, 把算好的最终选项放进容器
         services.AddSingleton(options);
@@ -49,6 +40,19 @@ public sealed class SnowElsaModule : SnowModule
 
         services.AddElsa(elsa =>
         {
+            // 运行工作流所需的最小特性集: 表达式、JS 引擎与内存缓存。取舍项(如身份)不放在这里。
+            if (options.UseDefaultFeatures)
+            {
+                elsa.UseExpressions(_ => { });
+
+                if (options.UseJavaScript)
+                {
+                    elsa.UseJavaScript((global::Elsa.Expressions.JavaScript.Features.JavaScriptFeature _) => { });
+                }
+
+                elsa.UseMemoryCache(_ => { });
+            }
+
             elsa.UseWorkflowManagement(management =>
             {
                 if (useSqlite)
@@ -61,6 +65,11 @@ public sealed class SnowElsaModule : SnowModule
                 }
 
                 options.ConfigureWorkflowManagement?.Invoke(management);
+
+                if (options.UseDefaultFeatures)
+                {
+                    management.UseCache(_ => { });
+                }
             });
 
             elsa.UseWorkflowRuntime(runtime =>
@@ -75,12 +84,23 @@ public sealed class SnowElsaModule : SnowModule
                 }
 
                 options.ConfigureWorkflowRuntime?.Invoke(runtime);
+
+                if (options.UseDefaultFeatures)
+                {
+                    runtime.UseCache(_ => { });
+                    runtime.UseDefaultRuntime(_ => { });
+                }
             });
 
             if (options.EnableHttp)
             {
                 elsa.UseHttp(http =>
                 {
+                    if (options.UseDefaultFeatures)
+                    {
+                        http.UseCache(_ => { });
+                    }
+
                     http.ConfigureHttpOptions = httpOptions =>
                     {
                         if (options.HttpBaseUrl is not null)

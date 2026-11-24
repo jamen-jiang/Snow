@@ -1,3 +1,4 @@
+using Snow.Security.Claims;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -147,8 +148,8 @@ public sealed class SnowAuthenticationModule : SnowModule
         validation.IssuerSigningKeys = keys.ValidationKeys;
         // 白名单严格等于这一个算法: 少了这一步就有算法混淆攻击(把 alg 改成 none 或另一种算法再签一份)
         validation.ValidAlgorithms = keys.ValidAlgorithms;
-        validation.NameClaimType = UserClaimTypes.UserName;
-        validation.RoleClaimType = UserClaimTypes.Role;
+        validation.NameClaimType = SnowClaimTypes.UserName;
+        validation.RoleClaimType = SnowClaimTypes.Role;
 
         // 只挂自己的回调, 不整体替换 Events: 宿主在 AddJwtBearer 里配的 OnMessageReceived / OnChallenge /
         // OnAuthenticationFailed 要留着, 否则接入方一个都改不了

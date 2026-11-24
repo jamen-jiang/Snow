@@ -6,7 +6,7 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Description>应用层契约: 实体 DTO、分页请求与分页结果; 业务应用服务放在消费方项目里</Description>
+    <Description>应用层契约: 实体 DTO、分页请求与分页结果、IQueryable 的 PageBy 分页扩展; 业务应用服务放在消费方项目里</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />

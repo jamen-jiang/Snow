@@ -15,7 +15,7 @@ namespace Snow.Emailing.MailKit;
 /// <summary>
 /// 基于 MailKit 的邮件发送器: MimeKit 组装正文与附件, MailKit 的 <see cref="SmtpClient"/> 走 SSL/STARTTLS 投递
 /// <para>顶替 <see cref="NullEmailSender"/>: 引入本包后注入到的 <see cref="IEmailSender"/> 就是它。</para>
-/// <para>一组链式调用对应一封信; 发送后<b>不清空</b>已设置的收件人与内容, 要再发一封请重新注入(Transient)。</para>
+/// <para>无状态: 要发的数据都在传入的 <see cref="EmailMessage"/> 上, 同一个实例可以反复给不同的信投递。</para>
 /// <para>连接加密方式只由 <see cref="EmailOptions.UseSsl"/> 决定: true 走 465 直连 SSL, false 走 STARTTLS。</para>
 /// </summary>
 [TransientService(ReplaceServices = true)]
@@ -23,12 +23,6 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
 {
     private readonly EmailOptions _options;
     private readonly ILogger<MailKitEmailSender>? _logger;
-
-    private readonly List<InternetAddress> _to = [];
-    private readonly List<InternetAddress> _cc = [];
-    private readonly List<(string FileName, byte[] Data)> _attachments = [];
-    private string? _subject;
-    private string? _content;
 
     /// <summary>
     /// 构造器
@@ -46,74 +40,69 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
     }
 
     /// <inheritdoc />
-    public IEmailSender Attach(string fileName, byte[] data)
+    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(message);
 
-        _attachments.Add((fileName, data));
-        return this;
+        return SendManyAsync(new[] { message }, cancellationToken);
     }
 
     /// <inheritdoc />
-    /// <remarks>支持 "a@x.com, b@y.com" 这种一次写多个地址, 也支持 "名字 &lt;a@x.com&gt;"</remarks>
-    public IEmailSender To(string to)
+    public Task SendAsync(Action<EmailMessage> configure, CancellationToken cancellationToken = default)
     {
-        _to.AddRange(ParseAddresses(to, nameof(to)));
-        return this;
+        ArgumentNullException.ThrowIfNull(configure);
+
+        EmailMessage message = new();
+        configure(message);
+        return SendAsync(message, cancellationToken);
     }
 
     /// <inheritdoc />
-    public IEmailSender Cc(string cc)
+    public async Task SendManyAsync(IEnumerable<EmailMessage> messages, CancellationToken cancellationToken = default)
     {
-        _cc.AddRange(ParseAddresses(cc, nameof(cc)));
-        return this;
-    }
+        ArgumentNullException.ThrowIfNull(messages);
 
-    /// <inheritdoc />
-    public IEmailSender Subject(string subject)
-    {
-        _subject = subject;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEmailSender Content(string content)
-    {
-        _content = content;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public async Task SendAsync()
-    {
-        MimeMessage message = BuildMessage();
-
-        _logger?.LogDebug(
-            "发送邮件: 收件人 {To}, 抄送 {Cc}, 标题 {Subject}, 附件 {AttachmentCount} 个",
-            string.Join(", ", _to), string.Join(", ", _cc), message.Subject, _attachments.Count);
-
-        CancellationTokenSource? timeoutSource = _options.Timeout is { } timeout && timeout > TimeSpan.Zero
-            ? new CancellationTokenSource(timeout)
-            : null;
-
-        try
+        EmailMessage[] list = messages.ToArray();
+        if (list.Length == 0)
         {
-            CancellationToken cancellationToken = timeoutSource?.Token ?? CancellationToken.None;
+            return;
+        }
 
-            using SmtpClient client = await BuildClientAsync(cancellationToken).ConfigureAwait(false);
-            await client.SendAsync(message, cancellationToken).ConfigureAwait(false);
-            await client.DisconnectAsync(quit: true, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
+        // 建连与认证只做一次, 整批复用同一条连接
+        using CancellationTokenSource? connectTimeout = CreateTimeoutSource(_options.Timeout, cancellationToken);
+        CancellationToken connectToken = connectTimeout?.Token ?? cancellationToken;
+
+        using SmtpClient client = await BuildClientAsync(connectToken).ConfigureAwait(false);
+
+        foreach (EmailMessage message in list)
         {
-            _logger?.LogError(ex, "发送邮件失败: 收件人 {To}, 标题 {Subject}", string.Join(", ", _to), message.Subject);
-            throw;
+            MimeMessage mimeMessage = BuildMessage(message);
+
+            using CancellationTokenSource? sendTimeout = CreateTimeoutSource(message.Timeout ?? _options.Timeout, cancellationToken);
+            CancellationToken sendToken = sendTimeout?.Token ?? cancellationToken;
+
+            try
+            {
+                await client.SendAsync(mimeMessage, sendToken).ConfigureAwait(false);
+
+                _logger?.LogDebug(
+                    "发送邮件: 收件人 {To}, 抄送 {Cc}, 标题 {Subject}, 附件 {AttachmentCount} 个",
+                    JoinAddresses(message.To), JoinAddresses(message.Cc), mimeMessage.Subject, message.Attachments.Count);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new EmailSendException(
+                    "发送邮件超时(" + FormatTimeout(message.Timeout ?? _options.Timeout) + ")",
+                    _options.SmtpHost,
+                    ToRecipientStrings(message));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                throw WrapException(ex, message);
+            }
         }
-        finally
-        {
-            timeoutSource?.Dispose();
-        }
+
+        await client.DisconnectAsync(quit: true, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -129,11 +118,6 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
     /// <returns>已连接的客户端, 调用方负责释放</returns>
     public async Task<SmtpClient> BuildClientAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_options.SmtpHost))
-        {
-            throw new InvalidOperationException("未配置 SMTP 服务器, 请设置 Email:SmtpHost。");
-        }
-
         SmtpClient client = new();
 
         try
@@ -155,46 +139,81 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
         }
     }
 
-    private MimeMessage BuildMessage()
+    private MimeMessage BuildMessage(EmailMessage message)
     {
-        if (string.IsNullOrWhiteSpace(_options.DefaultFromAddress))
+        MimeMessage mimeMessage = new();
+
+        // 发件人: 优先信上指定的, 否则回退配置的默认发件人
+        string? fromAddress = message.From?.Address ?? (string.IsNullOrWhiteSpace(_options.DefaultFromAddress) ? null : _options.DefaultFromAddress);
+        if (fromAddress is not null)
         {
-            throw new InvalidOperationException("未配置发件人地址, 请设置 Email:DefaultFromAddress。");
+            string? displayName = message.From?.DisplayName
+                ?? (string.IsNullOrWhiteSpace(_options.DefaultFromDisplayName) ? null : _options.DefaultFromDisplayName);
+
+            mimeMessage.From.Add(new MailboxAddress(displayName ?? string.Empty, fromAddress));
         }
 
-        if (_to.Count == 0)
+        mimeMessage.To.AddRange(ToMailboxAddresses(message.To));
+        if (message.Cc.Count > 0)
         {
-            throw new InvalidOperationException("发送邮件前必须先指定收件人(调用 To)。");
+            mimeMessage.Cc.AddRange(ToMailboxAddresses(message.Cc));
         }
 
-        MimeMessage message = new();
-        message.From.Add(new MailboxAddress(_options.DefaultFromDisplayName, _options.DefaultFromAddress));
-        message.To.AddRange(_to);
-        if (_cc.Count > 0)
+        if (message.Bcc.Count > 0)
         {
-            message.Cc.AddRange(_cc);
+            mimeMessage.Bcc.AddRange(ToMailboxAddresses(message.Bcc));
         }
 
-        message.Subject = _subject ?? string.Empty;
-        message.MessageId = MimeUtils.GenerateMessageId();
+        if (message.ReplyTo.Count > 0)
+        {
+            mimeMessage.ReplyTo.AddRange(ToMailboxAddresses(message.ReplyTo));
+        }
+
+        mimeMessage.Subject = message.Subject ?? string.Empty;
+        mimeMessage.MessageId = MimeUtils.GenerateMessageId();
+        mimeMessage.Priority = message.Priority switch
+        {
+            EmailPriority.High => MessagePriority.Urgent,
+            EmailPriority.Low => MessagePriority.NonUrgent,
+            _ => MessagePriority.Normal
+        };
+
+        foreach (KeyValuePair<string, string> header in message.Headers)
+        {
+            mimeMessage.Headers.Add(header.Key, header.Value);
+        }
 
         BodyBuilder body = new();
-        if (_options.IsBodyHtml)
+        if (!string.IsNullOrEmpty(message.HtmlBody))
         {
-            body.HtmlBody = _content ?? string.Empty;
-        }
-        else
-        {
-            body.TextBody = _content ?? string.Empty;
+            body.HtmlBody = message.HtmlBody;
         }
 
-        foreach ((string fileName, byte[] data) in _attachments)
+        if (!string.IsNullOrEmpty(message.TextBody))
         {
-            body.Attachments.Add(fileName, data);
+            body.TextBody = message.TextBody;
         }
 
-        message.Body = body.ToMessageBody();
-        return message;
+        if (body.HtmlBody is null && body.TextBody is null)
+        {
+            // 两种正文都没给: 按配置给个空体, 保证 MimeMessage 有合法正文
+            if (_options.IsBodyHtml)
+            {
+                body.HtmlBody = string.Empty;
+            }
+            else
+            {
+                body.TextBody = string.Empty;
+            }
+        }
+
+        foreach (EmailAttachment attachment in message.Attachments)
+        {
+            body.Attachments.Add(attachment.FileName, attachment.OpenRead());
+        }
+
+        mimeMessage.Body = body.ToMessageBody();
+        return mimeMessage;
     }
 
     private SecureSocketOptions ResolveSecureSocketOption()
@@ -203,15 +222,52 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
         return _options.UseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable;
     }
 
-    private static List<InternetAddress> ParseAddresses(string value, string parameterName)
+    private EmailSendException WrapException(Exception exception, EmailMessage message)
     {
-        try
+        string reason = exception switch
         {
-            return InternetAddressList.Parse(value).Cast<InternetAddress>().ToList();
-        }
-        catch (ParseException ex)
+            SmtpCommandException smtpCommand when smtpCommand.ErrorCode == SmtpErrorCode.RecipientNotAccepted =>
+                "收件人被服务器拒绝: " + smtpCommand.Message,
+            SmtpCommandException smtpCommand =>
+                "SMTP 服务器拒绝(" + smtpCommand.StatusCode + " " + smtpCommand.ErrorCode + "): " + smtpCommand.Message,
+            SmtpProtocolException protocol =>
+                "SMTP 协议错误: " + protocol.Message,
+            AuthenticationException authentication =>
+                "SMTP 认证失败: " + authentication.Message,
+            _ => "发送邮件失败: " + exception.Message
+        };
+
+        _logger?.LogError(exception, "发送邮件失败: 收件人 {To}, 标题 {Subject}", JoinAddresses(message.To), message.Subject);
+
+        return new EmailSendException(reason, _options.SmtpHost, ToRecipientStrings(message), exception);
+    }
+
+    private static CancellationTokenSource? CreateTimeoutSource(TimeSpan? timeout, CancellationToken cancellationToken)
+    {
+        if (timeout is not { } value || value <= TimeSpan.Zero)
         {
-            throw new FormatException("邮件地址格式不正确: " + value, ex);
+            return null;
         }
+
+        CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        source.CancelAfter(value);
+        return source;
+    }
+
+    private static IEnumerable<MailboxAddress> ToMailboxAddresses(IEnumerable<EmailAddress> addresses)
+    {
+        return addresses.Select(address => new MailboxAddress(address.DisplayName ?? string.Empty, address.Address));
+    }
+
+    private static string JoinAddresses(IEnumerable<EmailAddress> addresses) => string.Join(", ", addresses);
+
+    private static string[] ToRecipientStrings(EmailMessage message)
+    {
+        return message.To.Select(address => address.Address).ToArray();
+    }
+
+    private static string FormatTimeout(TimeSpan? timeout)
+    {
+        return timeout is { } value ? value.TotalSeconds.ToString("0.###") + " 秒" : "不限时";
     }
 }

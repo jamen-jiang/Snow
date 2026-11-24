@@ -14,6 +14,8 @@
     <!-- 引擎核心 + HTTP 端点 + 管理 API -->
     <PackageReference Include="Elsa" />
     <PackageReference Include="Elsa.Http" />
+    <!-- JS 表达式引擎: 模块的默认特性里会挂 UseJavaScript -->
+    <PackageReference Include="Elsa.Expressions.JavaScript" />
     <PackageReference Include="Elsa.Workflows.Api" />
     <!-- 持久化: 包内只带 SQLite, 其他数据库由使用方自行加提供程序包并走回调 -->
     <PackageReference Include="Elsa.Persistence.EFCore" />

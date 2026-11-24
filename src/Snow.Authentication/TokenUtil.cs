@@ -1,3 +1,4 @@
+using Snow.Security.Claims;
 using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
@@ -56,7 +57,7 @@ public static class TokenUtil
     /// </summary>
     public static long? GetLoginIdOrNull()
     {
-        string? value = Context?.User.FindFirst(UserClaimTypes.UserId)?.Value;
+        string? value = Context?.User.FindFirst(SnowClaimTypes.UserId)?.Value;
         return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long id) ? id : null;
     }
 

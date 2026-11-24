@@ -1,9 +1,11 @@
+using Snow.Exceptions;
+
 namespace Snow.Workflows;
 
 /// <summary>
 /// 工作流执行失败: 定义找不到、执行抛错、或引擎未安装。
 /// </summary>
-public class SnowWorkflowException : Exception
+public class SnowWorkflowException : SnowException
 {
     /// <summary>
     /// 创建异常。

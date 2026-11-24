@@ -24,21 +24,8 @@ public sealed class SnowObjectMappingMapsterModule : SnowModule
     /// <param name="context">服务配置上下文</param>
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        SnowObjectMappingMapsterOptions options = new();
-        IConfigurationSection section = context.Services.GetConfiguration().GetSection("ObjectMapping:Mapster");
-
-        if (section.Exists())
-        {
-            section.Bind(options);
-        }
-
-        SnowObjectMappingMapsterOptionsSetup? setup = context.Services
-            .Where(descriptor => descriptor.ServiceType == typeof(SnowObjectMappingMapsterOptionsSetup))
-            .Select(descriptor => descriptor.ImplementationInstance)
-            .OfType<SnowObjectMappingMapsterOptionsSetup>()
-            .FirstOrDefault();
-
-        setup?.Apply(options);
+        context.Services.Configure<SnowObjectMappingMapsterOptions>(options => context.Services.GetConfiguration().GetSection("ObjectMapping:Mapster").Bind(options));
+        SnowObjectMappingMapsterOptions options = context.Services.GetOptions<SnowObjectMappingMapsterOptions>();
 
         if (!options.Enabled)
         {
@@ -46,36 +33,6 @@ public sealed class SnowObjectMappingMapsterModule : SnowModule
         }
 
         context.Services.AddSingleton(options);
-        context.Services.Configure<SnowObjectMappingMapsterOptions>(configured =>
-        {
-            configured.Enabled = options.Enabled;
-            configured.CompileMappings = options.CompileMappings;
-            configured.ValidateMappings = options.ValidateMappings;
-            configured.ScanRegisters = options.ScanRegisters;
-            configured.ScanAutoMaps = options.ScanAutoMaps;
-            configured.DefaultMaxDepth = options.DefaultMaxDepth;
-            configured.Configure = options.Configure;
-
-            foreach (Type registerType in options.RegisterTypes)
-            {
-                configured.RegisterTypes.Add(registerType);
-            }
-
-            foreach (Type profileType in options.ProfileTypes)
-            {
-                configured.ProfileTypes.Add(profileType);
-            }
-
-            foreach (Assembly assembly in options.MapAssemblies)
-            {
-                configured.MapAssemblies.Add(assembly);
-            }
-
-            foreach (Action<TypeAdapterConfig> configurator in options.Configurators)
-            {
-                configured.Configurators.Add(configurator);
-            }
-        });
 
         IReadOnlyList<Type> registerTypes = ResolveRegisterTypes(context, options);
         IReadOnlyList<Assembly> scannedAssemblies = ResolveScannedAssemblies(context, options);

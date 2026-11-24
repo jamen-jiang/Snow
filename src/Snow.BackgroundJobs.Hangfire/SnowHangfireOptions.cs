@@ -13,7 +13,7 @@ public class SnowHangfireOptions
 
     /// <summary>
     /// 宿主未自行配置存储时是否退回进程内存储, 默认 true
-    /// <para>生产环境应显式调用 AddHangfire 配置持久化存储, 本开关随之失效</para>
+    /// <para>生产环境应显式调用 AddSnowHangfire 配置持久化存储, 本开关随之失效</para>
     /// </summary>
     public bool UseInMemoryStorage { get; set; } = true;
 

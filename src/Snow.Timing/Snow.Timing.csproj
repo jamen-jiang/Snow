@@ -7,11 +7,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Snow.Timing</RootNamespace>
-    <Description>时间: IClock 抽象与直接读系统时钟的默认实现, 供业务与框架统一取当前时间</Description>
+    <Description>时间: IClock 抽象与默认实现(基准 Kind / 多时区换算 / 用户时区), 时钟选项, Windows-IANA 时区换算(对应 ABP 的 Volo.Abp.Timing)</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TimeZoneConverter" />
   </ItemGroup>
 
 </Project>

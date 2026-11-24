@@ -33,5 +33,5 @@ public sealed record SnowWorkflowResult
     /// <summary>
     /// 工作流输出。
     /// </summary>
-    public IReadOnlyDictionary<string, object?> Output { get; init; } = new Dictionary<string, object?>();
+    public IReadOnlyDictionary<string, object> Output { get; init; } = new Dictionary<string, object>();
 }

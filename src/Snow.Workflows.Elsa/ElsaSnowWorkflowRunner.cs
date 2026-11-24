@@ -99,7 +99,7 @@ public sealed class ElsaSnowWorkflowRunner : ISnowWorkflowRunner
             Status = context.Status.ToString(),
             SubStatus = context.SubStatus.ToString(),
             Incidents = context.Incidents.Select(incident => incident.Message).ToArray(),
-            Output = new Dictionary<string, object?>(context.Output, StringComparer.Ordinal),
+            Output = new Dictionary<string, object>(context.Output, StringComparer.Ordinal),
         };
     }
 }

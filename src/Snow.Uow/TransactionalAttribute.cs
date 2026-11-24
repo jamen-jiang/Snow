@@ -44,14 +44,17 @@ public sealed class TransactionalAttribute : SnowInterceptorAttribute
             // 只有最外层提交: 嵌套调用把提交权交给调用方
             if (ownsUnitOfWork)
             {
-                await unitOfWork.CompleteAsync();
+                // 正常提交: 把调用方的取消令牌透传给提交回调(CA2016)
+                await unitOfWork.CompleteAsync(cancellationToken);
             }
         }
         catch
         {
             if (ownsUnitOfWork)
             {
-                await unitOfWork.RollbackAsync();
+                // 回滚往往正是由取消触发: 这里显式传 CancellationToken.None,
+                // 表示「有意不传播取消令牌」, 保证事务一定能回滚/清理, 不会被已取消的令牌中途打断(CA2016)
+                await unitOfWork.RollbackAsync(CancellationToken.None);
             }
 
             throw;

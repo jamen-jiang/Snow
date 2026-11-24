@@ -33,29 +33,29 @@ public class CurrentUser : ICurrentUser
     public virtual long? Id => _principalAccessor.Principal?.FindUserId();
 
     /// <inheritdoc />
-    public virtual string? UserName => this.FindClaimValue(UserClaimTypes.UserName);
+    public virtual string? UserName => this.FindClaimValue(SnowClaimTypes.UserName);
 
     /// <inheritdoc />
-    public virtual string? Name => this.FindClaimValue(UserClaimTypes.Name);
+    public virtual string? Name => this.FindClaimValue(SnowClaimTypes.Name);
 
     /// <inheritdoc />
     public virtual Guid? TenantId
     {
         get
         {
-            string? value = this.FindClaimValue(UserClaimTypes.TenantId);
+            string? value = this.FindClaimValue(SnowClaimTypes.TenantId);
             return Guid.TryParse(value, out Guid tenantId) ? tenantId : null;
         }
     }
 
     /// <inheritdoc />
-    public virtual string? PhoneNumber => this.FindClaimValue(UserClaimTypes.MobilePhone);
+    public virtual string? PhoneNumber => this.FindClaimValue(SnowClaimTypes.MobilePhone);
 
     /// <inheritdoc />
-    public virtual string? Email => this.FindClaimValue(UserClaimTypes.Email);
+    public virtual string? Email => this.FindClaimValue(SnowClaimTypes.Email);
 
     /// <inheritdoc />
-    public virtual string[] Roles => FindClaims(UserClaimTypes.Role).Select(claim => claim.Value).Distinct(StringComparer.Ordinal).ToArray();
+    public virtual string[] Roles => FindClaims(SnowClaimTypes.Role).Select(claim => claim.Value).Distinct(StringComparer.Ordinal).ToArray();
 
     /// <inheritdoc />
     public virtual Claim? FindClaim(string claimType)
@@ -72,7 +72,7 @@ public class CurrentUser : ICurrentUser
     /// <inheritdoc />
     public virtual bool IsInRole(string roleName)
     {
-        return FindClaims(UserClaimTypes.Role).Any(claim => claim.Value == roleName);
+        return FindClaims(SnowClaimTypes.Role).Any(claim => claim.Value == roleName);
     }
 
     private Claim[] FindClaims(string claimType)

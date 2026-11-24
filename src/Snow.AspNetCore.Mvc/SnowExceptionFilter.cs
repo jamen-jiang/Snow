@@ -7,12 +7,16 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Snow;
 using Snow.AspNetCore.Filters;
+using Snow.Exceptions;
+using Snow.Logging;
+using Snow.Validation;
 
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
 /// 把异常翻译成统一错误响应与合适的 HTTP 状态码的过滤器
-/// <para>业务异常(<see cref="SnowUserFriendlyException"/>)按消息返回; 其余异常默认只回"服务器内部错误", 细节靠日志。</para>
+/// <para>业务异常(<see cref="SnowBusinessException"/> 及其子类 <see cref="SnowUserFriendlyException"/>)与校验异常按消息返回;
+/// 其余异常默认只回"服务器内部错误", 细节靠日志。日志级别取 <see cref="IHasLogLevel"/>。</para>
 /// <para>实现 <see cref="ISnowFilter"/>: 控制器标了 <see cref="DisableSnowFeaturesAttribute"/> 时由
 /// <c>SnowMvcActionDescriptorProvider</c> 在动作描述符定型时把它整个摘掉, 请求期不做判断。</para>
 /// </summary>
@@ -40,13 +44,14 @@ public sealed class SnowExceptionFilter : IExceptionFilter, ISnowFilter
         Exception exception = context.Exception;
         (int statusCode, string code, string message) = Translate(exception);
 
-        if (statusCode >= StatusCodes.Status500InternalServerError)
+        LogLevel level = ResolveLogLevel(exception, statusCode);
+        if (level >= LogLevel.Error)
         {
             _logger.LogError(exception, "请求处理失败: {Message}", exception.Message);
         }
         else
         {
-            _logger.LogWarning("请求被拒绝({StatusCode}): {Message}", statusCode, exception.Message);
+            _logger.Log(level, "请求被拒绝({StatusCode}): {Message}", statusCode, exception.Message);
         }
 
         string? details = _options.IncludeExceptionMessage ? exception.ToString() : null;
@@ -58,12 +63,24 @@ public sealed class SnowExceptionFilter : IExceptionFilter, ISnowFilter
         context.ExceptionHandled = true;
     }
 
+    private static LogLevel ResolveLogLevel(Exception exception, int statusCode) => exception switch
+    {
+        IHasLogLevel hasLogLevel => hasLogLevel.LogLevel,
+        _ => statusCode >= StatusCodes.Status500InternalServerError ? LogLevel.Error : LogLevel.Warning,
+    };
+
     private (int StatusCode, string Code, string Message) Translate(Exception exception)
     {
         switch (exception)
         {
+            case SnowValidationException validation:
+                return (StatusCodes.Status400BadRequest, "ValidationFailed", validation.Message);
+
             case SnowUserFriendlyException friendly:
                 return (StatusCodes.Status400BadRequest, friendly.Code ?? "BusinessError", friendly.Message);
+
+            case SnowBusinessException business:
+                return (StatusCodes.Status400BadRequest, business.Code ?? "BusinessError", business.Message);
 
             case UnauthorizedAccessException:
                 return (StatusCodes.Status403Forbidden, "Forbidden", "没有访问该资源的权限");

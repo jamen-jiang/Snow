@@ -1,9 +1,11 @@
+using Snow.Exceptions;
+
 namespace Snow.ObjectMapping;
 
 /// <summary>
 /// 对象映射异常: 映射过程出错时抛出
 /// </summary>
-public class SnowObjectMappingException : Exception
+public class SnowObjectMappingException : SnowException
 {
     /// <summary>
     /// 构造器

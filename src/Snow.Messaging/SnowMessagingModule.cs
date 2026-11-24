@@ -1,4 +1,5 @@
 using Assembly = System.Reflection.Assembly;
+using Microsoft.Extensions.DependencyInjection;
 using Snow.DependencyInjection;
 using Snow.Messaging.Registration;
 using Snow.Modularity;

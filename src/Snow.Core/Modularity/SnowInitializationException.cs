@@ -1,9 +1,11 @@
+using Snow.Exceptions;
+
 namespace Snow.Modularity;
 
 /// <summary>
 /// 模块初始化失败时抛出的异常(对应 ABP 的 AbpInitializationException)
 /// </summary>
-public class SnowInitializationException : Exception
+public class SnowInitializationException : SnowException
 {
     /// <summary>
     /// 构造器

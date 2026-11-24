@@ -1,15 +1,19 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Snow.DependencyInjection;
 
 namespace Snow.Ftping;
 
 /// <summary>
-/// 静默 FTP 客户端: 不连任何服务器, 只把调用记进日志
-/// <para>作为 <see cref="IFtpClient"/> 的兜底实现, 引入 Snow.Ftping.FluentFTP 后由
-/// <c>FluentFtpClient</c> 顶替(它带 ReplaceServices)。这样开发期不配 FTP 也能启动。</para>
-/// <para>与 <c>NullEmailSender</c> 的差别在返回值: 邮件的发送结果无处可返, 只能吞掉;
-/// FTP 的上传/删除有 bool 与 void, 这里选择<b>如实报告失败</b>(上传返 false, 存在性判断返 false)
-/// 而不是假装成功 —— 写入丢失是事故, 让调用方当场发现比事后排查便宜。</para>
+/// 静默 FTP 客户端: 不连任何服务器。
+/// <para>作为 <see cref="IFtpClient"/> 的兜底实现, 引入 Snow.Ftping.FluentFTP 后由 <c>FluentFtpClient</c>
+/// (带 ReplaceServices)顶替, 因此开发期不配 FTP 也能正常启动。</para>
+/// <para>与旧版"返回 null/false"不同, 本实现对每次调用<b>显式抛 <see cref="FtpOperationException"/></b>:
+/// 这样"没装实现/没配置"与"文件真的不存在"不会混为一谈, 问题当场暴露而不是被静默吞掉。</para>
 /// </summary>
 [TransientService]
 public sealed class NullFtpClient : IFtpClient
@@ -26,79 +30,80 @@ public sealed class NullFtpClient : IFtpClient
     }
 
     /// <inheritdoc />
-    public byte[]? Get(string path)
-    {
-        _logger?.LogDebug("FTP 读取未执行(当前为静默实现): 路径 {Path}", path);
-
-        return null;
-    }
+    public Task<byte[]?> ReadAllBytesAsync(string path, CancellationToken cancellationToken = default)
+        => Fail<byte[]?>("读取文件", path);
 
     /// <inheritdoc />
-    public bool Upload(Stream stream, string remotePath)
-    {
-        return ReportWrite("上传流", remotePath);
-    }
+    public Task<Stream> OpenReadAsync(string path, CancellationToken cancellationToken = default)
+        => Fail<Stream>("打开读取流", path);
 
     /// <inheritdoc />
-    public bool Upload(byte[] buffer, string remotePath)
-    {
-        ArgumentNullException.ThrowIfNull(buffer);
-
-        return ReportWrite("上传字节数组(" + buffer.Length + " 字节)", remotePath);
-    }
+    public Task DownloadAsync(string remotePath, Stream destination, CancellationToken cancellationToken = default)
+        => Fail("下载到流", remotePath);
 
     /// <inheritdoc />
-    public bool Upload(string localPath, string remotePath)
-    {
-        return ReportWrite("上传本地文件 " + localPath, remotePath);
-    }
+    public Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true, CancellationToken cancellationToken = default)
+        => Fail("下载到本地文件", remotePath);
 
     /// <inheritdoc />
-    public void Remove(string path)
-    {
-        ReportWrite("删除", path);
-    }
+    public Task UploadAsync(Stream source, string remotePath, bool overwrite = true, CancellationToken cancellationToken = default)
+        => Fail("上传流", remotePath);
 
     /// <inheritdoc />
-    public void CreateDirectory(string path)
-    {
-        ReportWrite("创建目录", path);
-    }
+    public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true, CancellationToken cancellationToken = default)
+        => Fail("上传本地文件", remotePath);
 
     /// <inheritdoc />
-    public bool FileExists(string path)
-    {
-        _logger?.LogDebug("FTP 存在性判断未执行(当前为静默实现): 路径 {Path}", path);
-
-        return false;
-    }
+    public Task DeleteFileAsync(string path, CancellationToken cancellationToken = default)
+        => Fail("删除文件", path);
 
     /// <inheritdoc />
-    public bool DirectoryExists(string path)
-    {
-        _logger?.LogDebug("FTP 目录判断未执行(当前为静默实现): 路径 {Path}", path);
-
-        return false;
-    }
+    public Task DeleteDirectoryAsync(string path, bool recursive = false, CancellationToken cancellationToken = default)
+        => Fail("删除目录", path);
 
     /// <inheritdoc />
-    public IReadOnlyList<FtpFile> GetFtpFiles(string path)
-    {
-        _logger?.LogDebug("FTP 目录列举未执行(当前为静默实现): 路径 {Path}", path);
+    public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
+        => Fail("创建目录", path);
 
-        return [];
+    /// <inheritdoc />
+    public Task MoveFileAsync(string sourcePath, string destinationPath, bool overwrite = true, CancellationToken cancellationToken = default)
+        => Fail("移动文件", sourcePath);
+
+    /// <inheritdoc />
+    public Task RenameAsync(string path, string newName, CancellationToken cancellationToken = default)
+        => Fail("重命名文件", path);
+
+    /// <inheritdoc />
+    public Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default)
+        => Fail<bool>("判断文件是否存在", path);
+
+    /// <inheritdoc />
+    public Task<bool> DirectoryExistsAsync(string path, CancellationToken cancellationToken = default)
+        => Fail<bool>("判断目录是否存在", path);
+
+    /// <inheritdoc />
+    public Task<FtpFileInfo?> GetFileInfoAsync(string path, CancellationToken cancellationToken = default)
+        => Fail<FtpFileInfo?>("读取文件信息", path);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<FtpEntry>> ListAsync(string path, string? searchPattern = null, CancellationToken cancellationToken = default)
+        => Fail<IReadOnlyList<FtpEntry>>("列举目录", path);
+
+    private Task Fail(string operation, string path)
+    {
+        _logger?.LogWarning("FTP {Operation} 未执行(当前为静默实现, 需引入 Snow.Ftping.FluentFTP): 路径 {Path}", operation, path);
+
+        return Task.FromException(new FtpOperationException(
+            "FTP " + operation + "未执行: 当前为静默实现, 请引入 Snow.Ftping.FluentFTP 包。路径: " + path,
+            remotePath: path));
     }
 
-    /// <summary>
-    /// 写操作统一留痕并报告失败
-    /// </summary>
-    /// <param name="operation">操作名</param>
-    /// <param name="remotePath">目标路径</param>
-    /// <returns>恒为 false</returns>
-    private bool ReportWrite(string operation, string remotePath)
+    private Task<T> Fail<T>(string operation, string path)
     {
-        _logger?.LogWarning("FTP {Operation} 未执行(当前为静默实现, 需引入 Snow.Ftping.FluentFTP): 路径 {Path}", operation, remotePath);
+        _logger?.LogWarning("FTP {Operation} 未执行(当前为静默实现, 需引入 Snow.Ftping.FluentFTP): 路径 {Path}", operation, path);
 
-        return false;
+        return Task.FromException<T>(new FtpOperationException(
+            "FTP " + operation + "未执行: 当前为静默实现, 请引入 Snow.Ftping.FluentFTP 包。路径: " + path,
+            remotePath: path));
     }
 }

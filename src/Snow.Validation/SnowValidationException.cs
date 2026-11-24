@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Logging;
+using Snow.Exceptions;
 
 namespace Snow.Validation;
 
@@ -6,7 +8,7 @@ namespace Snow.Validation;
 /// 参数校验失败异常: 携带字段级错误明细
 /// <para>业务层与接口层都抛它, 由异常处理包翻译成 400 与字段错误列表。</para>
 /// </summary>
-public class SnowValidationException : Exception
+public class SnowValidationException : SnowException
 {
     /// <summary>
     /// 构造器
@@ -17,6 +19,7 @@ public class SnowValidationException : Exception
         : base(message ?? BuildMessage(validationErrors))
     {
         ValidationErrors = validationErrors ?? Array.Empty<ValidationResult>();
+        LogLevel = LogLevel.Warning;
     }
 
     /// <summary>

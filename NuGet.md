@@ -95,13 +95,13 @@ public interface ISnowModule
 - 三个阶段由宿主显式触发(对齐 ABP): Web 宿主在 `builder.Build()` 之后调一次 `await app.InitializeApplicationAsync()`, 它填好四个 Web 对象访问器、把关停挂到 `ApplicationStopping`、再按"预初始化 → 第一段 → 收尾段"跑完, 启动模块就在其中的第一段里写管道; 非 Web 宿主(控制台 / Worker)调 `await serviceProvider.InitializeAsync()` 一次把三段跑完(也可以 `PreInitializeModulesAsync()` / `InitializeModulesAsync()` / `PostInitializeModulesAsync()` 分开跑), 退出前 `serviceProvider.Shutdown()`。框架不注册 `IStartupFilter`, `builder.Build()` 里不会偷偷初始化。
 - 中间件由宿主在启动模块的第一段里手写(`context.GetApplicationBuilder()` 拿构建器, 按行序 `app.UseXxx()`), 能力包只提供 `UseXxx()` 扩展方法; 不需要 `Order`、不登记、不实现接口 —— 位置就是代码行序(见下文「中间件管道」)。
 - 关停阶段的服务解析走独立作用域, 所以关停里可以正常注入 Scoped 服务; 重复调用幂等。
-- 需要「在 `AddApplication` 之前」生效的选项(`AddSnowMvc` / `AddSnowSwagger` / `AddSnowRateLimiting` / `AddSnowElsa` 等), 直接在 `builder.Services` 上调用, 不要塞进模块的 `ConfigureServices` —— 那时被依赖模块可能已经跑过, 动作就晚了。
+- 需要「在 `AddApplication` 之前」生效的选项(`AddSnowMvc` / `AddSnowOpenApi` / `AddSnowRateLimiting` / `AddSnowElsa` 等), 直接在 `builder.Services` 上调用, 不要塞进模块的 `ConfigureServices` —— 那时被依赖模块可能已经跑过, 动作就晚了。
 
 ## Web 宿主: 模块只做接线
 
 `Snow.AspNetCore` 只有一件事: **Web 接线**(职责对位 ABP 的 `AbpAspNetCoreModule`)。它只引用接线本身跑得起来的 6 个基础模块 —— 审计 / 安全 / 授权 / 工作单元 / 时间 / 链路标识。
 除此之外的能力都不在本包里: 应用层、认证、缓存、分布式锁、后台作业、事件总线、消息、邮件、FTP、HTTP 客户端、Excel、工作流、EntityFrameworkCore、数据过滤(`Snow.Data`)、AOP(`Snow.Aop.Castle`) 以及它们的第三方实现, 由宿主按需引用。ABP 也是这个做法: `Volo.Abp.AspNetCore` 只依赖 9 个基础模块, Caching / EventBus / BackgroundJobs 全部留给宿主声明。
-所以本包只有 7 个包引用, 没有一个是第三方依赖。
+所以本包只有 6 个包引用, 没有一个是第三方依赖。
 
 **包引用不等于模块加载。** `SnowAspNetCoreModule` 只自动装配它依赖的 6 个基础模块。缓存、分布式锁、后台作业、事件总线、消息、邮件、FTP、HTTP 客户端这些要自己引用包并声明依赖:
 
@@ -274,7 +274,7 @@ public override void ConfigureServices(ServiceConfigurationContext context)
 }
 ```
 
-只在单独使用某个包、且不经过统一挂载时, 才需要手写 `app.MapSnowHubs()` / `app.UseSnowSwagger()`。
+只在单独使用某个包、且不经过统一挂载时, 才需要手写 `app.MapSnowHubs()` / `app.UseSnowOpenApi()`。
 
 `UseSnowEndpoints()` 与 ABP 的 `UseConfiguredEndpoints()` 签名一样, 带一个可选参数 —— 想在同一个 `UseEndpoints` 里顺手加几个端点就传进来, 不必再单独写一次 `app.UseEndpoints(...)`:
 
@@ -461,6 +461,11 @@ public sealed class MyModule : SnowModule;
 // 仪表盘中间件由宿主在管道里挂(见「中间件管道」), 需放在 UseAuthorization() 之后:
 //   app.UseSnowHangfireDashboard();                                                            // 默认 DashboardOptions
 //   app.UseSnowHangfireDashboard(o => o.Authorization = new MyDashboardAuthorizationFilter());  // 自定义授权过滤器
+
+// 持久化存储: AddSnowHangfire 已内置兼容级别/序列化器/序列化设置, 只需在回调里指定存储
+// (存储提供程序由宿主引, 本包不绑定任何一种库):
+builder.Services.AddSnowHangfire(configuration => configuration
+    .UseSqlServerStorage(builder.Configuration.GetConnectionString("Hangfire")));
 ```
 
 模块做的事: 关掉内置 worker(免得它空轮询进程内存储), 接上 Hangfire 的服务端与存储, 并提供 `UseSnowHangfireDashboard()` 供宿主在管道里挂; 两个端口本身的替换不写代码 —— `HangfireBackgroundJobManager` / `HangfireBackgroundJobScheduler` 上标了 `ReplaceServices = true`, 约定注册会把默认实现顶掉(与 MailKit / FTP / Excel 那批同一套路)。
@@ -881,7 +886,9 @@ public class MyModule : SnowModule;
       "RunMigrations": true,                   // 由宿主启动阶段执行, 只在真正的 ASP.NET 宿主生效
       "EnableHttp": true,
       "HttpBasePath": "/workflows",
-      "EnableApi": true
+      "EnableApi": true,
+      "UseDefaultFeatures": true,             // 表达式 + JS 引擎 + 内存缓存 + 管理与运行时缓存
+      "UseJavaScript": true                   // 只用 C# 表达式时可关掉, 省一个依赖
     }
   }
 }
@@ -901,70 +908,11 @@ SnowWorkflowResult r2 = await runner.StartAsync<OrderApprovalWorkflow>(input);
 
 - 结果 `SnowWorkflowResult` 只透出字符串状态(`Status` / `SubStatus`)与 `Incidents`, 不把 Elsa 的枚举泄漏到业务层; `Succeeded` 表示状态与子状态都是 `Finished`。
 - 定义找不到、类型不可执行、引擎未安装都抛 `SnowWorkflowException`。
+- 运行工作流所需的最小特性集已由模块兜住(UseDefaultFeatures 默认开): 表达式求值、JavaScript 引擎、内存缓存, 以及管理与运行时的缓存。关掉它就得用 options.ConfigureElsa 自己补齐, 否则启动校验服务时缺件。
+- 身份这类带取舍的特性不内置: 需要用户上下文时自己挂 —— options.ConfigureElsa = elsa => elsa.UseIdentity(...); 内置的 UseDevelopmentAdminUserProvider 只适合开发环境。
 - 换 SQL Server / PostgreSQL: 自己加对应的 `Elsa.Persistence.EFCore.*` 包, 再通过 `options.ConfigureWorkflowManagement` / `options.ConfigureWorkflowRuntime` 换提供程序(包内只带 SQLite)。
 - 不引实现包也能启动, 但调用 `ISnowWorkflowRunner` 会立刻抛 `SnowWorkflowException` 并提示装 `Snow.Workflows.Elsa`。
 - 不想挂 HTTP 端点就配 `Workflows:Elsa:EnableHttp=false`(管理 API 仍在); 想挂就按「中间件管道」在 `UseAuthorization()` 之后调 `app.UseSnowWorkflows()`。
-
-## 审计
-
-方法级审计只做两件事: 记下每次调用的调用方、耗时、参数与异常, 以及给实体填创建/修改/删除字段。
-
-### 方法级审计
-
-```csharp
-[DependsOn(typeof(SnowAuditingModule))] // 通常随 Snow.AspNetCore 一起加载
-public sealed class MyModule : SnowModule { }
-
-[Auditing] // 标在类上对全部接口方法生效, 也可只标在某个方法上
-public sealed class OrderAppService : IOrderAppService
-{
-    public Task CreateAsync(string name, int count) => ...;
-}
-```
-
-审计日志默认不落任何介质: 内置的 `NullAuditingStore` 只写调试日志。要落库就替换掉它(约定注册会跳过已显式登记的服务类型, 所以 `TryAddSingleton` 有效):
-
-```csharp
-public sealed class MyAuditingStore : IAuditingStore
-{
-    public Task SaveAsync(AuditLogInfo auditLogInfo, CancellationToken cancellationToken = default)
-    {
-        // auditLogInfo.UserId / UserName / HttpMethod / Url / ExecutionDuration / Actions / Exceptions
-        return Task.CompletedTask;
-    }
-}
-
-public override void ConfigureServices(ServiceConfigurationContext context)
-{
-    context.Services.TryAddSingleton<IAuditingStore, MyAuditingStore>();
-}
-```
-
-### 实体审计字段
-
-`IAuditPropertySetter` 按实体实现的契约自动填值, 不需要手写赋值:
-
-| 契约 | 填什么 |
-| --- | --- |
-| `IHasCreationTime` / `ICreationAudited` | `CreationTime`、`CreatorId`、`Creator` |
-| `IHasModificationTime` / `IModificationAudited` | `LastModificationTime`、`LastModifierId`、`LastModifier` |
-| `IDeletionAudited` / `ISoftDelete` | `DeletionTime`、`DeleterId`、`Deleter`、`IsDeleted = true` |
-
-### 配置
-
-```json
-{
-  "Auditing": {
-    "IsEnabled": true,
-    "IsEnabledForAnonymousUsers": true,
-    "IsEnabledForGetRequests": false,
-    "ApplicationName": "MyApp",
-    "MaxSerializedLength": 32000
-  }
-}
-```
-
-`IgnoredNamespaces` 默认含 `Snow.`, 因此框架自身的类型不会被当成业务审计; 要连框架类型也记就设 `AlwaysLogFrameworkTypes = true`。保存日志失败只记错误日志, 不会把业务调用拖垮。
 
 ## MVC 与自动 API
 
@@ -1017,6 +965,7 @@ public class BookAppService
 | 异常 | 状态码 | 错误码 |
 | --- | --- | --- |
 | `SnowUserFriendlyException` | 400 | 异常自带的 `Code`, 未给则 `BusinessError` |
+| `SnowBusinessException`(及其它 `SnowException` 子类带 `Code` 的) | 400 | 异常自带的 `Code`, 未给则 `BusinessError` |
 | `UnauthorizedAccessException` | 403 | `Forbidden` |
 | `KeyNotFoundException` | 404 | `NotFound` |
 | `NotImplementedException` | 501 | `NotImplemented` |
@@ -1041,7 +990,7 @@ public class HalfController : SnowControllerBase { }
 | --- | --- | --- |
 | `DisableMiddleware` | 继承 `SnowMiddlewareBase`(`Snow.AspNetCore.Middleware`)的框架中间件(链路标识、日志上下文等) | `SnowMiddlewareBase.ShouldSkipAsync` |
 | `DisableMvcFilters` | 自动校验、模型绑定校验、结果信封、异常翻译、登录态异常 | 动作描述符定型时由 `SnowMvcActionDescriptorProvider` 把五个过滤器整个摘掉, 请求期零判断 |
-| `DisableInterceptors` | AOP 拦截器(审计、缓存等注解) | 约定注册阶段不建代理 |
+| `DisableInterceptors` | AOP 拦截器(缓存等注解) | 约定注册阶段不建代理 |
 
 - 特性在 `Snow.Core`(命名空间 `Snow`), 与 ABP 放在 `Volo.Abp.Core` 同位; 标注控制器的项目不必为了一个特性引用 `Snow.Security`。
 - 判定只认控制器端点: 最小 API、静态文件、健康检查没有 `ControllerActionDescriptor`, 不受开关影响。判定函数收的是 `Type?` 而不是 `ActionDescriptor`, 所以 `Snow.Core` 不必认识 MVC 类型。
@@ -1084,21 +1033,21 @@ public sealed class MyHttpApiHostModule : SnowModule { }
 ```
 
 ```csharp
-app.Run();   // 文档端点已由 SnowOpenApiModule 登记, 默认 /swagger/v1.json 与 /swagger 界面
+app.Run();   // 文档端点已由 SnowOpenApiModule 登记, 默认 /openapi/v1.json 与 /openapi 界面
 ```
 
-单独使用本包(宿主没有依赖 `SnowAspNetCoreModule`)时才需要手写 `app.UseSnowSwagger();`。
+单独使用本包(宿主没有依赖 `SnowAspNetCoreModule`)时才需要手写 `app.UseSnowOpenApi();`。
 
-选项既可以走配置节 `Swagger`, 也可以在 `AddApplication` 之前用 `builder.Services.AddSnowSwagger(options => ...)` 覆盖(后执行者赢):
+选项既可以走配置节 `OpenApi`, 也可以在 `AddApplication` 之前用 `builder.Services.AddSnowOpenApi(options => ...)` 覆盖(后执行者赢):
 
 ```json
 {
-  "Swagger": {
+  "OpenApi": {
     "Enabled": true,
     "Title": "Snow API",
     "Version": "v1",
     "Description": "订单与商品接口",
-    "RoutePrefix": "swagger",
+    "RoutePrefix": "openapi",
     "IncludeXmlComments": true,
     "AddJwtBearerSecurity": true
   }
@@ -1107,7 +1056,7 @@ app.Run();   // 文档端点已由 SnowOpenApiModule 登记, 默认 /swagger/v1.
 
 `IncludeXmlComments` 打开时会自动找各模块程序集目录下的 `{程序集名}.xml`(生成项目需开 `GenerateDocumentationFile`), 把三行 summary 写成接口摘要、把 `<param>` 写成参数说明、把属性的 summary 写成字段说明。`AddJwtBearerSecurity` 在文档里加 `Bearer` 方案, 界面上可直接填令牌(只填令牌本身, 不加 `Bearer ` 前缀)调试。
 
-文档名就是 `Version`, 所以对外地址是 `/{RoutePrefix}/{Version}.json`(默认 `/swagger/v1.json`)。
+文档名就是 `Version`, 所以对外地址是 `/{RoutePrefix}/{Version}.json`(默认 `/openapi/v1.json`)。
 
 ## 健康检查
 
@@ -1279,40 +1228,34 @@ app.UseCors();
 
 `configuration` 就是 `context.Configuration`(或 `context.Services.GetConfiguration()`)。需要额外暴露响应头时在 `AllowCredentials()` 之前加 `.WithExposedHeaders("你的头")` —— 对应 ABP 的 `WithAbpExposedHeaders()`。
 
-## 框架服务: 设置 / 功能 / 校验 / 异常 / 对象存储 / 播种
+## 框架服务: 校验 / 异常
 
 这批包的关系是"契约 + 默认实现", 引进来就可用, 要换后端再加实现包或改配置。
 
 | 需求 | 用法 |
 | --- | --- |
-| 设置 | 继承 `SettingDefinitionProvider` 定义, `ISettingProvider.GetAsync<T>("MyApp.Mail.Host")` 读取; 值来源优先级 租户(T) > 全局存储(G) > 配置(C, `Settings:{名}`) > 默认值(D), 顺序由 `SnowSettingOptions.ValueProviders` 决定(列表靠后优先), 与 ABP 的 `AbpSettingOptions` 一致 |
-| 功能开关 | 继承 `FeatureDefinitionProvider` 定义, `IFeatureChecker.IsEnabledAsync("MyApp.Feature")` 判定; 值来源 配置(C, `Features:{名}`) > 默认值(D) |
 | 参数校验 | `[SnowValidation]` 标在应用服务或方法上, 复杂参数按 DataAnnotations 校验, 有错抛 `SnowValidationException`; 再加 `Snow.Validation.FluentValidation` 则同一处同时跑 FluentValidation 规则 |
 | 对象映射 | 注入 `IObjectMapper`(`Map<OrderDto>(order)` / `Map(order, dto)`); `Snow.ObjectMapping.Mapster` = ABP AutoMapper 的 Mapster 版: `SnowMapsterProfile` + `[SnowAutoMap]` + `AddProfile`/`AddMaps` + `DefaultMaxDepth`/`ValidateMappings` |
-| 异常翻译 | `app.Services.ToErrorResponse(exception)` 得到统一错误对象; 业务异常用 `SnowUserFriendlyException` 可带 `Code` 与附加数据 |
-| 对象存储 | 注入 `IBlobContainer<MyAvatarBlobContainer>`, 容器名由类型名去掉 `BlobContainer` 后缀得到, 或用 `[BlobContainerName("avatars")]` 指定; 换后端在 `AddApplication` 之前 `services.AddSnowBlobStoring<MyBlobProvider>()`(或 `AddSnowBlobStoring(o => o.ProviderType = ...)`), 写在同一处配置节里与代码动作冲突时以代码动作为准 |
-| 数据播种 | 实现 `IDataSeedContributor`, 启动完成时按 `DataSeeding:SeedOnStartup` 自动执行 |
+| 异常翻译 | `app.Services.ToErrorResponse(exception)` 得到统一错误对象; 业务异常用 `SnowBusinessException`(或语义更强的 `SnowUserFriendlyException`)可带 `Code` 与附加数据 |
 | 本地化 | `[LocalizationResource("MyApp")]` 标资源类, 注入 `IStringLocalizer<MyAppResource>` 取字符串 |
 | JSON | 注入 `ISnowJsonSerializer`, 选项与框架其余部分一致, 不要在业务里另建 `JsonSerializerOptions`; `Snow.Json` 自带 System.Text.Json 实现, 要 Newtonsoft 行为再加 `Snow.Json.Newtonsoft` |
 
-开关与值的层级用配置节控制, 例如:
+### 异常类型体系(对齐 ABP)
 
-```json
-{
-  "Settings": { "MyApp.Mail.Host": "smtp.example.com" },
-  "Features": { "MyApp.NewCheckout": true },
-  "DataSeeding": { "SeedOnStartup": false },
-  "BlobStoring": { "ProviderType": "MyApp.MyBlobProvider, MyApp" }
-}
-```
+| 类型 | 基类 | 日志级别 | 用途 |
+| --- | --- | --- | --- |
+| `SnowException`(`Snow.Exceptions`) | `Exception` | Error | 框架所有自定义异常的基类, 实现 `IHasErrorCode`(`Code`)与 `IHasLogLevel` |
+| `SnowBusinessException` | `SnowException` | Warning | 业务规则不允许; `Code` + 附加数据(`IHasErrorDetails.Details`, 序列化进错误响应的 `data`) |
+| `SnowUserFriendlyException` | `SnowBusinessException` | Warning | 同上, 语义上承诺消息可直接展示给调用方 |
+| `SnowValidationException` / `SnowJsonException` / `SnowObjectMappingException` / `SnowWorkflowException` / `SnowTenantNotFoundException` / `SnowHttpServiceException` / `SnowInitializationException` | `SnowException` | Error(校验为 Warning) | 各自场景的失败; 有 `Code` 就回给客户端 |
 
-`BlobStoring:ProviderType` 必须写成 `"命名空间.类型, 程序集名"`(例如 `"MyApp.MyBlobProvider, MyApp"`), 只写 `"MyApp.MyBlobProvider"` 解析不到就启动报错。换成内存实现以外的后端两种写法等价: 配置节, 或 `AddApplication` 之前 `builder.Services.AddSnowBlobStoring<MyBlobProvider>()`; 两处同时写时代码动作生效。
+异常处理层(中间件 / MVC 过滤器 / 转换器)只按接口取信息: 错误码取 `IHasErrorCode.Code`, 日志级别取 `IHasLogLevel.LogLevel`, 附加数据取 `IHasErrorDetails.Details`, 不再按具体类型硬编码。HTTP 状态码: 校验与业务异常 400, `UnauthorizedAccessException` 403, `KeyNotFoundException` 404, `NotImplementedException` 501, 其余 500(与 ABP 的差异: ABP 把 `IBusinessException` 映射成 403, Snow 用 400, 语义更贴切)。
 
 ## 多租户
 
 两个包, 与 ABP 的 `Volo.Abp.MultiTenancy` / `Volo.Abp.AspNetCore.MultiTenancy` 一一对应:
 
-- `Snow.MultiTenancy` —— 内核, 与环境无关: 当前租户上下文、租户配置、租户存储、解析出资者、租户级设置
+- `Snow.MultiTenancy` —— 内核, 与环境无关: 当前租户上下文、租户配置、租户存储、解析出资者
 - `Snow.AspNetCore.MultiTenancy` —— Web 适配层: 四个请求侧出资者 + 中间件
 
 默认**关闭**(与 ABP 一致): 不开的时候 `ICurrentTenant.Id` 恒为 `null`, 中间件原样放行, 代码照常跑。
@@ -1366,19 +1309,6 @@ public override void OnApplicationInitialization(ApplicationInitializationContex
 - 默认 `DefaultTenantStore`: 从 `MultiTenancy:Tenants` 读, 名称比较去掉首尾空白且忽略大小写, `IsActive: false` 的租户当作不存在
 - 换数据库实现: `context.Services.Replace(ServiceDescriptor.Singleton<ITenantStore, MyTenantStore>())`; 契约是 `FindAsync` / `GetAsync` 各两个重载
 - 自己解析并翻译: `ITenantConfigurationProvider.GetAsync(saveResolveResult: true)` 一步拿到 `TenantConfiguration`, 结果同时写进 `ITenantResolveResultAccessor`
-
-### 租户级设置
-
-`TenantSettingValueProvider`(名字 `T`)自动接进设置链: 在租户上下文里读设置, 会先问租户那一层, 取不到才落到全局存储 `G` / 配置 `C` / 默认值 `D`。存储实现要按三元组落库:
-
-```csharp
-public interface ISettingStore
-{
-    Task<string?> GetOrNullAsync(string name, string? providerName = null, string? providerKey = null, CancellationToken cancellationToken = default);
-}
-// 全局设置: ("MyApp.Mail.Host", "G", null)
-// 租户设置: ("MyApp.Mail.Host", "T", tenantId.ToString())
-```
 
 ### 实体隔离
 
@@ -1541,14 +1471,14 @@ git tag v1.2.0 && git push origin v1.2.0
 | 包 | 用途 |
 | --- | --- |
 | `Snow.Domain` | 实体、聚合根、审计实体、软删除、领域事件、仓储契约、值对象 |
-| `Snow.Application` | 应用层契约: 实体 DTO、分页请求与分页结果; 业务应用服务写在消费方项目里 |
+| `Snow.Application` | 应用层契约: 实体 DTO、分页请求与分页结果、`IQueryable.PageBy(IPagedResultRequest)` 分页扩展(对应 ABP AbpPagingQueryableExtensions); 业务应用服务写在消费方项目里 |
 | `Snow.Uow` | 工作单元与事务: `IUnitOfWork`、`[Transactional]` 注解、提交/回滚回调 |
 
 ### 持久化
 
 | 包 | 用途 |
 | --- | --- |
-| `Snow.EntityFrameworkCore` | EF Core 集成: `SnowDbContext` 基类、连接串解析、按工作单元共享的上下文、ABP 式仓储、审计/软删除/领域事件拦截 |
+| `Snow.EntityFrameworkCore` | EF Core 集成: `SnowDbContext` 基类、连接串解析、按工作单元共享的上下文、ABP 式仓储、软删除/领域事件拦截 |
 | `Snow.EntityFrameworkCore.SqlServer` | SQL Server 提供程序 |
 | `Snow.EntityFrameworkCore.Sqlite` | SQLite 提供程序(单元测试与本地开发) |
 | `Snow.EntityFrameworkCore.MySql` | MySQL 提供程序。因依赖只有 Oracle 官方 preview 通道, 该包版本自带 `-preview.N` 后缀 |
@@ -1576,10 +1506,6 @@ git tag v1.2.0 && git push origin v1.2.0
 | `Snow.ObjectMapping` | 对象映射契约: `IObjectMapper` 五个 Map 重载 + `source.Map<T>()` 链式扩展, 含静默兜底实现 |
 | `Snow.ObjectMapping.Mapster` | 对象映射的 Mapster 实现(对应 ABP AutoMapper): `SnowMapsterProfile` 基类、`[SnowAutoMap]` 声明式映射、`AddProfile`/`AddMaps`、`Configurators`、`DefaultMaxDepth`、`ValidateMappings` 启动校验、可注入 `MapsterMapper.IMapper` |
 | `Snow.Localization` | 本地化: 资源定义 + `IStringLocalizer` / `IStringLocalizerFactory` 实现, 按当前文化逐级回退 |
-| `Snow.Settings` | 设置: 定义 + 值提供器链(默认值 / 配置 / 全局存储 / 租户)分层覆盖, 顺序由 `SnowSettingOptions.ValueProviders` 决定, `ISettingProvider` 读取 |
-| `Snow.Features` | 功能开关: 定义 + 值提供器链, `IFeatureChecker.IsEnabledAsync` 判定 |
-| `Snow.BlobStoring` | 对象存储: `IBlobContainer` / `IBlobContainer<T>` 读写二进制对象, 默认内存实现 |
-| `Snow.DataSeeding` | 数据播种: 启动阶段按顺序执行全部 `IDataSeedContributor` |
 
 ### 安全与其它
 
@@ -1587,17 +1513,16 @@ git tag v1.2.0 && git push origin v1.2.0
 | --- | --- |
 | `Snow.Aop.Castle` | AOP 实现: 基于 Castle DynamicProxy 的接口代理与真异步方法拦截 |
 | `Snow.Security` | 当前用户抽象与基于 `ClaimsPrincipal` 的默认实现 |
-| `Snow.Auditing` | 审计: `[Auditing]` 注解采集调用方 / 耗时 / 参数 / 异常, `IAuditPropertySetter` 填实体审计字段; 默认 `NullAuditingStore` 只写调试日志 |
 | `Snow.Authentication` | 认证: 一个模块 `SnowAuthenticationModule`(包内分 `Abstractions/` 与 `AspNetCore/` 两个目录, 同包同命名空间), 处理器是框架自带的 `JwtBearerHandler`。只有 `SecretKey` 必填(`Issuer` / `Audience` / `Expiration` 都有默认值), HS256 签发令牌、会话白名单、滑动续期(一直在用就一直在线)、踢人封禁在线数、注解鉴权、`TokenUtil` 门面 |
 | `Snow.Authorization` | 权限: 定义树(自动扫描)、声明式校验器与动态策略(不存授予表), 策略名即权限名, `[Permission("Snow.Orders.Create")]` 直用 |
-| `Snow.Emailing` | 邮件发送契约与配置(默认是静默实现, 不真发) |
-| `Snow.MultiTenancy` | 多租户内核: 租户上下文与切换、租户配置与存储(默认从 `MultiTenancy:Tenants` 读)、解析出资者、租户级设置提供器 `T`, 默认关闭 |
-| `Snow.Emailing.MailKit` | 邮件的 MailKit 实现: MimeKit 组装正文/附件, SMTP 走 SSL 或 STARTTLS 真投递 |
+| `Snow.Emailing` | 邮件发送契约与配置: 无状态 `IEmailSender`(`SendAsync` / `SendManyAsync`, 一封邮件一个 `EmailMessage`: 收件人/抄送/密送/回复地址/附件/优先级/双正文), 默认静默实现不真发 |
+| `Snow.MultiTenancy` | 多租户内核: 租户上下文与切换、租户配置与存储(默认从 `MultiTenancy:Tenants` 读)、解析出资者, 默认关闭 |
+| `Snow.Emailing.MailKit` | 邮件的 MailKit 实现: MimeKit 组装正文/附件, SMTP 走 SSL 或 STARTTLS 真投递; 批量发信复用同一条连接, 底层异常统一包成 `EmailSendException` |
 | `Snow.Ftping` | FTP 客户端契约与配置, 含静默兜底实现 `NullFtpClient`(写操作记 warning 并返 false) |
 | `Snow.Ftping.FluentFTP` | FTP 的 FluentFTP 实现: 每次调用建连, 上传/下载/删除/建目录/取目录列表, 文件名编码可配 |
 | `Snow.Validation` | 参数校验: `ISnowObjectValidator` 做 DataAnnotations 校验(含嵌套对象), `[SnowValidation]` 方法级拦截, 统一抛 `SnowValidationException` |
 | `Snow.Validation.FluentValidation` | 校验的 FluentValidation 后端: 自动扫描 `AbstractValidator<T>`, 把 DataAnnotations 与 FluentValidation 合成一条管线 |
-| `Snow.ExceptionHandling` | 异常处理: `IExceptionToErrorInfoConverter` 把异常翻译成 `SnowRemoteServiceErrorInfo`(错误码 / 消息 / 字段错误 / 附加数据) |
+| `Snow.AspNetCore`(内建异常处理) | 异常 → 错误信封: `IExceptionToErrorInfoConverter` / `DefaultExceptionToErrorInfoConverter` 把异常翻译成 `SnowRemoteServiceErrorInfo`(错误码 / 消息 / 字段错误 / 附加数据), 由 `UseSnowExceptionHandling()` 中间件写回 JSON。对应 ABP 随 `Volo.Abp.AspNetCore` 发布的 AspNetCore.ExceptionHandling 子模块(无独立包) |
 
 ## 注解一览
 
@@ -1607,9 +1532,9 @@ git tag v1.2.0 && git push origin v1.2.0
 | `[CacheEvict("Acme.User", Key = "id")]` | 方法执行后失效缓存; `AllEntries = true` 时整区失效 |
 | `[DistributedLock("'stock:' + id", WaitSeconds = 3)]` | 方法级分布式锁, 支持 Prefix / Condition / LeaseSeconds / ThrowOnLost |
 | `[Transactional]` | 方法级工作单元与事务, 支持 RequiresNew |
-| `[Auditing]` | 方法级审计日志(调用方 / 耗时 / 参数 / 异常), 由 `IAuditingStore` 落库 |
 | `[Permission("Snow.Orders.Create")]` | 要求当前用户拥有该权限(策略名即权限名, 动态生成并缓存); 可写多个权限, 默认满足其一, `Mode = PermissionMatchMode.All` 改成都要有; 权限须先定义, 未定义时请求抛 500 |
 | `[TokenCheckLogin]` / `[TokenCheckRole(...)]` | 登录 / 角色校验, 策略名 `snowauth:*` 动态生成; 权限直接写 `[Authorize("权限名")]` |
+| `app.UseSnowExceptionHandling()` | 把任意异常翻译成统一的 JSON 错误信封(错误码 / 消息 / 字段校验错误), 挂在管道最外层; 配置节 `ExceptionHandling` 的 `SendExceptionDetailsToClients` / `SendStackTraceToClients` 控制是否暴露细节 |
 | `app.UseSnowTokenExceptionHandling()` | 把登录态异常翻译成 401/403(宿主在管道里挂在 `UseAuthentication()` 之前, 这样认证阶段抛的令牌异常也兜得住; MVC 侧另有模块自动注册的 `TokenExceptionFilter` 接管 Controller 里的同类异常) |
 
 ## 许可

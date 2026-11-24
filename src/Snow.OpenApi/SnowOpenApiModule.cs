@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.Configuration;
@@ -27,39 +28,30 @@ public sealed class SnowOpenApiModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        SnowSwaggerOptions swagger = BuildOptions(context.Services);
+        context.Services.Configure<SnowOpenApiOptions>(options => context.Services.GetConfiguration().GetSection("OpenApi").Bind(options));
+        SnowOpenApiOptions openApi = context.Services.GetOptions<SnowOpenApiOptions>();
 
-        context.Services.AddSingleton(swagger);
-        context.Services.Configure<SnowSwaggerOptions>(options =>
-        {
-            options.Enabled = swagger.Enabled;
-            options.Title = swagger.Title;
-            options.Version = swagger.Version;
-            options.Description = swagger.Description;
-            options.RoutePrefix = swagger.RoutePrefix;
-            options.IncludeXmlComments = swagger.IncludeXmlComments;
-            options.AddJwtBearerSecurity = swagger.AddJwtBearerSecurity;
-        });
+        context.Services.AddSingleton(openApi);
 
-        if (!swagger.Enabled)
+        if (!openApi.Enabled)
         {
             return;
         }
 
-        SnowXmlComments xmlComments = SnowXmlComments.Load(swagger.IncludeXmlComments ? GetXmlCommentPaths(context.Services) : []);
+        SnowXmlComments xmlComments = SnowXmlComments.Load(openApi.IncludeXmlComments ? GetXmlCommentPaths(context.Services) : []);
 
-        context.Services.AddOpenApi(swagger.Version, options =>
+        context.Services.AddOpenApi(openApi.Version, options =>
         {
             options.AddDocumentTransformer((document, _, _) =>
             {
                 document.Info = new OpenApiInfo
                 {
-                    Title = swagger.Title,
-                    Version = swagger.Version,
-                    Description = swagger.Description,
+                    Title = openApi.Title,
+                    Version = openApi.Version,
+                    Description = openApi.Description,
                 };
 
-                if (!swagger.AddJwtBearerSecurity)
+                if (!openApi.AddJwtBearerSecurity)
                 {
                     return Task.CompletedTask;
                 }
@@ -112,28 +104,7 @@ public sealed class SnowOpenApiModule : SnowModule
         // 端点映射交给统一挂载: 与 ABP 的 EndpointConfigureActions 同形
         Configure<SnowEndpointRouterOptions>(options =>
             options.EndpointConfigureActions.Add(endpointContext =>
-                SnowSwaggerApplicationBuilderExtensions.MapSwaggerEndpoints(endpointContext.Endpoints, swagger)));
-    }
-
-    private static SnowSwaggerOptions BuildOptions(IServiceCollection services)
-    {
-        SnowSwaggerOptions options = new();
-
-        IConfiguration? configuration = services.GetConfiguration();
-        IConfigurationSection section = configuration?.GetSection("Swagger") ?? new ConfigurationBuilder().Build().GetSection("Swagger");
-        if (section.Exists())
-        {
-            section.Bind(options);
-        }
-
-        services
-            .Where(descriptor => descriptor.ServiceType == typeof(SnowSwaggerOptionsSetup))
-            .Select(descriptor => descriptor.ImplementationInstance)
-            .OfType<SnowSwaggerOptionsSetup>()
-            .FirstOrDefault()
-            ?.Apply(options);
-
-        return options;
+                SnowOpenApiApplicationBuilderExtensions.MapOpenApiEndpoints(endpointContext.Endpoints, openApi)));
     }
 
     private static List<string> GetXmlCommentPaths(IServiceCollection services)

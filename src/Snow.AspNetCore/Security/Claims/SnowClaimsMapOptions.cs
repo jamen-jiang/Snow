@@ -1,3 +1,4 @@
+using Snow.Security.Claims;
 using Snow.Security;
 
 namespace Snow.AspNetCore.Security.Claims;
@@ -5,7 +6,7 @@ namespace Snow.AspNetCore.Security.Claims;
 /// <summary>
 /// 声明名映射表: 外部令牌的声明名 → 本框架的声明名(对应 ABP 的 <c>AbpClaimsMapOptions</c>)
 /// <para>默认表覆盖 OIDC 标准声明, 与 ABP 的六条一致; 值用 <c>Func&lt;string&gt;</c> 而非字符串,
-/// 因为 <see cref="UserClaimTypes"/> 的成员是可写属性, 宿主可能在启动早期改掉, 映射要跟着走。</para>
+/// 因为 <see cref="SnowClaimTypes"/> 的成员是可写属性, 宿主可能在启动早期改掉, 映射要跟着走。</para>
 /// </summary>
 public class SnowClaimsMapOptions
 {
@@ -15,11 +16,11 @@ public class SnowClaimsMapOptions
     public Dictionary<string, Func<string>> Maps { get; } =
         new()
         {
-            { "sub", () => UserClaimTypes.UserId },
-            { "role", () => UserClaimTypes.Role },
-            { "email", () => UserClaimTypes.Email },
-            { "name", () => UserClaimTypes.UserName },
-            { "family_name", () => UserClaimTypes.SurName },
-            { "given_name", () => UserClaimTypes.Name },
+            { "sub", () => SnowClaimTypes.UserId },
+            { "role", () => SnowClaimTypes.Role },
+            { "email", () => SnowClaimTypes.Email },
+            { "name", () => SnowClaimTypes.UserName },
+            { "family_name", () => SnowClaimTypes.SurName },
+            { "given_name", () => SnowClaimTypes.Name },
         };
 }

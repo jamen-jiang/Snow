@@ -1,3 +1,4 @@
+using Snow.Security.Claims;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -89,13 +90,13 @@ public class SnowAspNetCoreServiceCollectionExtensionsTests
 
         ClaimsPrincipal transformed = await CreateTransformation().TransformAsync(principal);
 
-        Assert.Equal("user-1", transformed.FindFirst(UserClaimTypes.UserId)?.Value);
-        Assert.Equal("issuer-a", transformed.FindFirst(UserClaimTypes.UserId)?.Issuer);
-        Assert.Equal("admin", transformed.FindFirst(UserClaimTypes.Role)?.Value);
-        Assert.Equal("a@b.c", transformed.FindFirst(UserClaimTypes.Email)?.Value);
-        Assert.Equal("jamen", transformed.FindFirst(UserClaimTypes.UserName)?.Value);
-        Assert.Equal("Jiang", transformed.FindFirst(UserClaimTypes.SurName)?.Value);
-        Assert.Equal("Jamen", transformed.FindFirst(UserClaimTypes.Name)?.Value);
+        Assert.Equal("user-1", transformed.FindFirst(SnowClaimTypes.UserId)?.Value);
+        Assert.Equal("issuer-a", transformed.FindFirst(SnowClaimTypes.UserId)?.Issuer);
+        Assert.Equal("admin", transformed.FindFirst(SnowClaimTypes.Role)?.Value);
+        Assert.Equal("a@b.c", transformed.FindFirst(SnowClaimTypes.Email)?.Value);
+        Assert.Equal("jamen", transformed.FindFirst(SnowClaimTypes.UserName)?.Value);
+        Assert.Equal("Jiang", transformed.FindFirst(SnowClaimTypes.SurName)?.Value);
+        Assert.Equal("Jamen", transformed.FindFirst(SnowClaimTypes.Name)?.Value);
     }
 
     /// <summary>
@@ -109,7 +110,7 @@ public class SnowAspNetCoreServiceCollectionExtensionsTests
         ClaimsPrincipal transformed = await CreateTransformation().TransformAsync(principal);
 
         Assert.Equal("user-1", transformed.FindFirst("sub")?.Value);
-        Assert.Equal("user-1", transformed.FindFirst(UserClaimTypes.UserId)?.Value);
+        Assert.Equal("user-1", transformed.FindFirst(SnowClaimTypes.UserId)?.Value);
     }
 
     /// <summary>
@@ -123,27 +124,27 @@ public class SnowAspNetCoreServiceCollectionExtensionsTests
         ClaimsPrincipal transformed = await CreateTransformation().TransformAsync(principal);
 
         Assert.Single(transformed.Identities);
-        Assert.Null(transformed.FindFirst(UserClaimTypes.UserId));
+        Assert.Null(transformed.FindFirst(SnowClaimTypes.UserId));
     }
 
     /// <summary>
-    /// 宿主改过映射表就按改后的走 —— 值是委托, 读的是 UserClaimTypes 当时的属性值
+    /// 宿主改过映射表就按改后的走 —— 值是委托, 读的是 SnowClaimTypes 当时的属性值
     /// </summary>
     [Fact]
     public async Task TransformAsync_UsesConfiguredMap()
     {
         SnowClaimsMapOptions options = new();
-        options.Maps["custom"] = () => UserClaimTypes.TenantId;
+        options.Maps["custom"] = () => SnowClaimTypes.TenantId;
         ClaimsPrincipal principal = new(new ClaimsIdentity([new Claim("custom", "tenant-9")], "Bearer"));
 
         ClaimsPrincipal transformed = await new SnowClaimsTransformation(
-            Options.Create(options)).TransformAsync(principal);
+            Microsoft.Extensions.Options.Options.Create(options)).TransformAsync(principal);
 
-        Assert.Equal("tenant-9", transformed.FindFirst(UserClaimTypes.TenantId)?.Value);
+        Assert.Equal("tenant-9", transformed.FindFirst(SnowClaimTypes.TenantId)?.Value);
     }
 
     private static SnowClaimsTransformation CreateTransformation()
-        => new(Options.Create(new SnowClaimsMapOptions()));
+        => new(Microsoft.Extensions.Options.Options.Create(new SnowClaimsMapOptions()));
 
     private sealed class FakeWebHostEnvironment(string environmentName) : IWebHostEnvironment
     {

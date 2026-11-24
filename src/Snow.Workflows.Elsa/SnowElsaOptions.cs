@@ -63,6 +63,19 @@ public sealed class SnowElsaOptions
     public bool EnableApi { get; set; } = true;
 
     /// <summary>
+    /// 是否挂上运行工作流所需的默认特性(表达式求值、JavaScript 引擎、内存缓存,
+    /// 以及管理与运行时的缓存)。默认开启; 关掉后这些特性须由 <see cref="ConfigureElsa"/> 自行补齐,
+    /// 否则启动校验服务时会缺件。
+    /// </summary>
+    public bool UseDefaultFeatures { get; set; } = true;
+
+    /// <summary>
+    /// 默认特性中是否包含 JavaScript 表达式引擎。只用 C# 表达式时可关掉省一个依赖。
+    /// 仅在 <see cref="UseDefaultFeatures"/> 为 true 时有效。
+    /// </summary>
+    public bool UseJavaScript { get; set; } = true;
+
+    /// <summary>
     /// 要注册成工作流定义的代码类型集合。
     /// </summary>
     public IList<Type> WorkflowTypes { get; } = new List<Type>();

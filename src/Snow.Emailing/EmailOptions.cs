@@ -49,8 +49,8 @@ public class EmailOptions
     public TimeSpan? Timeout { get; set; } = TimeSpan.FromSeconds(100);
 
     /// <summary>
-    /// <see cref="IEmailSender.Content(string)"/> 传入的内容按 HTML 解析, 默认 true;
-    /// 设为 false 则按纯文本投递
+    /// <see cref="EmailMessageExtensions.Content(EmailMessage, string, bool)"/> 未显式指定 isBodyHtml 时,
+    /// 以及两种正文都没给时的空正文, 都按这个开关决定用 HTML 还是纯文本, 默认 true
     /// </summary>
     public bool IsBodyHtml { get; set; } = true;
 }

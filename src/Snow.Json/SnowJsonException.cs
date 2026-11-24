@@ -1,9 +1,11 @@
+using Snow.Exceptions;
+
 namespace Snow.Json;
 
 /// <summary>
 /// JSON 处理异常: 序列化或反序列化失败时抛出
 /// </summary>
-public class SnowJsonException : Exception
+public class SnowJsonException : SnowException
 {
     /// <summary>
     /// 构造器

@@ -13,12 +13,6 @@ public sealed class NullEmailSender : IEmailSender
 {
     private readonly ILogger<NullEmailSender>? _logger;
 
-    private readonly List<string> _to = [];
-    private readonly List<string> _cc = [];
-    private readonly List<string> _attachments = [];
-    private string? _subject;
-    private string? _content;
-
     /// <summary>
     /// 构造器
     /// </summary>
@@ -29,47 +23,42 @@ public sealed class NullEmailSender : IEmailSender
     }
 
     /// <inheritdoc />
-    public IEmailSender Attach(string fileName, byte[] data)
+    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        _attachments.Add(fileName);
-        return this;
-    }
+        ArgumentNullException.ThrowIfNull(message);
 
-    /// <inheritdoc />
-    public IEmailSender To(string to)
-    {
-        _to.Add(to);
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEmailSender Cc(string cc)
-    {
-        _cc.Add(cc);
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEmailSender Subject(string subject)
-    {
-        _subject = subject;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEmailSender Content(string content)
-    {
-        _content = content;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public Task SendAsync()
-    {
         _logger?.LogDebug(
-            "邮件未发送(当前为静默实现): 收件人 {To}, 抄送 {Cc}, 标题 {Subject}, 内容长度 {ContentLength}, 附件 {Attachments}",
-            string.Join(", ", _to), string.Join(", ", _cc), _subject, _content?.Length ?? 0, string.Join(", ", _attachments));
+            "邮件未发送(当前为静默实现): 标题 {Subject}, 收件人 {To}, 抄送 {Cc}, 密送 {Bcc}, 附件 {AttachmentCount} 个",
+            message.Subject,
+            Join(message.To),
+            Join(message.Cc),
+            Join(message.Bcc),
+            message.Attachments.Count);
 
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public Task SendAsync(Action<EmailMessage> configure, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+
+        EmailMessage message = new();
+        configure(message);
+        return SendAsync(message, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SendManyAsync(IEnumerable<EmailMessage> messages, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        foreach (EmailMessage message in messages)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await SendAsync(message, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string Join(List<EmailAddress> addresses) => string.Join(", ", addresses);
 }

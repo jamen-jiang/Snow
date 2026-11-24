@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Snow.Sample.Web</RootNamespace>
+    <!-- 示例宿主: 不打包、不生成 XML 文档, 保持构建零告警 -->
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- 全模块示例: 引用框架全部 src 工程(含每一个能力模块与各实现提供者) -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Snow\Snow.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Aop.Castle\Snow.Aop.Castle.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Application\Snow.Application.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore\Snow.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.Mvc\Snow.AspNetCore.Mvc.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.RateLimiting\Snow.AspNetCore.RateLimiting.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.Serilog\Snow.AspNetCore.Serilog.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.SignalR\Snow.AspNetCore.SignalR.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Authentication\Snow.Authentication.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Authorization\Snow.Authorization.csproj" />
+    <ProjectReference Include="..\..\src\Snow.BackgroundJobs\Snow.BackgroundJobs.csproj" />
+    <ProjectReference Include="..\..\src\Snow.BackgroundJobs.Hangfire\Snow.BackgroundJobs.Hangfire.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Caching\Snow.Caching.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Caching.StackExchangeRedis\Snow.Caching.StackExchangeRedis.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Data\Snow.Data.csproj" />
+    <ProjectReference Include="..\..\src\Snow.DistributedLocking\Snow.DistributedLocking.csproj" />
+    <ProjectReference Include="..\..\src\Snow.DistributedLocking.Redis\Snow.DistributedLocking.Redis.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Domain\Snow.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Emailing\Snow.Emailing.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Emailing.MailKit\Snow.Emailing.MailKit.csproj" />
+    <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore\Snow.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore.SqlServer\Snow.EntityFrameworkCore.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\Snow.EventBus\Snow.EventBus.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Ftping\Snow.Ftping.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Ftping.FluentFTP\Snow.Ftping.FluentFTP.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Http.Client\Snow.Http.Client.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Json\Snow.Json.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Localization\Snow.Localization.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Messaging\Snow.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\Snow.ObjectMapping\Snow.ObjectMapping.csproj" />
+    <ProjectReference Include="..\..\src\Snow.ObjectMapping.Mapster\Snow.ObjectMapping.Mapster.csproj" />
+    <ProjectReference Include="..\..\src\Snow.OpenApi\Snow.OpenApi.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Security\Snow.Security.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Timing\Snow.Timing.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Tracing\Snow.Tracing.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Uow\Snow.Uow.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Validation\Snow.Validation.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Validation.FluentValidation\Snow.Validation.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Workflows\Snow.Workflows.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Workflows.Elsa\Snow.Workflows.Elsa.csproj" />
+  </ItemGroup>
+
+  <!-- Hangfire 持久化存储(示例用 SQLite 文件库): 只示例宿主需要, 框架包本身不引 -->
+  <ItemGroup>
+    <PackageReference Include="Hangfire.Storage.SQLite" />
+  </ItemGroup>
+
+</Project>
