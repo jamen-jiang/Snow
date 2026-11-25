@@ -65,7 +65,7 @@ public sealed class SnowApplication
 
         Services.AddSingleton(context);
 
-        // Options 基础设施全局注册一次(对齐 ABP 由 AbpCoreModule 统一 AddOptions 的做法),
+        // Options 基础设施全局注册一次(对齐 ABP 内部服务统一 AddOptions 的做法),
         // 这样任何模块都可以直接注入 IOptions<T>, 无需各自补齐; 重复调用幂等。
         Services.AddOptions();
 
@@ -84,6 +84,16 @@ public sealed class SnowApplication
         // 这样宿主与模块的显式登记稳定排在约定登记之前, TryAdd / Add / Replace 都能顶掉默认实现
         HashSet<Assembly> scannedAssemblies = new HashSet<Assembly>();
         List<ServiceCollectionExtensions.ConventionalRegistration> conventionalCandidates = new();
+
+        // Snow.Core 自身没有模块类, 但里面有靠注解登记的基础服务(异常通知器、惰性服务提供者、缓存服务提供者等),
+        // 这些类型也必须参与约定注册, 所以把核心程序集一并纳入扫描 ——
+        // 对应 ABP 在内部服务注册里 AddAssemblyOf<IAbpApplication>() 把核心程序集纳入约定扫描的做法
+        Assembly coreAssembly = typeof(SnowModule).Assembly;
+
+        if (scannedAssemblies.Add(coreAssembly))
+        {
+            conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(coreAssembly));
+        }
 
         foreach (SnowModuleDescriptor module in Modules)
         {

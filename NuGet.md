@@ -1586,9 +1586,11 @@ git tag v1.2.0 && git push origin v1.2.0
 | 包 | 用途 |
 | --- | --- |
 | `Snow` | 名称占位包: 不含代码, 只引用 `Snow.Core`(与 ABP 的 `Volo.Abp` 同形) |
-| `Snow.Core` | 内核: 模块系统、约定式依赖注入、AOP 拦截契约(`AspectContext` / `AspectDelegate` / `SnowInterceptorAttribute` / `SnowProxyHelper`)、表达式求值、System 扩展方法 |
+| `Snow.Core` | 内核: 模块系统、约定式依赖注入(含惰性/缓存服务提供者 `ISnowLazyServiceProvider` / `ICachedServiceProvider`)、AOP 拦截契约(`AspectContext` / `AspectDelegate` / `SnowInterceptorAttribute` / `SnowProxyHelper`)、表达式求值、System 扩展方法 |
 | `Snow.Data` | 数据过滤: 按过滤器类型开关全局过滤(软删除等), 状态按异步调用链隔离 |
 | `Snow.Timing` | 时间: `IClock` 抽象与直接读系统时钟的默认实现 |
+| `Snow.Guids` | 标识生成: `IGuidGenerator`、`SimpleGuidGenerator` 与顺序 Guid 实现 `SequentialGuidGenerator`(对应 ABP 的 `Volo.Abp.Guids`) |
+| `Snow.Threading` | 线程与异步基础设施: 异步查询执行器 `IAsyncQueryableExecuter` / `IAsyncQueryableProvider`(有 EF Core 之类的异步提供者就交给它, 否则退回同步 LINQ; 对应 ABP 的 `Volo.Abp.Threading` 下的 `Volo.Abp.Linq`) |
 | `Snow.Tracing` | 链路标识: `ICorrelationIdProvider` 与进程内默认实现 |
 | `Snow.AspNetCore` | Web 宿主能力包: `SnowAspNetCoreModule`(HTTP 上下文访问器、Web 对象访问器) + `GetHostingEnvironment()`(对应 ABP 的 `AbpAspNetCoreServiceCollectionExtensions`) + 宿主显式初始化 `app.InitializeApplicationAsync()`(对应 ABP 的 `AbpApplicationBuilderExtensions.InitializeApplicationAsync`, 驱动模块生命周期; 管道由宿主在启动模块里手写) + 端点路由选项 `SnowEndpointRouterOptions` 与宿主最后一行 `UseSnowEndpoints()`(对应 ABP 的 `AbpEndpointRouterOptions` / `UseConfiguredEndpoints`) + `UseSnowCorrelationId()` 与链路标识中间件 `SnowCorrelationIdMiddleware`(对应 ABP 的 `AbpCorrelationIdMiddleware`) + 应用初始化上下文扩展 `GetApplicationBuilder()` 一族; 不含任何具体后端(EF / Redis / Hangfire / Serilog / MailKit / FluentFTP / ClosedXML / Elsa 由宿主按需引用) |
 | `Snow.AspNetCore.Serilog` | Serilog 集成: 请求级租户/用户/链路标识自动进日志上下文; 已依赖 `Snow.AspNetCore`(与 ABP 的 `Volo.Abp.AspNetCore.Serilog` 依赖 `Volo.Abp.AspNetCore` 同形); 中间件由宿主在管道里调 `UseSnowSerilogEnrichers()` |
@@ -1602,7 +1604,7 @@ git tag v1.2.0 && git push origin v1.2.0
 
 | 包 | 用途 |
 | --- | --- |
-| `Snow.Domain` | 实体、聚合根、审计实体、软删除、领域事件、仓储契约、值对象 |
+| `Snow.Domain` | 实体、聚合根、审计实体、软删除、领域事件、仓储契约、值对象, 以及领域服务基类 `DomainService`(对应 ABP 的 `DomainService`: 惰性暴露 `Clock` / `GuidGenerator` / `Logger` / `CurrentTenant` / `AsyncExecuter`; ABP 靠 Autofac 属性注入填 `LazyServiceProvider`, Snow 没有属性注入, 改由构造器传入 `ISnowLazyServiceProvider`) |
 | `Snow.Application` | 应用层契约: 实体 DTO、分页请求与分页结果、`IQueryable.PageBy(IPagedResultRequest)` 分页扩展(对应 ABP AbpPagingQueryableExtensions); 业务应用服务写在消费方项目里 |
 | `Snow.Uow` | 工作单元与事务: `IUnitOfWork`、`[Transactional]` 注解、提交/回滚回调、领域事件队列(提交事务前按序派发) |
 

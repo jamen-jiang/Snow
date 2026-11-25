@@ -6,11 +6,15 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Description>领域层基元: 实体、聚合根、审计实体、领域事件、仓储契约与值对象</Description>
+    <Description>领域层基元: 实体、聚合根、审计实体、领域事件、仓储契约、值对象与领域服务基类</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\Snow.EventBus\Snow.EventBus.csproj" />
     <ProjectReference Include="..\Snow.ExceptionHandling\Snow.ExceptionHandling.csproj" />
+    <ProjectReference Include="..\Snow.Guids\Snow.Guids.csproj" />
+    <ProjectReference Include="..\Snow.Threading\Snow.Threading.csproj" />
+    <ProjectReference Include="..\Snow.MultiTenancy\Snow.MultiTenancy.csproj" />
+    <ProjectReference Include="..\Snow.Timing\Snow.Timing.csproj" />
   </ItemGroup>
 </Project>

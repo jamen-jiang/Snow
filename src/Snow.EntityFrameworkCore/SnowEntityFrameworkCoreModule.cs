@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.Data;
 using Snow.DependencyInjection;
+using Snow.Domain;
 using Snow.Domain.Repositories;
 using Snow.Domain.Repositories.EntityFrameworkCore;
 using Snow.Modularity;
@@ -17,6 +18,7 @@ namespace Snow.EntityFrameworkCore;
 /// </summary>
 [DependsOn(typeof(SnowUowModule))]
 [DependsOn(typeof(SnowDataModule))]
+[DependsOn(typeof(SnowDomainModule))]
 public sealed class SnowEntityFrameworkCoreModule : SnowModule
 {
     /// <inheritdoc />

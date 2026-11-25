@@ -22,6 +22,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Snow.AspNetCore\Snow.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.Mvc\Snow.AspNetCore.Mvc.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Domain\Snow.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Guids\Snow.Guids.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Threading\Snow.Threading.csproj" />
   </ItemGroup>
 
 </Project>
