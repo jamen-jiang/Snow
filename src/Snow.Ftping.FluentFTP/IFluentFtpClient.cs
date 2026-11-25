@@ -10,8 +10,9 @@ namespace Snow.Ftping.FluentFTP;
 public interface IFluentFtpClient : IFtpClient
 {
     /// <summary>
-    /// 按配置建一个尚未连接的 FluentFTP 异步客户端
+    /// 按当前配置项建一个尚未连接的 FluentFTP 异步客户端
     /// </summary>
+    /// <param name="cancellationToken">取消令牌(读取配置项时使用)</param>
     /// <returns>客户端实例, <b>调用方负责连接与释放</b></returns>
-    AsyncFtpClient BuildClient();
+    Task<AsyncFtpClient> BuildClientAsync(CancellationToken cancellationToken = default);
 }

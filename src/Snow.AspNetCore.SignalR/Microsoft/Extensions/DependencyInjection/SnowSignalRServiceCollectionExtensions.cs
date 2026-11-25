@@ -35,9 +35,31 @@ public static class SnowSignalRServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        services.Configure(configure);
+        configure(GetOrCreateOptions(services));
         GetOrCreateRegistry(services);
         return services;
+    }
+
+    /// <summary>
+    /// 取选项实例, 没有就建一个挂进服务集合
+    /// <para>模块在 <c>ConfigureServices</c> 阶段就要拿这些值决定扫不扫 Hub、调不调 <c>AddSignalR</c>,
+    /// 而 <c>IOptions</c> 那时还没成型, 所以选项以实例形式登记, 模块与扩展方法读写同一个对象。</para>
+    /// </summary>
+    internal static SnowSignalROptions GetOrCreateOptions(IServiceCollection services)
+    {
+        SnowSignalROptions? options = services
+            .Where(descriptor => descriptor.ServiceType == typeof(SnowSignalROptions))
+            .Select(descriptor => descriptor.ImplementationInstance)
+            .OfType<SnowSignalROptions>()
+            .FirstOrDefault();
+
+        if (options is null)
+        {
+            options = new SnowSignalROptions();
+            services.AddSingleton(options);
+        }
+
+        return options;
     }
 
     internal static SnowHubRegistry GetOrCreateRegistry(IServiceCollection services)

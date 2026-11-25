@@ -28,6 +28,7 @@
     <Project Path="src/Snow.EntityFrameworkCore.Sqlite/Snow.EntityFrameworkCore.Sqlite.csproj" />
     <Project Path="src/Snow.EntityFrameworkCore.SqlServer/Snow.EntityFrameworkCore.SqlServer.csproj" />
     <Project Path="src/Snow.EventBus/Snow.EventBus.csproj" />
+    <Project Path="src/Snow.ExceptionHandling/Snow.ExceptionHandling.csproj" />
     <Project Path="src/Snow.Ftping/Snow.Ftping.csproj" />
     <Project Path="src/Snow.Ftping.FluentFTP/Snow.Ftping.FluentFTP.csproj" />
     <Project Path="src/Snow.Http.Client/Snow.Http.Client.csproj" />
@@ -40,11 +41,13 @@
     <Project Path="src/Snow.ObjectMapping.Mapster/Snow.ObjectMapping.Mapster.csproj" />
     <Project Path="src/Snow.OpenApi/Snow.OpenApi.csproj" />
     <Project Path="src/Snow.Security/Snow.Security.csproj" />
+    <Project Path="src/Snow.Settings/Snow.Settings.csproj" />
     <Project Path="src/Snow.Timing/Snow.Timing.csproj" />
     <Project Path="src/Snow.Tracing/Snow.Tracing.csproj" />
     <Project Path="src/Snow.Uow/Snow.Uow.csproj" />
     <Project Path="src/Snow.Validation/Snow.Validation.csproj" />
     <Project Path="src/Snow.Validation.FluentValidation/Snow.Validation.FluentValidation.csproj" />
+    <Project Path="src/Snow.VirtualFileSystem/Snow.VirtualFileSystem.csproj" />
     <Project Path="src/Snow.Workflows/Snow.Workflows.csproj" />
     <Project Path="src/Snow.Workflows.Elsa/Snow.Workflows.Elsa.csproj" />
   </Folder>

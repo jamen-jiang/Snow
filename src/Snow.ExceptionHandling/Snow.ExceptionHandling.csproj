@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Snow.ExceptionHandling</AssemblyName>
+    <PackageId>Snow.ExceptionHandling</PackageId>
+    <Description>异常处理: 异常到远端错误信息的转换器、异常处理选项与异常处理本地化资源(对应 ABP 的 Volo.Abp.ExceptionHandling)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Localization\*.json" />
+    <EmbeddedResource Include="Localization\*.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Authorization\Snow.Authorization.csproj" />
+    <ProjectReference Include="..\Snow.Localization\Snow.Localization.csproj" />
+    <ProjectReference Include="..\Snow.VirtualFileSystem\Snow.VirtualFileSystem.csproj" />
+    <ProjectReference Include="..\Snow.Validation\Snow.Validation.csproj" />
+  </ItemGroup>
+
+</Project>

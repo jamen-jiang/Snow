@@ -1,14 +1,14 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Snow.DependencyInjection;
 using Snow.Modularity;
+using Snow.Settings;
 
 namespace Snow.Emailing;
 
 /// <summary>
-/// 邮件模块: 绑定 <c>Email</c> 配置节到 <see cref="EmailOptions"/>
+/// 邮件模块: 把邮件配置项(<see cref="EmailSettingNames"/>)挂到配置项系统, 值由宿主在 <c>Settings</c> 节或其它来源提供
 /// <para>本模块只带静默实现(<see cref="NullEmailSender"/>), 真正投递需再引入 Snow.Emailing.MailKit 顶替它。</para>
 /// </summary>
+[DependsOn(typeof(SnowSettingsModule))]
 public sealed class SnowEmailingModule : SnowModule
 {
     /// <inheritdoc />
@@ -17,8 +17,9 @@ public sealed class SnowEmailingModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        // 配置节: Email:{ SmtpHost, Port, UserName, Password, DefaultFromAddress, DefaultFromDisplayName, UseSsl }
-        IConfiguration configuration = context.Services.GetConfiguration();
-        Configure<EmailOptions>(configuration.GetSection("Email"));
+        Configure<SnowSettingOptions>(options => options.DefinitionProviders.Add<EmailSettingProvider>());
+
+        // EmailOptions 只剩 Snow 自己的两个开关(超时/正文默认格式), 不绑配置节
+        context.Services.AddOptions<EmailOptions>();
     }
 }

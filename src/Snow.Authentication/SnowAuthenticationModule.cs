@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -30,6 +29,8 @@ namespace Snow.Authentication;
 /// 对称密钥同时塞进 <see cref="TokenValidationParameters.IssuerSigningKeys"/> 供框架验签。</para>
 /// <para><b>会话</b>: 微软的处理器是无状态的, 认不出"这个令牌已经被踢了"。所以每次验签通过后再查一次
 /// <see cref="ITokenSessionStore"/>: 登出、踢人、封禁删掉会话, 令牌立刻失效。</para>
+/// <para>选项不读配置节: 由宿主在 <c>ConfigureServices</c> 里配(绑一节配置或直接赋值), 本模块只做校验,
+/// 密钥不合规时在应用初始化阶段就抛, 不会等到第一个请求。</para>
 /// <para>状态存储只有 <see cref="DistributedCacheTokenSessionStore"/> 一个实现, 跑在 <see cref="IDistributedCache"/> 上。
 /// 本模块<b>不注册</b> <see cref="IDistributedCache"/>, 只在解析会话存储时取容器里已有的实例: 宿主注册了 Redis 就用 Redis,
 /// 什么都没注册才回退进程内实现(<see cref="MemoryDistributedCache"/>)。因此与缓存模块的装配顺序无关。</para>
@@ -48,16 +49,9 @@ public sealed class SnowAuthenticationModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        IConfiguration configuration = context.Services.GetConfiguration();
-        IConfigurationSection section = configuration.GetSection("Authentication");
-
-        // 启动时先绑一次并校验: 配置写错就直接起不来, 而不是等到第一个请求进来才发现全是 401
-        SnowAuthenticationOptions options = section.Get<SnowAuthenticationOptions>() ?? new SnowAuthenticationOptions();
-        options.Validate();
-
-        // 校验同时挂在选项管线上: 热更新后也会校验, 不会出现"密钥被改成空串但进程照跑"
+        // 选项不读配置节(与 ABP 的 AddAbpJwtBearer 一样由宿主决定来源): 宿主在 ConfigureServices 里
+        // Configure<SnowAuthenticationOptions>(...) 或绑一节配置, 本模块只负责校验
         context.Services.AddOptions<SnowAuthenticationOptions>()
-            .Bind(section)
             .Validate(authenticationOptions =>
             {
                 authenticationOptions.Validate();
@@ -112,6 +106,9 @@ public sealed class SnowAuthenticationModule : SnowModule
     public override void OnApplicationInitialization(ApplicationInitializationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        // 启动时先校验一次: 密钥写错就直接起不来, 而不是等到第一个请求进来才发现全是 401
+        context.ServiceProvider.GetRequiredService<IOptionsMonitor<SnowAuthenticationOptions>>().CurrentValue.Validate();
 
         // 进程内缓存只对单实例有效: 多实例部署时 A 实例删掉的会话到 B 实例还能查到, 表现为"登出后换个实例又活了"。
         // 缺 Redis 属于配置问题, 这里只提醒, 不阻断启动

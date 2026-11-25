@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Snow\Snow.csproj" />
     <ProjectReference Include="..\Snow.Authorization\Snow.Authorization.csproj" />
+    <ProjectReference Include="..\Snow.ExceptionHandling\Snow.ExceptionHandling.csproj" />
     <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />
     <ProjectReference Include="..\Snow.Tracing\Snow.Tracing.csproj" />
     <ProjectReference Include="..\Snow.Uow\Snow.Uow.csproj" />

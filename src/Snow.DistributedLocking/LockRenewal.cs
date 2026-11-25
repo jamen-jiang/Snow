@@ -6,15 +6,15 @@ namespace Snow.DistributedLocking;
 /// 一次持锁对应的续期循环(对应 Redisson 的 <c>ExpirationEntry</c>): 每「租期三分之一」续期一次, 续不上即判定丢锁。
 /// <para>一条循环只服务一个锁句柄; 可重入的锁在重入时共享句柄, 因此同一把锁同一时刻也只有这一条循环,
 /// 不存在 Redisson 里「按锁名去重」导致的续错对象问题。</para>
-/// <para>每次触发先看 <see cref="IDistributedLockHandle.HandleLostToken"/>, 再调
-/// <see cref="IDistributedLockHandle.TryExtendAsync"/>; 任一步失败即认定锁已丢失(Redisson 的
+/// <para>每次触发先看 <see cref="ISnowDistributedLockHandle.HandleLostToken"/>, 再调
+/// <see cref="ISnowDistributedLockHandle.TryExtendAsync"/>; 任一步失败即认定锁已丢失(Redisson 的
 /// <c>cancelExpirationRenewal</c> 语义), 取消 <see cref="LostToken"/> 并记录错误。</para>
 /// </summary>
 public sealed class LockRenewal : IAsyncDisposable
 {
     private readonly CancellationTokenSource _stopSource = new();
     private readonly CancellationTokenSource _lostSource = new();
-    private readonly IDistributedLockHandle _handle;
+    private readonly ISnowDistributedLockHandle _handle;
     private readonly TimeSpan _leaseTime;
     private readonly TimeSpan _interval;
     private readonly ILogger? _logger;
@@ -24,7 +24,7 @@ public sealed class LockRenewal : IAsyncDisposable
     private int _disposed;
 
     internal LockRenewal(
-        IDistributedLockHandle handle,
+        ISnowDistributedLockHandle handle,
         string key,
         TimeSpan leaseTime,
         TimeSpan interval,

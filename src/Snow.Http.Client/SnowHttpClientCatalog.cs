@@ -1,27 +1,23 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Snow.Http.Client;
 
 /// <summary>
-/// 按客户端名字解析生效选项: 以 <c>HttpClient</c> 节(全局默认值)为底, 再用 <c>HttpClient:{名字}</c> 节覆盖
+/// 按客户端名字解析生效选项: 以 <see cref="SnowHttpClientOptions"/> 的顶层值为底,
+/// 若 <see cref="SnowHttpClientOptions.Clients"/> 里有同名项则整份用它
 /// </summary>
 public sealed class SnowHttpClientCatalog
 {
-    private readonly IConfiguration _configuration;
     private readonly IOptionsMonitor<SnowHttpClientOptions> _defaults;
 
     /// <summary>
     /// 构造器
     /// </summary>
-    /// <param name="configuration">配置根</param>
     /// <param name="defaults">全局默认选项</param>
-    public SnowHttpClientCatalog(IConfiguration configuration, IOptionsMonitor<SnowHttpClientOptions> defaults)
+    public SnowHttpClientCatalog(IOptionsMonitor<SnowHttpClientOptions> defaults)
     {
-        ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(defaults);
 
-        _configuration = configuration;
         _defaults = defaults;
     }
 
@@ -46,19 +42,14 @@ public sealed class SnowHttpClientCatalog
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        SnowHttpClientOptions options = _defaults.CurrentValue.Clone();
+        SnowHttpClientOptions defaults = _defaults.CurrentValue;
 
-        IConfigurationSection section = _configuration.GetSection("HttpClient:" + name);
-        if (section.Exists())
-        {
-            section.Bind(options);
-        }
-
-        return options;
+        return defaults.Clients.TryGetValue(name, out SnowHttpClientOptions? named) ? named.Clone() : defaults.Clone();
     }
 
     /// <summary>
-    /// 该名字是否已有自己的配置节(有则命名客户端管线已按同一份选项配好, 调用方不必再应用一次, 避免重复追加请求头)
+    /// 该名字的管线是否已由模块建好并应用过同一份选项 —— 只有默认客户端是这种情况,
+    /// 按契约派生的具名客户端由 <see cref="SnowHttpClient{T}"/> 自己应用, 不必再建一次管线
     /// </summary>
     /// <param name="name">客户端名称</param>
     /// <returns>已配好返回 true</returns>
@@ -66,7 +57,6 @@ public sealed class SnowHttpClientCatalog
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        return string.Equals(name, SnowHttpClientNames.Default, StringComparison.Ordinal)
-            || _configuration.GetSection("HttpClient:" + name).Exists();
+        return string.Equals(name, SnowHttpClientNames.Default, StringComparison.Ordinal);
     }
 }

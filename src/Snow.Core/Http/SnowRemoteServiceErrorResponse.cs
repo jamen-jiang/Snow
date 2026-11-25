@@ -1,7 +1,7 @@
-namespace Snow.AspNetCore.ExceptionHandling;
+namespace Snow.Http;
 
 /// <summary>
-/// 远端错误响应信封(对应 ABP 的 RemoteServiceErrorResponse)
+/// 远端错误响应信封(对应 ABP 的 <c>RemoteServiceErrorResponse</c>)
 /// </summary>
 public sealed class SnowRemoteServiceErrorResponse
 {
@@ -9,10 +9,10 @@ public sealed class SnowRemoteServiceErrorResponse
     /// 构造器
     /// </summary>
     /// <param name="error">错误信息</param>
-    public SnowRemoteServiceErrorResponse(SnowRemoteServiceErrorInfo error) => Error = error;
+    public SnowRemoteServiceErrorResponse(RemoteServiceErrorInfo error) => Error = error;
 
     /// <summary>
     /// 错误信息
     /// </summary>
-    public SnowRemoteServiceErrorInfo Error { get; }
+    public RemoteServiceErrorInfo Error { get; }
 }

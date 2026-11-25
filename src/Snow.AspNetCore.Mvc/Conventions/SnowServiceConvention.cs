@@ -18,11 +18,11 @@ using Snow.Reflection;
 namespace Snow.AspNetCore.Mvc.Conventions;
 
 /// <summary>
-/// 实现 ABP 的约定路由主逻辑(对应 ABP 的 <c>AbpServiceConvention</c>)。
+/// 实现约定路由主逻辑。
 /// <para>只对真正的 Controller 生效: 实现 <see cref="IRemoteService"/> 或标了 <see cref="RemoteServiceAttribute"/> 的控制器才会被套用约定路由。</para>
 /// </summary>
 [TransientService]
-public class SnowServiceConvention : ISnowServiceConvention
+public class SnowServiceConvention : IApplicationModelConvention
 {
     /// <summary>
     /// 约定控制器选项
@@ -32,7 +32,7 @@ public class SnowServiceConvention : ISnowServiceConvention
     /// <summary>
     /// 约定路由构造器
     /// </summary>
-    protected IConventionalRouteBuilder ConventionalRouteBuilder { get; }
+    protected ConventionalRouteBuilder ConventionalRouteBuilder { get; }
 
     /// <summary>
     /// 日志
@@ -47,7 +47,7 @@ public class SnowServiceConvention : ISnowServiceConvention
     /// <param name="logger">日志器</param>
     public SnowServiceConvention(
         IOptions<SnowAspNetCoreMvcOptions> options,
-        IConventionalRouteBuilder conventionalRouteBuilder,
+        ConventionalRouteBuilder conventionalRouteBuilder,
         ILogger<SnowServiceConvention> logger)
     {
         Options = options.Value;
@@ -73,20 +73,17 @@ public class SnowServiceConvention : ISnowServiceConvention
 
         foreach (var controller in application.Controllers)
         {
-            var controllerSetting = GetControllerSettingOrNull(controller.ControllerType);
-
             if (ImplementsRemoteServiceInterface(controller.ControllerType))
             {
                 controller.ControllerName = controller.ControllerName.RemovePostFix(SnowApplicationServicePostfixes.CommonPostfixes);
-                controllerSetting?.ControllerModelConfigurer?.Invoke(controller);
-                ConfigureRemoteService(controller, controllerSetting);
+                ConfigureRemoteService(controller);
             }
             else
             {
                 var remoteServiceAttr = ReflectionHelper.GetSingleAttributeOrDefault<RemoteServiceAttribute>(controller.ControllerType);
                 if (remoteServiceAttr != null && remoteServiceAttr.IsEnabledFor(controller.ControllerType))
                 {
-                    ConfigureRemoteService(controller, controllerSetting);
+                    ConfigureRemoteService(controller);
                 }
             }
         }
@@ -102,12 +99,6 @@ public class SnowServiceConvention : ISnowServiceConvention
 
         foreach (var controllerModel in application.Controllers)
         {
-            if (Options.ControllersToRemove.Any(type => controllerModel.ControllerType.IsAssignableFrom(type)))
-            {
-                controllerModelsToRemove.Add(controllerModel);
-                continue;
-            }
-
             var replaceControllersAttribute = ReflectionHelper.GetSingleAttributeOrDefault<ReplaceControllersAttribute>(controllerModel.ControllerType);
             if (replaceControllersAttribute != null &&
                 replaceControllersAttribute.ControllerTypes.Any(type => controllerModel.ControllerType.IsAssignableFrom(type)))
@@ -118,11 +109,6 @@ public class SnowServiceConvention : ISnowServiceConvention
 
             var exposeServicesAttribute = ReflectionHelper.GetSingleAttributeOrDefault<ExposeServicesAttribute>(controllerModel.ControllerType);
             if (exposeServicesAttribute == null)
-            {
-                continue;
-            }
-
-            if (Options.IgnoredControllersOnModelExclusion.Contains(controllerModel.ControllerType))
             {
                 continue;
             }
@@ -150,7 +136,7 @@ public class SnowServiceConvention : ISnowServiceConvention
     }
 
     /// <summary>
-    /// 根据选项移除不应暴露的集成服务/客户端代理服务控制器。
+    /// 根据选项移除不应暴露的集成服务控制器。
     /// </summary>
     /// <param name="application">应用模型</param>
     protected virtual void RemoveIntegrationControllersIfNotExposed(ApplicationModel application)
@@ -161,31 +147,16 @@ public class SnowServiceConvention : ISnowServiceConvention
                 controller => IntegrationServiceAttribute.IsDefinedOrInherited(controller.ControllerType)
             );
         }
-
-        if (!Options.ExposeClientProxyServices)
-        {
-            application.Controllers.RemoveAll(IsClientProxyService);
-        }
-    }
-
-    /// <summary>
-    /// Snow 无客户端代理基类, 恒返回 false(保留 ABP 方法结构)。
-    /// </summary>
-    /// <param name="controller">控制器模型</param>
-    protected virtual bool IsClientProxyService(ControllerModel controller)
-    {
-        return false;
     }
 
     /// <summary>
     /// 配置控制器的 API Explorer、选择器和参数。
     /// </summary>
     /// <param name="controller">控制器模型</param>
-    /// <param name="controllerSetting">约定配置, 可为 null</param>
-    protected virtual void ConfigureRemoteService(ControllerModel controller, ConventionalControllerSetting? controllerSetting)
+    protected virtual void ConfigureRemoteService(ControllerModel controller)
     {
         ConfigureApiExplorer(controller);
-        ConfigureSelector(controller, controllerSetting);
+        ConfigureSelector(controller);
         ConfigureParameters(controller);
     }
 
@@ -266,7 +237,7 @@ public class SnowServiceConvention : ISnowServiceConvention
     /// </summary>
     protected virtual void ConfigureApiExplorer(ControllerModel controller)
     {
-        if (Options.ChangeControllerModelApiExplorerGroupName && controller.ApiExplorer.GroupName.IsNullOrEmpty())
+        if (controller.ApiExplorer.GroupName.IsNullOrEmpty())
         {
             controller.ApiExplorer.GroupName = controller.ControllerName;
         }
@@ -286,7 +257,7 @@ public class SnowServiceConvention : ISnowServiceConvention
     /// <summary>
     /// 为控制器/动作生成选择器与路由。
     /// </summary>
-    protected virtual void ConfigureSelector(ControllerModel controller, ConventionalControllerSetting? controllerSetting)
+    protected virtual void ConfigureSelector(ControllerModel controller)
     {
         RemoveEmptySelectors(controller.Selectors);
 
@@ -304,14 +275,14 @@ public class SnowServiceConvention : ISnowServiceConvention
         var rootPath = GetRootPathOrDefault(controller.ControllerType);
         foreach (var action in controller.Actions)
         {
-            ConfigureSelector(rootPath, controller.ControllerName, action, controllerSetting);
+            ConfigureSelector(rootPath, controller.ControllerName, action);
         }
     }
 
     /// <summary>
     /// 为单个动作配置选择器。
     /// </summary>
-protected virtual void ConfigureSelector(string rootPath, string controllerName, ActionModel action, ConventionalControllerSetting? controllerSetting)
+    protected virtual void ConfigureSelector(string rootPath, string controllerName, ActionModel action)
     {
         RemoveEmptySelectors(action.Selectors);
 
@@ -323,24 +294,24 @@ protected virtual void ConfigureSelector(string rootPath, string controllerName,
 
         if (!action.Selectors.Any())
         {
-            AddSnowServiceSelector(rootPath, controllerName, action, controllerSetting);
+            AddSnowServiceSelector(rootPath, controllerName, action);
         }
         else
         {
-            NormalizeSelectorRoutes(rootPath, controllerName, action, controllerSetting);
+            NormalizeSelectorRoutes(rootPath, controllerName, action);
         }
     }
 
     /// <summary>
     /// 添加约定选择器。
     /// </summary>
-    protected virtual void AddSnowServiceSelector(string rootPath, string controllerName, ActionModel action, ConventionalControllerSetting? controllerSetting)
+    protected virtual void AddSnowServiceSelector(string rootPath, string controllerName, ActionModel action)
     {
-        var httpMethod = SelectHttpMethod(action, controllerSetting);
+        var httpMethod = SelectHttpMethod(action);
 
         var selector = new SelectorModel
         {
-            AttributeRouteModel = CreateSnowServiceAttributeRouteModel(rootPath, controllerName, action, httpMethod, controllerSetting),
+            AttributeRouteModel = CreateSnowServiceAttributeRouteModel(rootPath, controllerName, action, httpMethod),
             ActionConstraints =
             {
                 new HttpMethodActionConstraint(new[] { httpMethod })
@@ -353,16 +324,16 @@ protected virtual void ConfigureSelector(string rootPath, string controllerName,
     /// <summary>
     /// 规范已有选择器的路由。
     /// </summary>
-    protected virtual void NormalizeSelectorRoutes(string rootPath, string controllerName, ActionModel action, ConventionalControllerSetting? controllerSetting)
+    protected virtual void NormalizeSelectorRoutes(string rootPath, string controllerName, ActionModel action)
     {
         foreach (var selector in action.Selectors)
         {
             var httpMethod = selector.ActionConstraints
                 .OfType<HttpMethodActionConstraint>()
                 .SelectMany(c => c.HttpMethods)
-                .FirstOrDefault() ?? SelectHttpMethod(action, controllerSetting);
+                .FirstOrDefault() ?? SelectHttpMethod(action);
 
-            selector.AttributeRouteModel ??= CreateSnowServiceAttributeRouteModel(rootPath, controllerName, action, httpMethod, controllerSetting);
+            selector.AttributeRouteModel ??= CreateSnowServiceAttributeRouteModel(rootPath, controllerName, action, httpMethod);
 
             if (!selector.ActionConstraints.OfType<HttpMethodActionConstraint>().Any())
             {
@@ -374,7 +345,7 @@ protected virtual void ConfigureSelector(string rootPath, string controllerName,
     /// <summary>
     /// 根据动作名推断 HTTP 动词。
     /// </summary>
-    protected virtual string SelectHttpMethod(ActionModel action, ConventionalControllerSetting? controllerSetting)
+    protected virtual string SelectHttpMethod(ActionModel action)
     {
         return HttpMethodHelper.GetConventionalVerbForMethodName(action.ActionName);
     }
@@ -386,12 +357,11 @@ protected virtual void ConfigureSelector(string rootPath, string controllerName,
         string rootPath,
         string controllerName,
         ActionModel action,
-        string httpMethod,
-        ConventionalControllerSetting? controllerSetting)
+        string httpMethod)
     {
         return new AttributeRouteModel(
             new RouteAttribute(
-                ConventionalRouteBuilder.Build(rootPath, controllerName, action, httpMethod, controllerSetting)
+                ConventionalRouteBuilder.Build(rootPath, controllerName, action, httpMethod)
             )
         );
     }
@@ -401,10 +371,13 @@ protected virtual void ConfigureSelector(string rootPath, string controllerName,
     /// </summary>
     protected virtual void RemoveEmptySelectors(IList<SelectorModel> selectors)
     {
-        selectors
-            .Where(IsEmptySelector)
-            .ToList()
-            .ForEach(s => selectors.Remove(s));
+        for (var i = selectors.Count - 1; i >= 0; i--)
+        {
+            if (IsEmptySelector(selectors[i]))
+            {
+                selectors.RemoveAt(i);
+            }
+        }
     }
 
     /// <summary>
@@ -418,24 +391,10 @@ protected virtual void ConfigureSelector(string rootPath, string controllerName,
     }
 
     /// <summary>
-    /// 取得控制器对应的约定设置。
-    /// </summary>
-    protected virtual ConventionalControllerSetting? GetControllerSettingOrNull(Type controllerType)
-    {
-        return Options.ConventionalControllers.ConventionalControllerSettings.GetSettingOrNull(controllerType);
-    }
-
-    /// <summary>
     /// 决定控制器根路径。
     /// </summary>
     protected virtual string GetRootPathOrDefault(Type controllerType)
     {
-        var controllerSetting = GetControllerSettingOrNull(controllerType);
-        if (controllerSetting?.RootPath != null)
-        {
-            return controllerSetting.RootPath;
-        }
-
         var areaAttribute = controllerType.GetCustomAttribute<AreaAttribute>();
         if (areaAttribute?.RouteValue != null)
         {
@@ -503,5 +462,5 @@ public static class SnowApplicationServicePostfixes
     /// <summary>
     /// 常用后缀
     /// </summary>
-    public static string[] CommonPostfixes => new[] { "AppService", "ApplicationService", "Service" };
+    public static string[] CommonPostfixes { get; } = new[] { "AppService", "ApplicationService", "Service" };
 }

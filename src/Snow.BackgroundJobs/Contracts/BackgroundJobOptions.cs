@@ -3,8 +3,10 @@ using System;
 namespace Snow.BackgroundJobs;
 
 /// <summary>
-/// 后台任务配置, 对应配置节 <c>BackgroundJobs</c>
+/// 后台任务配置
 /// <para>执行开关与轮询参数都在这里: 只有一套开关, 不会出现"到底哪个才是关"的疑问。</para>
+/// <para>模块不读配置节(与 ABP 的 <c>AbpBackgroundJobOptions</c> 一致): 宿主
+/// <c>Configure&lt;BackgroundJobOptions&gt;(...)</c> 给出, 不配就用下面的默认值。</para>
 /// </summary>
 public class BackgroundJobOptions
 {

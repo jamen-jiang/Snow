@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using MimeKit;
 using MimeKit.Utils;
 using Snow.DependencyInjection;
+using Snow.Emailing.Configuration;
 using SmtpClient = MailKit.Net.Smtp.SmtpClient;
 
 namespace Snow.Emailing.MailKit;
@@ -15,26 +16,32 @@ namespace Snow.Emailing.MailKit;
 /// <summary>
 /// 基于 MailKit 的邮件发送器: MimeKit 组装正文与附件, MailKit 的 <see cref="SmtpClient"/> 走 SSL/STARTTLS 投递
 /// <para>顶替 <see cref="NullEmailSender"/>: 引入本包后注入到的 <see cref="IEmailSender"/> 就是它。</para>
-/// <para>无状态: 要发的数据都在传入的 <see cref="EmailMessage"/> 上, 同一个实例可以反复给不同的信投递。</para>
-/// <para>连接加密方式只由 <see cref="EmailOptions.UseSsl"/> 决定: true 走 465 直连 SSL, false 走 STARTTLS。</para>
+/// <para>SMTP 地址/端口/账号/密码/发件人都来自配置项系统(见 <see cref="EmailSettingNames"/>),
+/// 与 ABP 一样每次发信前现读, 所以改配置不用重启。</para>
+/// <para>连接加密方式由 <c>Snow.Mailing.Smtp.EnableSsl</c> 决定: true 走 465 直连 SSL, false 走 STARTTLS。</para>
 /// </summary>
 [TransientService(ReplaceServices = true)]
 public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
 {
+    private readonly ISmtpEmailSenderConfiguration _smtpConfiguration;
     private readonly EmailOptions _options;
     private readonly ILogger<MailKitEmailSender>? _logger;
 
     /// <summary>
     /// 构造器
     /// </summary>
-    /// <param name="options">邮件配置</param>
+    /// <param name="smtpConfiguration">SMTP 配置(来自配置项系统)</param>
+    /// <param name="options">邮件通用开关</param>
     /// <param name="logger">日志</param>
     public MailKitEmailSender(
+        ISmtpEmailSenderConfiguration smtpConfiguration,
         IOptions<EmailOptions> options,
         ILogger<MailKitEmailSender>? logger = null)
     {
+        ArgumentNullException.ThrowIfNull(smtpConfiguration);
         ArgumentNullException.ThrowIfNull(options);
 
+        _smtpConfiguration = smtpConfiguration;
         _options = options.Value;
         _logger = logger;
     }
@@ -68,15 +75,17 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
             return;
         }
 
+        SmtpSettings settings = await LoadSettingsAsync().ConfigureAwait(false);
+
         // 建连与认证只做一次, 整批复用同一条连接
         using CancellationTokenSource? connectTimeout = CreateTimeoutSource(_options.Timeout, cancellationToken);
         CancellationToken connectToken = connectTimeout?.Token ?? cancellationToken;
 
-        using SmtpClient client = await BuildClientAsync(connectToken).ConfigureAwait(false);
+        using SmtpClient client = await BuildClientAsync(settings, connectToken).ConfigureAwait(false);
 
         foreach (EmailMessage message in list)
         {
-            MimeMessage mimeMessage = BuildMessage(message);
+            MimeMessage mimeMessage = BuildMessage(message, settings);
 
             using CancellationTokenSource? sendTimeout = CreateTimeoutSource(message.Timeout ?? _options.Timeout, cancellationToken);
             CancellationToken sendToken = sendTimeout?.Token ?? cancellationToken;
@@ -93,12 +102,12 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
             {
                 throw new EmailSendException(
                     "发送邮件超时(" + FormatTimeout(message.Timeout ?? _options.Timeout) + ")",
-                    _options.SmtpHost,
+                    settings.Host,
                     ToRecipientStrings(message));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                throw WrapException(ex, message);
+                throw WrapException(ex, message, settings.Host);
             }
         }
 
@@ -106,9 +115,9 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
     }
 
     /// <inheritdoc />
-    public Task<SmtpClient> BuildClientAsync()
+    public async Task<SmtpClient> BuildClientAsync()
     {
-        return BuildClientAsync(CancellationToken.None);
+        return await BuildClientAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -118,16 +127,24 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
     /// <returns>已连接的客户端, 调用方负责释放</returns>
     public async Task<SmtpClient> BuildClientAsync(CancellationToken cancellationToken)
     {
+        SmtpSettings settings = await LoadSettingsAsync().ConfigureAwait(false);
+        return await BuildClientAsync(settings, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<SmtpClient> BuildClientAsync(SmtpSettings settings, CancellationToken cancellationToken)
+    {
         SmtpClient client = new();
 
         try
         {
-            await client.ConnectAsync(_options.SmtpHost, _options.Port, ResolveSecureSocketOption(), cancellationToken).ConfigureAwait(false);
+            await client
+                .ConnectAsync(settings.Host, settings.Port, ResolveSecureSocketOption(settings.EnableSsl), cancellationToken)
+                .ConfigureAwait(false);
 
-            // 匿名中继(内网 SMTP、开发期的 MailHog 之类)不需要账号, 配了才认证
-            if (!string.IsNullOrEmpty(_options.UserName))
+            // 匿名中继(内网 SMTP、开发期的 MailHog 之类)用默认凭据, 不认证
+            if (!settings.UseDefaultCredentials)
             {
-                await client.AuthenticateAsync(_options.UserName, _options.Password, cancellationToken).ConfigureAwait(false);
+                await client.AuthenticateAsync(settings.UserName!, settings.Password!, cancellationToken).ConfigureAwait(false);
             }
 
             return client;
@@ -139,19 +156,37 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
         }
     }
 
-    private MimeMessage BuildMessage(EmailMessage message)
+    private async Task<SmtpSettings> LoadSettingsAsync()
+    {
+        bool useDefaultCredentials = await _smtpConfiguration.GetUseDefaultCredentialsAsync().ConfigureAwait(false);
+
+        string? userName = null;
+        string? password = null;
+        if (!useDefaultCredentials)
+        {
+            userName = await _smtpConfiguration.GetUserNameAsync().ConfigureAwait(false);
+            password = await _smtpConfiguration.GetPasswordAsync().ConfigureAwait(false);
+        }
+
+        return new SmtpSettings(
+            await _smtpConfiguration.GetHostAsync().ConfigureAwait(false),
+            await _smtpConfiguration.GetPortAsync().ConfigureAwait(false),
+            await _smtpConfiguration.GetEnableSslAsync().ConfigureAwait(false),
+            useDefaultCredentials,
+            userName,
+            password,
+            await _smtpConfiguration.GetDefaultFromAddressAsync().ConfigureAwait(false),
+            await _smtpConfiguration.GetDefaultFromDisplayNameAsync().ConfigureAwait(false));
+    }
+
+    private MimeMessage BuildMessage(EmailMessage message, SmtpSettings settings)
     {
         MimeMessage mimeMessage = new();
 
-        // 发件人: 优先信上指定的, 否则回退配置的默认发件人
-        string? fromAddress = message.From?.Address ?? (string.IsNullOrWhiteSpace(_options.DefaultFromAddress) ? null : _options.DefaultFromAddress);
-        if (fromAddress is not null)
-        {
-            string? displayName = message.From?.DisplayName
-                ?? (string.IsNullOrWhiteSpace(_options.DefaultFromDisplayName) ? null : _options.DefaultFromDisplayName);
-
-            mimeMessage.From.Add(new MailboxAddress(displayName ?? string.Empty, fromAddress));
-        }
+        // 发件人: 优先信上指定的, 否则用配置项里的默认发件人
+        string fromAddress = message.From?.Address ?? settings.DefaultFromAddress;
+        string? displayName = message.From?.DisplayName ?? settings.DefaultFromDisplayName;
+        mimeMessage.From.Add(new MailboxAddress(displayName ?? string.Empty, fromAddress));
 
         mimeMessage.To.AddRange(ToMailboxAddresses(message.To));
         if (message.Cc.Count > 0)
@@ -212,17 +247,16 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
             body.Attachments.Add(attachment.FileName, attachment.OpenRead());
         }
 
-        mimeMessage.Body = body.ToMessageBody();
         return mimeMessage;
     }
 
-    private SecureSocketOptions ResolveSecureSocketOption()
+    private static SecureSocketOptions ResolveSecureSocketOption(bool enableSsl)
     {
         // 465 端口直连即加密; 587/25 先明文开局再按服务器能力升级, 不支持 STARTTLS 就退回明文(内网中继常见)
-        return _options.UseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable;
+        return enableSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable;
     }
 
-    private EmailSendException WrapException(Exception exception, EmailMessage message)
+    private EmailSendException WrapException(Exception exception, EmailMessage message, string host)
     {
         string reason = exception switch
         {
@@ -239,7 +273,7 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
 
         _logger?.LogError(exception, "发送邮件失败: 收件人 {To}, 标题 {Subject}", JoinAddresses(message.To), message.Subject);
 
-        return new EmailSendException(reason, _options.SmtpHost, ToRecipientStrings(message), exception);
+        return new EmailSendException(reason, host, ToRecipientStrings(message), exception);
     }
 
     private static CancellationTokenSource? CreateTimeoutSource(TimeSpan? timeout, CancellationToken cancellationToken)
@@ -270,4 +304,17 @@ public sealed class MailKitEmailSender : IEmailSender, IMailKitEmailSender
     {
         return timeout is { } value ? value.TotalSeconds.ToString("0.###") + " 秒" : "不限时";
     }
+
+    /// <summary>
+    /// 一次发信所需的全部 SMTP 参数快照(整批共用, 避免每封信都读一遍配置项)
+    /// </summary>
+    private sealed record SmtpSettings(
+        string Host,
+        int Port,
+        bool EnableSsl,
+        bool UseDefaultCredentials,
+        string? UserName,
+        string? Password,
+        string DefaultFromAddress,
+        string DefaultFromDisplayName);
 }

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.VirtualFileSystem\Snow.VirtualFileSystem.csproj" />
   </ItemGroup>
 
 </Project>

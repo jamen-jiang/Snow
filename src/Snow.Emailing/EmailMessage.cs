@@ -7,7 +7,7 @@ namespace Snow.Emailing;
 public sealed class EmailMessage
 {
     /// <summary>
-    /// 发件人; 为空时用 <see cref="EmailOptions.DefaultFromAddress"/> 与 <see cref="EmailOptions.DefaultFromDisplayName"/>
+    /// 发件人; 为空时用配置项 <see cref="EmailSettingNames.DefaultFromAddress"/> 与 <see cref="EmailSettingNames.DefaultFromDisplayName"/>
     /// </summary>
     public EmailAddress? From { get; set; }
 

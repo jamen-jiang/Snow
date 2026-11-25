@@ -1,11 +1,9 @@
 using System.Reflection;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.Options;
+using Snow.AspNetCore.Filters;
 using Snow.AspNetCore.Mvc;
 using Xunit;
 
@@ -63,7 +61,7 @@ public class SnowFeatureSwitchTests
     [Fact]
     public void Provider_RemovesFrameworkFiltersOnMarkedController()
     {
-        ControllerActionDescriptor action = CreateControllerAction(typeof(MarkedController), typeof(SnowModelStateInvalidFilter));
+        ControllerActionDescriptor action = CreateControllerAction(typeof(MarkedController), typeof(FrameworkFilter));
 
         RunProvider(action);
 
@@ -76,7 +74,7 @@ public class SnowFeatureSwitchTests
     [Fact]
     public void Provider_KeepsFrameworkFiltersWhenSwitchOff()
     {
-        ControllerActionDescriptor action = CreateControllerAction(typeof(MiddlewareOnlyDisabledController), typeof(SnowModelStateInvalidFilter));
+        ControllerActionDescriptor action = CreateControllerAction(typeof(MiddlewareOnlyDisabledController), typeof(FrameworkFilter));
 
         RunProvider(action);
 
@@ -89,7 +87,7 @@ public class SnowFeatureSwitchTests
     [Fact]
     public void Provider_KeepsFiltersThatAreNotFrameworkFilters()
     {
-        ControllerActionDescriptor action = CreateControllerAction(typeof(MarkedController), typeof(HostFilter), typeof(SnowModelStateInvalidFilter));
+        ControllerActionDescriptor action = CreateControllerAction(typeof(MarkedController), typeof(HostFilter), typeof(FrameworkFilter));
 
         RunProvider(action);
 
@@ -103,25 +101,11 @@ public class SnowFeatureSwitchTests
     [Fact]
     public void Provider_IgnoresNonControllerActions()
     {
-        ActionDescriptor action = new() { FilterDescriptors = CreateFilterDescriptors(typeof(SnowModelStateInvalidFilter)) };
+        ActionDescriptor action = new() { FilterDescriptors = CreateFilterDescriptors(typeof(FrameworkFilter)) };
 
         RunProvider(action);
 
         Assert.Single(action.FilterDescriptors);
-    }
-
-    /// <summary>
-    /// 模型绑定校验过滤器本身不再判断: 描述符里还在就一定拦(摘除发生在更早的描述符定型阶段)
-    /// </summary>
-    [Fact]
-    public void ModelStateInvalidFilter_BlocksWheneverItIsStillInThePipeline()
-    {
-        ActionExecutingContext context = CreateActionExecutingContext(typeof(MarkedController));
-        context.ModelState.AddModelError("Name", "必填");
-
-        new SnowModelStateInvalidFilter(Microsoft.Extensions.Options.Options.Create(new SnowAspNetCoreMvcOptions())).OnActionExecuting(context);
-
-        Assert.NotNull(context.Result);
     }
 
     private static void RunProvider(ActionDescriptor action)
@@ -148,13 +132,6 @@ public class SnowFeatureSwitchTests
         return [.. filterTypes.Select(filterType => new FilterDescriptor(new ServiceFilterAttribute(filterType), 0))];
     }
 
-    private static ActionExecutingContext CreateActionExecutingContext(Type controllerType)
-    {
-        ActionContext actionContext = new(new DefaultHttpContext(), new RouteData(), CreateControllerAction(controllerType));
-
-        return new ActionExecutingContext(actionContext, [], new Dictionary<string, object?>(), controller: null!);
-    }
-
     [DisableSnowFeatures]
     private sealed class MarkedController
     {
@@ -176,6 +153,16 @@ public class SnowFeatureSwitchTests
     /// 宿主自己的过滤器: 不实现 ISnowFilter, 摘除时应当留着
     /// </summary>
     private sealed class HostFilter : IActionFilter
+    {
+        public void OnActionExecuting(ActionExecutingContext context) { }
+
+        public void OnActionExecuted(ActionExecutedContext context) { }
+    }
+
+    /// <summary>
+    /// 框架过滤器: 实现 ISnowFilter, 用于验证特性开关摘除
+    /// </summary>
+    private sealed class FrameworkFilter : IActionFilter, ISnowFilter
     {
         public void OnActionExecuting(ActionExecutingContext context) { }
 

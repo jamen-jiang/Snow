@@ -1,0 +1,25 @@
+namespace Snow.DistributedLocking;
+
+/// <summary>
+/// 分布式锁配置(对应 ABP 的 <c>AbpDistributedLockOptions</c>): 只有 key 前缀一项。
+/// <para>由使用方在模块里 <c>context.Services.Configure&lt;SnowDistributedLockOptions&gt;(o => o.KeyPrefix = "app:")</c> 设置,
+/// 与 ABP 一致, 不绑配置节。</para>
+/// <para>租期、续期节奏、抢锁重试间隔都是实现内部的常量(<see cref="DistributedLockWatchdog.LeaseTime"/> 等),
+/// 不开放配置; 需要「到点自动释放」就在这一次抢锁时传 <c>leaseTime</c>。</para>
+/// <para>前缀怎么叠加成 key 不在这里做, 由 <see cref="IDistributedLockKeyNormalizer"/> 负责(与 ABP 同构)。</para>
+/// </summary>
+public class SnowDistributedLockOptions
+{
+    /// <summary>
+    /// 构造器: 前缀为空
+    /// </summary>
+    public SnowDistributedLockOptions()
+    {
+        KeyPrefix = "";
+    }
+
+    /// <summary>
+    /// 锁 key 的统一前缀, 默认空字符串; 用于给不同应用/租户的锁隔离命名空间
+    /// </summary>
+    public string KeyPrefix { get; set; }
+}

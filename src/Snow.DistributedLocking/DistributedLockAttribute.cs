@@ -12,7 +12,7 @@ namespace Snow.DistributedLocking;
 /// <para>续期(看门狗)由锁实现负责: 不设 <see cref="LeaseSeconds"/> 时, 拿到锁后就按
 /// <see cref="DistributedLockWatchdog.LeaseTime"/> 的三分之一节奏自动续期, 长任务不会因为超过租期而中途失锁;
 /// 设了 <see cref="LeaseSeconds"/> 则固定租期不续期(对齐 Redisson 的 <c>lock(leaseTime, unit)</c>)。
-/// 锁真的丢了句柄的 <see cref="IDistributedLockHandle.HandleLostToken"/> 会被取消, 开了 <see cref="ThrowOnLost"/> 则抛异常。</para>
+/// 锁真的丢了句柄的 <see cref="ISnowDistributedLockHandle.HandleLostToken"/> 会被取消, 开了 <see cref="ThrowOnLost"/> 则抛异常。</para>
 /// </summary>
 /// <example>
 /// <code>
@@ -101,12 +101,12 @@ public sealed class DistributedLockAttribute : SnowInterceptorAttribute
             : TimeSpan.Zero;
         TimeSpan? leaseTime = LeaseSeconds > 0 ? TimeSpan.FromSeconds(LeaseSeconds) : null;
 
-        // 前缀统一由 DistributedLockOptions.ResolveKey 叠加(本地锁与 Redis 锁都走它), 这里只拼 Prefix 与 Key
-        IDistributedLock distributedLock =
-            context.ServiceProvider.GetRequiredService<IDistributedLock>();
+        // 配置前缀统一由 IDistributedLockKeyNormalizer 叠加(本地锁与 Redis 锁都走它), 这里只拼注解自己的 Prefix 与 Key
+        ISnowDistributedLock distributedLock =
+            context.ServiceProvider.GetRequiredService<ISnowDistributedLock>();
         // cancellationToken 由适配器从方法签名里取出后交给整条链, 所以这里的等待天然可以被叫停:
         // 无限等待没有它就是一个永远退不出来的阻塞
-        IDistributedLockHandle? handle = await distributedLock
+        ISnowDistributedLockHandle? handle = await distributedLock
             .TryAcquireAsync(key, timeout, leaseTime, cancellationToken)
             .ConfigureAwait(false);
 

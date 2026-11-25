@@ -95,7 +95,7 @@ public sealed class BackgroundJobWorker : BackgroundService
     /// <returns>下一轮之前的等待时长</returns>
     private async Task<TimeSpan> RunOnceAsync(CancellationToken cancellationToken)
     {
-        IDistributedLock? distributedLock = _options.UseDistributedLock ? _serviceProvider.GetService<IDistributedLock>() : null;
+        ISnowDistributedLock? distributedLock = _options.UseDistributedLock ? _serviceProvider.GetService<ISnowDistributedLock>() : null;
 
         if (distributedLock is null)
         {
@@ -104,7 +104,7 @@ public sealed class BackgroundJobWorker : BackgroundService
             return _options.PollInterval;
         }
 
-        await using IDistributedLockHandle? handle = await distributedLock
+        await using ISnowDistributedLockHandle? handle = await distributedLock
             .TryAcquireAsync(_options.DistributedLockName, TimeSpan.Zero, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 

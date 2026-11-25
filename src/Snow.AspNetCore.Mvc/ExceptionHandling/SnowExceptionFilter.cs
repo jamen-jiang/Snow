@@ -32,7 +32,7 @@ public class SnowExceptionFilter : IAsyncExceptionFilter, ISnowFilter
     {
         if (!ShouldHandleException(context))
         {
-            LogException(context, out _);
+            LogException(context);
             return;
         }
 
@@ -109,11 +109,32 @@ public class SnowExceptionFilter : IAsyncExceptionFilter, ISnowFilter
     }
 
     /// <summary>
+    /// 记录原始异常日志(不转换成远端错误信息)。
+    /// </summary>
+    /// <param name="context">异常上下文</param>
+    protected virtual void LogException(ExceptionContext context)
+    {
+        var exceptionHandlingOptions = context.HttpContext.RequestServices
+            .GetRequiredService<IOptions<SnowExceptionHandlingOptions>>()
+            .Value;
+
+        if (!exceptionHandlingOptions.ShouldLogException(context.Exception))
+        {
+            return;
+        }
+
+        var logger = context.HttpContext.RequestServices.GetService<ILogger<SnowExceptionFilter>>()
+            ?? NullLogger<SnowExceptionFilter>.Instance;
+        var logLevel = context.Exception.GetLogLevel();
+        logger.LogException(context.Exception, logLevel);
+    }
+
+    /// <summary>
     /// 转换异常并记录日志
     /// </summary>
     /// <param name="context">异常上下文</param>
     /// <param name="remoteServiceErrorInfo">转换出的远端错误信息</param>
-    protected virtual void LogException(ExceptionContext context, out SnowRemoteServiceErrorInfo remoteServiceErrorInfo)
+    protected virtual void LogException(ExceptionContext context, out RemoteServiceErrorInfo remoteServiceErrorInfo)
     {
         var exceptionHandlingOptions = context.HttpContext.RequestServices
             .GetRequiredService<IOptions<SnowExceptionHandlingOptions>>()
@@ -128,19 +149,21 @@ public class SnowExceptionFilter : IAsyncExceptionFilter, ISnowFilter
             options.SendExceptionDataToClientTypes = exceptionHandlingOptions.SendExceptionDataToClientTypes;
         });
 
+        if (!exceptionHandlingOptions.ShouldLogException(context.Exception))
+        {
+            return;
+        }
+
         var sb = new StringBuilder();
-        sb.AppendLine($"---------- {nameof(SnowRemoteServiceErrorInfo)} ----------");
+        sb.AppendLine($"---------- {nameof(RemoteServiceErrorInfo)} ----------");
         sb.AppendLine(context.HttpContext.RequestServices
             .GetRequiredService<ISnowJsonSerializer>()
             .Serialize(remoteServiceErrorInfo, indented: true));
 
-        if (exceptionHandlingOptions.ShouldLogException(context.Exception))
-        {
-            var logger = context.HttpContext.RequestServices.GetService<ILogger<SnowExceptionFilter>>()
-                ?? NullLogger<SnowExceptionFilter>.Instance;
-            var logLevel = context.Exception.GetLogLevel();
-            logger.LogWithLevel(logLevel, sb.ToString());
-            logger.LogException(context.Exception, logLevel);
-        }
+        var logger = context.HttpContext.RequestServices.GetService<ILogger<SnowExceptionFilter>>()
+            ?? NullLogger<SnowExceptionFilter>.Instance;
+        var logLevel = context.Exception.GetLogLevel();
+        logger.LogWithLevel(logLevel, sb.ToString());
+        logger.LogException(context.Exception, logLevel);
     }
 }

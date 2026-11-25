@@ -1,0 +1,13 @@
+{
+  "culture": "en",
+  "texts": {
+    "Unauthorized": "Unauthorized",
+    "SessionExpired": "Your session has expired. Please login again to continue in the application.",
+    "ValidationErrorMessage": "Your request is not valid!",
+    "ValidationNarrativeErrorMessageTitle": "The following errors were detected during validation.",
+    "InternalServerErrorMessage": "An internal error occurred during your request!",
+    "SnowDbConcurrencyErrorMessage": "The data you have submitted has already been changed by another user. Discard your changes and try again.",
+    "EntityNotFoundErrorMessage": "There is no entity {0} with id = {1}!",
+    "EntityNotFoundErrorMessageWithoutId": "There is no entity {0}!"
+  }
+}

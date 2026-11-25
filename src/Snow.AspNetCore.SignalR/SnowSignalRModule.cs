@@ -2,7 +2,6 @@ using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.DependencyInjection;
 using Snow.Modularity;
@@ -13,6 +12,8 @@ namespace Snow.AspNetCore.SignalR;
 /// SignalR 模块: 登记实时通信服务, 并在约定扫描时收集 Hub
 /// <para>依赖 <see cref="SnowAspNetCoreModule"/>: Hub 端点挂在 ASP.NET Core 上。</para>
 /// <para>Hub 端点由模块声明, 框架在全部模块初始化完成之后统一映射, 宿主一行不用写。</para>
+/// <para>选项不读配置节: 由宿主在 <c>AddApplication</c> 之前调
+/// <c>AddSnowSignalR(options =&gt; ...)</c> 调整, 模块与扩展方法共用同一个选项实例。</para>
 /// </summary>
 [DependsOn(typeof(SnowAspNetCoreModule))]
 public sealed class SnowSignalRModule : SnowModule
@@ -23,12 +24,7 @@ public sealed class SnowSignalRModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        SnowSignalROptions options = new();
-        IConfigurationSection section = context.Services.GetConfiguration().GetSection("SignalR");
-        if (section.Exists())
-        {
-            section.Bind(options);
-        }
+        SnowSignalROptions options = SnowSignalRServiceCollectionExtensions.GetOrCreateOptions(context.Services);
 
         SnowHubRegistry registry = SnowSignalRServiceCollectionExtensions.GetOrCreateRegistry(context.Services);
 
@@ -43,7 +39,6 @@ public sealed class SnowSignalRModule : SnowModule
             }
         }
 
-        context.Services.AddSingleton(options);
         context.Services.Configure<SnowSignalROptions>(current =>
         {
             current.Enabled = options.Enabled;

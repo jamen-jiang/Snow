@@ -11,5 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\Snow.EventBus\Snow.EventBus.csproj" />
+    <ProjectReference Include="..\Snow.ExceptionHandling\Snow.ExceptionHandling.csproj" />
   </ItemGroup>
 </Project>

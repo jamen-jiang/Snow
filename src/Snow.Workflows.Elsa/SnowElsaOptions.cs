@@ -1,49 +1,27 @@
 using Elsa.Features.Services;
-using Elsa.Workflows.Management.Features;
-using Elsa.Workflows.Runtime.Features;
 
 namespace Snow.Workflows.Elsa;
 
 /// <summary>
-/// Elsa 使用的数据库提供程序。
-/// </summary>
-public enum SnowElsaDatabaseProvider
-{
-    /// <summary>
-    /// 不配持久化: 定义与实例都在内存里, 进程重启即丢。适合试跑与单元测试。
-    /// </summary>
-    None = 0,
-
-    /// <summary>
-    /// SQLite(Snow.Workflows.Elsa 已内置该提供程序)。
-    /// </summary>
-    Sqlite = 1,
-}
-
-/// <summary>
-/// Elsa 接入选项。既可通过配置节 Workflows:Elsa 绑定标量, 也可在 AddApplication 之前
-/// 用 services.AddSnowElsa(o =&gt; ...) 追加代码级设置(工作流类型、数据库回调等)。
+/// Elsa 接入选项。
+/// <para>模块不读配置节(与 ABP 一致): 宿主在启动模块的 <c>PreConfigureServices</c> 里
+/// <c>Configure&lt;SnowElsaOptions&gt;(o =&gt; ...)</c> 给出; 本节示例宿主另按 <c>Workflows:Elsa</c>
+/// 节绑一次标量, 那是宿主的自由, 不是模块的要求。</para>
+/// <para>够不够用就一把梭: 换数据库提供程序、挂身份、改 BaseUrl 这类细调都走 <see cref="ConfigureElsa"/>,
+/// 它在模块内置配置之后执行, 相当于追加一层回调。</para>
 /// </summary>
 public sealed class SnowElsaOptions
 {
     /// <summary>
-    /// 数据库连接串。非空且 Database 为 Sqlite 时启用持久化; 为空则纯内存。
+    /// SQLite 连接串。非空即启用持久化(定义与实例落库); 留空则纯内存, 进程重启即丢。
+    /// <para>包内只带 SQLite 提供程序; 换 SQL Server / PostgreSQL 用 <see cref="ConfigureElsa"/>
+    /// 里的 <c>UseWorkflowManagement</c> / <c>UseWorkflowRuntime</c> 换掉。</para>
     /// </summary>
     public string? ConnectionString { get; set; }
 
     /// <summary>
-    /// 使用的数据库提供程序, 默认 None。
-    /// </summary>
-    public SnowElsaDatabaseProvider Database { get; set; } = SnowElsaDatabaseProvider.None;
-
-    /// <summary>
-    /// 启动时是否自动迁移数据库结构。Elsa 的迁移由宿主启动阶段的服务执行,
-    /// 因此只有在真正的 ASP.NET 宿主里才生效(单纯构建 ServiceProvider 不会触发)。
-    /// </summary>
-    public bool RunMigrations { get; set; } = true;
-
-    /// <summary>
-    /// 是否挂载 Elsa 的 HTTP 端点(工作流可被 URL 触发)。
+    /// 是否挂载 Elsa 的 HTTP 端点(工作流可被 URL 触发)。关掉时管理 API 仍在, 宿主也不用调
+    /// <c>app.UseSnowWorkflows()</c>。
     /// </summary>
     public bool EnableHttp { get; set; } = true;
 
@@ -53,27 +31,9 @@ public sealed class SnowElsaOptions
     public string HttpBasePath { get; set; } = "/workflows";
 
     /// <summary>
-    /// HTTP 端点对外基地址(留空则由请求推断)。
-    /// </summary>
-    public Uri? HttpBaseUrl { get; set; }
-
-    /// <summary>
     /// 是否挂载 Elsa 的管理 API(/elsa/api)。
     /// </summary>
     public bool EnableApi { get; set; } = true;
-
-    /// <summary>
-    /// 是否挂上运行工作流所需的默认特性(表达式求值、JavaScript 引擎、内存缓存,
-    /// 以及管理与运行时的缓存)。默认开启; 关掉后这些特性须由 <see cref="ConfigureElsa"/> 自行补齐,
-    /// 否则启动校验服务时会缺件。
-    /// </summary>
-    public bool UseDefaultFeatures { get; set; } = true;
-
-    /// <summary>
-    /// 默认特性中是否包含 JavaScript 表达式引擎。只用 C# 表达式时可关掉省一个依赖。
-    /// 仅在 <see cref="UseDefaultFeatures"/> 为 true 时有效。
-    /// </summary>
-    public bool UseJavaScript { get; set; } = true;
 
     /// <summary>
     /// 要注册成工作流定义的代码类型集合。
@@ -81,18 +41,9 @@ public sealed class SnowElsaOptions
     public IList<Type> WorkflowTypes { get; } = new List<Type>();
 
     /// <summary>
-    /// 细调管理端的持久化特性(比如换成 SQL Server 提供程序)。在对 Elsa 的
-    /// UseWorkflowManagement 回调里、内置配置之后调用。
-    /// </summary>
-    public Action<WorkflowManagementFeature>? ConfigureWorkflowManagement { get; set; }
-
-    /// <summary>
-    /// 细调运行时的持久化特性。
-    /// </summary>
-    public Action<WorkflowRuntimeFeature>? ConfigureWorkflowRuntime { get; set; }
-
-    /// <summary>
-    /// 最后一道口子: 直接拿到 Elsa 的模块对象, 想加什么特性都行。
+    /// 最后一道口子: 直接拿到 Elsa 的模块对象, 想加什么特性都行
+    /// <para>它在模块内置的表达式 / 缓存 / 持久化 / HTTP / 管理 API 配置之后执行, 所以能改这些内置项;
+    /// 又因为 Elsa 的特性配置是追加式回调, 同一特性在这里再调一次相当于"内置之后补一刀"。</para>
     /// </summary>
     public Action<IModule>? ConfigureElsa { get; set; }
 }

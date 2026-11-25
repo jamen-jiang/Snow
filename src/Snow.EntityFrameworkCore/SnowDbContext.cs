@@ -11,6 +11,7 @@ using Snow.Domain.Entities;
 using Snow.Domain.Events;
 using Snow.EventBus;
 using Snow.Security.Users;
+using Snow.Uow;
 
 namespace Snow.EntityFrameworkCore;
 
@@ -19,7 +20,8 @@ namespace Snow.EntityFrameworkCore;
 /// <para>1) 保存前自动填充审计字段(创建人/创建时间、修改人/修改时间、删除人/删除时间);</para>
 /// <para>2) 删除带软删除契约的实体时自动转为更新并写入删除审计;</para>
 /// <para>3) 带软删除契约的实体自动挂全局查询过滤, 过滤掉已删除数据;</para>
-/// <para>4) 保存成功后派发聚合根上挂的领域事件;</para>
+/// <para>4) 保存前采集聚合根上挂的领域事件, 有工作单元时交给工作单元在提交事务之前统一派发,
+///    没有工作单元时保存成功后立即派发;</para>
 /// <para>表映射与 DbSet 由具体上下文自己声明。</para>
 /// </summary>
 public abstract class SnowDbContext : DbContext, ISnowDbContext
@@ -66,10 +68,13 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
     {
         ApplyBeforeSaveConventions();
 
+        // 事件在写库之前采集并清空(与 ABP 的 AbpDbContext.CreateEventReport 一致)
+        List<UnitOfWorkEventRecord> domainEvents = CollectDomainEvents();
+
         int result = base.SaveChanges(acceptAllChangesOnSuccess);
 
-        // 领域事件在保存成功后派发; 同步入口只能阻塞等待异步处理器
-        PublishDomainEventsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        // 同步入口只能阻塞等待异步处理器
+        DispatchDomainEventsAsync(domainEvents, CancellationToken.None).GetAwaiter().GetResult();
 
         return result;
     }
@@ -79,9 +84,11 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
     {
         ApplyBeforeSaveConventions();
 
+        List<UnitOfWorkEventRecord> domainEvents = CollectDomainEvents();
+
         int result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
 
-        await PublishDomainEventsAsync(cancellationToken);
+        await DispatchDomainEventsAsync(domainEvents, cancellationToken);
 
         return result;
     }
@@ -148,23 +155,23 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
         {
             if (creationAudited.CreationTime == default)
             {
-                creationAudited.CreationTime = now;
+                SetAuditValue(entry, nameof(ICreationAudited.CreationTime), now);
             }
 
             if (userId.HasValue)
             {
-                creationAudited.CreatorId = userId.Value;
+                SetAuditValue(entry, nameof(ICreationAudited.CreatorId), userId.Value);
             }
 
             if (!string.IsNullOrEmpty(userName))
             {
-                creationAudited.Creator = userName;
+                SetAuditValue(entry, nameof(ICreationAudited.Creator), userName);
             }
         }
 
-        if (entry.Entity is ISoftDelete softDelete)
+        if (entry.Entity is ISoftDelete)
         {
-            softDelete.IsDeleted = false;
+            SetAuditValue(entry, nameof(ISoftDelete.IsDeleted), false);
         }
     }
 
@@ -182,21 +189,21 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
             return;
         }
 
-        modificationAudited.LastModificationTime = now;
+        SetAuditValue(entry, nameof(IModificationAudited.LastModificationTime), now);
 
         if (userId.HasValue)
         {
-            modificationAudited.LastModifierId = userId;
+            SetAuditValue(entry, nameof(IModificationAudited.LastModifierId), userId);
         }
 
         if (!string.IsNullOrEmpty(userName))
         {
-            modificationAudited.LastModifier = userName;
+            SetAuditValue(entry, nameof(IModificationAudited.LastModifier), userName);
         }
     }
 
     /// <summary>
-    /// 删除实体: 带软删除契约的把删除改成更新并写删除审计, 其余保持物理删除
+    /// 删除实体: 带软删除契约的把删除改成更新并置删除标记, 其余保持物理删除
     /// </summary>
     /// <param name="entry">实体条目</param>
     /// <param name="userId">当前用户Id</param>
@@ -204,50 +211,49 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
     /// <param name="now">当前时间</param>
     protected virtual void ApplyDeletionAudit(EntityEntry entry, long? userId, string userName, DateTime now)
     {
-        if (entry.Entity is not IDeletionAudited deletionAudited)
+        if (entry.Entity is not ISoftDelete)
         {
             return;
         }
 
         entry.State = EntityState.Modified;
 
-        deletionAudited.IsDeleted = true;
-        deletionAudited.DeletionTime = now;
+        SetAuditValue(entry, nameof(ISoftDelete.IsDeleted), true);
 
-        if (userId.HasValue)
+        if (entry.Entity is IModificationAudited)
         {
-            deletionAudited.DeleterId = userId;
-        }
-
-        if (!string.IsNullOrEmpty(userName))
-        {
-            deletionAudited.Deleter = userName;
-        }
-
-        if (entry.Entity is IModificationAudited modificationAudited)
-        {
-            modificationAudited.LastModificationTime = now;
+            SetAuditValue(entry, nameof(IModificationAudited.LastModificationTime), now);
 
             if (userId.HasValue)
             {
-                modificationAudited.LastModifierId = userId;
+                SetAuditValue(entry, nameof(IModificationAudited.LastModifierId), userId);
             }
 
             if (!string.IsNullOrEmpty(userName))
             {
-                modificationAudited.LastModifier = userName;
+                SetAuditValue(entry, nameof(IModificationAudited.LastModifier), userName);
             }
         }
     }
 
     /// <summary>
-    /// 保存成功后派发聚合根上挂的领域事件
+    /// 写审计字段: 审计契约只暴露 getter, 实际值经 EF 条目写回实体属性(走 setter 或 backing field)
     /// </summary>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>异步任务</returns>
-    protected virtual async Task PublishDomainEventsAsync(CancellationToken cancellationToken = default)
+    /// <param name="entry">实体条目</param>
+    /// <param name="propertyName">属性名</param>
+    /// <param name="value">要写入的值</param>
+    private static void SetAuditValue(EntityEntry entry, string propertyName, object? value)
     {
-        List<IDomainEvent> events = [];
+        entry.Property(propertyName).CurrentValue = value;
+    }
+
+    /// <summary>
+    /// 采集聚合根上挂的领域事件并清空(写库之前调用)
+    /// </summary>
+    /// <returns>按采集顺序排队的事件记录</returns>
+    protected virtual List<UnitOfWorkEventRecord> CollectDomainEvents()
+    {
+        List<UnitOfWorkEventRecord> events = [];
 
         foreach (EntityEntry entry in ChangeTracker.Entries())
         {
@@ -256,12 +262,48 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
                 continue;
             }
 
-            events.AddRange(aggregateRoot.DomainEvents);
+            foreach (IDomainEvent domainEvent in aggregateRoot.DomainEvents)
+            {
+                events.Add(new UnitOfWorkEventRecord(domainEvent.GetType(), domainEvent, EventOrderGenerator.GetNext()));
+            }
+
             aggregateRoot.ClearDomainEvents();
         }
 
-        if (events.Count == 0)
+        return events;
+    }
+
+    /// <summary>
+    /// 派发领域事件: 处在工作单元里就登记进队列, 由工作单元在提交事务之前统一派发;
+    /// 没有工作单元时立即派发
+    /// </summary>
+    /// <param name="domainEvents">已采集的事件记录</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    protected virtual async Task DispatchDomainEventsAsync(IReadOnlyList<UnitOfWorkEventRecord> domainEvents,
+        CancellationToken cancellationToken)
+    {
+        if (domainEvents.Count == 0)
         {
+            return;
+        }
+
+        IUnitOfWork? unitOfWork = ServiceProvider.GetService<IUnitOfWorkManager>()?.Current;
+        if (unitOfWork is not null)
+        {
+            foreach (UnitOfWorkEventRecord domainEvent in domainEvents)
+            {
+                unitOfWork.AddOrReplaceLocalEvent(domainEvent);
+            }
+
+            return;
+        }
+
+        IUnitOfWorkEventPublisher? publisher = ServiceProvider.GetService<IUnitOfWorkEventPublisher>();
+        if (publisher is not null)
+        {
+            await publisher.PublishLocalEventsAsync(domainEvents, cancellationToken);
+
             return;
         }
 
@@ -271,9 +313,9 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
             return;
         }
 
-        foreach (IDomainEvent @event in events)
+        foreach (UnitOfWorkEventRecord domainEvent in domainEvents)
         {
-            await eventBus.PublishAsync(@event, cancellationToken);
+            await eventBus.PublishAsync(domainEvent.EventType, domainEvent.EventData, cancellationToken);
         }
     }
 

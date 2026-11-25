@@ -14,9 +14,4 @@ public static class SnowAspNetCoreConsts
     /// 集成服务 API 路由默认前缀
     /// </summary>
     public const string DefaultIntegrationServiceApiPrefix = "integration-api";
-
-    /// <summary>
-    /// 脚本 nonce 的键名
-    /// </summary>
-    public const string ScriptNonceKey = "ScriptNonce";
 }

@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Snow.Exceptions;
+using Snow.Http;
 using Snow.Logging;
-using Snow.Validation;
 
 namespace Snow.AspNetCore.ExceptionHandling;
 
@@ -34,10 +34,15 @@ public sealed class SnowExceptionHandlingMiddleware
     /// </summary>
     /// <param name="context">HTTP 上下文</param>
     /// <param name="converter">异常转换器</param>
-    public async Task InvokeAsync(HttpContext context, IExceptionToErrorInfoConverter converter)
+    /// <param name="statusCodeFinder">状态码解析器, 与 MVC 的异常过滤器共用同一口径</param>
+    public async Task InvokeAsync(
+        HttpContext context,
+        IExceptionToErrorInfoConverter converter,
+        IHttpExceptionStatusCodeFinder statusCodeFinder)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(converter);
+        ArgumentNullException.ThrowIfNull(statusCodeFinder);
 
         try
         {
@@ -51,11 +56,11 @@ public sealed class SnowExceptionHandlingMiddleware
                 throw;
             }
 
-            SnowRemoteServiceErrorInfo error = converter.Convert(exception);
+            RemoteServiceErrorInfo error = converter.Convert(exception);
             TryLog(exception, error, "请求处理异常: {Code} {Message}");
 
             context.Response.Clear();
-            context.Response.StatusCode = GetStatusCode(exception);
+            context.Response.StatusCode = (int)statusCodeFinder.GetStatusCode(context, exception);
             context.Response.ContentType = "application/json; charset=utf-8";
             await context.Response.WriteAsJsonAsync(new SnowRemoteServiceErrorResponse(error), context.RequestAborted);
         }
@@ -67,7 +72,7 @@ public sealed class SnowExceptionHandlingMiddleware
     /// <param name="exception">异常</param>
     /// <param name="error">错误信息, 可为 null</param>
     /// <param name="template">日志模板</param>
-    private void TryLog(Exception exception, SnowRemoteServiceErrorInfo? error, string template)
+    private void TryLog(Exception exception, RemoteServiceErrorInfo? error, string template)
     {
         try
         {
@@ -92,20 +97,5 @@ public sealed class SnowExceptionHandlingMiddleware
     {
         IHasLogLevel hasLogLevel => hasLogLevel.LogLevel,
         _ => LogLevel.Error,
-    };
-
-    private static int GetStatusCode(Exception exception) => exception switch
-    {
-        // 异常自带状态码时以它为准(如 EntityNotFoundException 声明 404), 其余类型再按种类兜底
-        IHasHttpStatusCode hasStatusCode => hasStatusCode.HttpStatusCode,
-        SnowValidationException => StatusCodes.Status400BadRequest,
-        BusinessException => StatusCodes.Status400BadRequest,
-        // 只实现 IBusinessException 标记接口的第三方业务异常: 同样 400
-        IBusinessException => StatusCodes.Status400BadRequest,
-        UnauthorizedAccessException => StatusCodes.Status403Forbidden,
-        KeyNotFoundException => StatusCodes.Status404NotFound,
-        NotImplementedException => StatusCodes.Status501NotImplemented,
-        ArgumentException or InvalidOperationException => StatusCodes.Status400BadRequest,
-        _ => StatusCodes.Status500InternalServerError,
     };
 }

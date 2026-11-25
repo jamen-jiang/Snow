@@ -1,27 +1,37 @@
 namespace Snow.Localization;
 
 /// <summary>
-/// 本地化选项: 资源表与默认文化
+/// 本地化选项(对应 ABP 的 <c>AbpLocalizationOptions</c>)
 /// </summary>
-public sealed class SnowLocalizationOptions
+public class SnowLocalizationOptions
 {
-    /// <summary>
-    /// 找不到对应资源时回退到的资源名
-    /// </summary>
-    public string DefaultResourceName { get; set; } = "Default";
-
-    /// <summary>
-    /// 全局默认文化; 为空时用进程当前 UI 文化
-    /// </summary>
-    public string? DefaultCulture { get; set; }
-
-    /// <summary>
-    /// 声明的支持文化(仅作文档用途, 请求文化解析交给宿主)
-    /// </summary>
-    public List<string> SupportedCultures { get; } = new();
-
     /// <summary>
     /// 资源名 → 资源; 资源名大小写不敏感
     /// </summary>
-    public Dictionary<string, LocalizationResource> Resources { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public LocalizationResourceDictionary Resources { get; }
+
+    /// <summary>
+    /// 默认资源类型; 为空表示没有默认资源
+    /// </summary>
+    public Type? DefaultResourceType { get; set; }
+
+    /// <summary>
+    /// 找不到当前文化时是否回退到其父(基础)文化
+    /// </summary>
+    public bool TryToGetFromBaseCulture { get; set; }
+
+    /// <summary>
+    /// 找不到当前文化时是否回退到资源的默认文化
+    /// </summary>
+    public bool TryToGetFromDefaultCulture { get; set; }
+
+    /// <summary>
+    /// 构造器
+    /// </summary>
+    public SnowLocalizationOptions()
+    {
+        Resources = new LocalizationResourceDictionary();
+        TryToGetFromBaseCulture = true;
+        TryToGetFromDefaultCulture = true;
+    }
 }

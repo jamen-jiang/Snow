@@ -1,6 +1,6 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Snow.Modularity;
 using StackExchange.Redis;
 
@@ -8,13 +8,13 @@ namespace Snow.DistributedLocking;
 
 /// <summary>
 /// 分布式锁的 Redis 模块: 依赖 <see cref="SnowDistributedLockModule"/>,
-/// 注册 Redis 连接并把默认锁顶替成 <see cref="RedisDistributedLock"/>。
-/// <para>连接串取配置 <c>Redis:Configuration</c>(与缓存、会话共用同一节), 缺省 <c>127.0.0.1:6379</c>;
-/// 宿主已注册 <see cref="IConnectionMultiplexer"/> 时直接复用, 不会重复建连。</para>
+/// 注册 Redis 连接并把默认锁顶替成 <see cref="RedisSnowDistributedLock"/>。
+/// <para>连接串来自 <see cref="SnowDistributedLockRedisOptions"/>(绑定配置节 <c>Redis</c>, 与缓存、会话共用),
+/// 缺省 <c>127.0.0.1:6379</c>; 宿主已注册 <see cref="IConnectionMultiplexer"/> 时直接复用, 不会重复建连。</para>
 /// <para>是否启用由模块图决定: 启动模块写了 <c>[DependsOn(typeof(SnowDistributedLockRedisModule))]</c> 就启用,
-/// 不写则本模块的 <see cref="ConfigureServices"/> 根本不会执行, 锁保持进程内的 <c>LocalDistributedLock</c>。没有配置开关。</para>
+/// 不写则本模块的 <see cref="ConfigureServices"/> 根本不会执行, 锁保持进程内的 <c>LocalSnowDistributedLock</c>。没有配置开关。</para>
 /// <para>租期与续期节奏是常量(<see cref="DistributedLockWatchdog.LeaseTime"/>),
-/// <see cref="DistributedLockOptions"/> 里只有 key 前缀一项。</para>
+/// <see cref="SnowDistributedLockOptions"/> 里只有 key 前缀一项。</para>
 /// </summary>
 [DependsOn(typeof(SnowDistributedLockModule))]
 public sealed class SnowDistributedLockRedisModule : SnowModule
@@ -24,12 +24,19 @@ public sealed class SnowDistributedLockRedisModule : SnowModule
     {
         base.ConfigureServices(context);
 
+        context.Services.Configure<SnowDistributedLockRedisOptions>(context.Configuration.GetSection("Redis"));
+
         context.Services.TryAddSingleton<IConnectionMultiplexer>(provider =>
         {
-            IConfiguration configuration = provider.GetRequiredService<IConfiguration>();
-            string configurationString = configuration["Redis:Configuration"] ?? "127.0.0.1:6379";
+            SnowDistributedLockRedisOptions options = provider
+                .GetRequiredService<IOptions<SnowDistributedLockRedisOptions>>()
+                .Value;
 
-            return ConnectionMultiplexer.Connect(EnsureAbortConnectFalse(configurationString));
+            return ConnectionMultiplexer.Connect(
+                EnsureAbortConnectFalse(
+                    options.Configuration.IsNullOrEmpty() ? "127.0.0.1:6379" : options.Configuration
+                )
+            );
         });
     }
 

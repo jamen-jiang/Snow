@@ -1,0 +1,13 @@
+{
+  "culture": "zh-Hant",
+  "texts": {
+    "Unauthorized": "未授權",
+    "SessionExpired": "您的會話已過期。請重新登錄以繼續應用程序。",
+    "ValidationErrorMessage": "你的請求無效!",
+    "ValidationNarrativeErrorMessageTitle": "驗證時發現以下錯誤.",
+    "InternalServerErrorMessage": "對不起,在處理你的請求期間,產生了一個伺服器內部錯誤!",
+    "SnowDbConcurrencyErrorMessage": "你提交的數據已經被其他用戶/客戶端修改.請放棄你所做的修改並再次嘗試.",
+    "EntityNotFoundErrorMessage": "實體 {0} 不存在,id = {1}!",
+    "EntityNotFoundErrorMessageWithoutId": "實體 {0} 不存在!"
+  }
+}

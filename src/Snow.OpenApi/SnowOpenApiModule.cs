@@ -2,10 +2,9 @@ using System.Reflection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
-using Microsoft.AspNetCore.Routing;
 using Snow.AspNetCore;
 using Snow.DependencyInjection;
 using Snow.Modularity;
@@ -19,7 +18,6 @@ namespace Snow.OpenApi;
 [DependsOn(typeof(Snow.AspNetCore.Mvc.SnowAspNetCoreMvcModule))]
 public sealed class SnowOpenApiModule : SnowModule
 {
-
     /// <summary>
     /// 登记文档服务与文档生成器的三段加工
     /// </summary>
@@ -28,7 +26,7 @@ public sealed class SnowOpenApiModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        context.Services.Configure<SnowOpenApiOptions>(options => context.Services.GetConfiguration().GetSection("OpenApi").Bind(options));
+        // 选项不读配置节(与 ABP 一致): 宿主在 PreConfigureServices 里 Configure<SnowOpenApiOptions>(...)
         SnowOpenApiOptions openApi = context.Services.GetOptions<SnowOpenApiOptions>();
 
         context.Services.AddSingleton(openApi);
@@ -38,73 +36,100 @@ public sealed class SnowOpenApiModule : SnowModule
             return;
         }
 
-        SnowXmlComments xmlComments = SnowXmlComments.Load(openApi.IncludeXmlComments ? GetXmlCommentPaths(context.Services) : []);
+        SnowXmlComments xmlComments = SnowXmlComments.Load(
+            openApi.IncludeXmlComments ? GetXmlCommentPaths(context.Services) : []
+        );
 
-        context.Services.AddOpenApi(openApi.Version, options =>
-        {
-            options.AddDocumentTransformer((document, _, _) =>
+        context.Services.AddOpenApi(
+            openApi.Version,
+            options =>
             {
-                document.Info = new OpenApiInfo
-                {
-                    Title = openApi.Title,
-                    Version = openApi.Version,
-                    Description = openApi.Description,
-                };
-
-                if (!openApi.AddJwtBearerSecurity)
-                {
-                    return Task.CompletedTask;
-                }
-
-                document.Components ??= new OpenApiComponents();
-                document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
-                document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
-                {
-                    Type = SecuritySchemeType.Http,
-                    Scheme = "bearer",
-                    BearerFormat = "JWT",
-                    In = ParameterLocation.Header,
-                    Name = "Authorization",
-                    Description = "在此填入访问令牌, 只填令牌本身, 不要加 Bearer 前缀。",
-                };
-
-                document.Security ??= [];
-                document.Security.Add(new OpenApiSecurityRequirement
-                {
-                    [new OpenApiSecuritySchemeReference("Bearer", document)] = [],
-                });
-
-                return Task.CompletedTask;
-            });
-
-            options.AddOperationTransformer((operation, transformerContext, _) =>
-            {
-                if (transformerContext.Description.ActionDescriptor is ControllerActionDescriptor descriptor)
-                {
-                    operation.Tags ??= new HashSet<OpenApiTagReference>();
-                    if (operation.Tags.Count == 0)
+                options.AddDocumentTransformer(
+                    (document, _, _) =>
                     {
-                        operation.Tags.Add(new OpenApiTagReference(descriptor.ControllerName, transformerContext.Document));
+                        document.Info = new OpenApiInfo
+                        {
+                            Title = openApi.Title,
+                            Version = openApi.Version,
+                            Description = openApi.Description,
+                        };
+
+                        if (!openApi.AddJwtBearerSecurity)
+                        {
+                            return Task.CompletedTask;
+                        }
+
+                        document.Components ??= new OpenApiComponents();
+                        document.Components.SecuritySchemes ??=
+                            new Dictionary<string, IOpenApiSecurityScheme>();
+                        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+                        {
+                            Type = SecuritySchemeType.Http,
+                            Scheme = "bearer",
+                            BearerFormat = "JWT",
+                            In = ParameterLocation.Header,
+                            Name = "Authorization",
+                            Description = "在此填入访问令牌, 只填令牌本身, 不要加 Bearer 前缀。",
+                        };
+
+                        document.Security ??= [];
+                        document.Security.Add(
+                            new OpenApiSecurityRequirement
+                            {
+                                [new OpenApiSecuritySchemeReference("Bearer", document)] = [],
+                            }
+                        );
+
+                        return Task.CompletedTask;
                     }
+                );
 
-                    xmlComments.ApplyToOperation(operation, descriptor.MethodInfo);
-                }
+                options.AddOperationTransformer(
+                    (operation, transformerContext, _) =>
+                    {
+                        if (
+                            transformerContext.Description.ActionDescriptor
+                            is ControllerActionDescriptor descriptor
+                        )
+                        {
+                            operation.Tags ??= new HashSet<OpenApiTagReference>();
+                            if (operation.Tags.Count == 0)
+                            {
+                                operation.Tags.Add(
+                                    new OpenApiTagReference(
+                                        descriptor.ControllerName,
+                                        transformerContext.Document
+                                    )
+                                );
+                            }
 
-                return Task.CompletedTask;
-            });
+                            xmlComments.ApplyToOperation(operation, descriptor.MethodInfo);
+                        }
 
-            options.AddSchemaTransformer((schema, schemaContext, _) =>
-            {
-                xmlComments.ApplyToSchema(schema, schemaContext.JsonTypeInfo.Type);
+                        return Task.CompletedTask;
+                    }
+                );
 
-                return Task.CompletedTask;
-            });
-        });
+                options.AddSchemaTransformer(
+                    (schema, schemaContext, _) =>
+                    {
+                        xmlComments.ApplyToSchema(schema, schemaContext.JsonTypeInfo.Type);
+
+                        return Task.CompletedTask;
+                    }
+                );
+            }
+        );
 
         // 端点映射交给统一挂载: 与 ABP 的 EndpointConfigureActions 同形
         Configure<SnowEndpointRouterOptions>(options =>
             options.EndpointConfigureActions.Add(endpointContext =>
-                SnowOpenApiApplicationBuilderExtensions.MapOpenApiEndpoints(endpointContext.Endpoints, openApi)));
+                SnowOpenApiApplicationBuilderExtensions.MapOpenApiEndpoints(
+                    endpointContext.Endpoints,
+                    openApi
+                )
+            )
+        );
     }
 
     private static List<string> GetXmlCommentPaths(IServiceCollection services)
@@ -114,8 +139,7 @@ public sealed class SnowOpenApiModule : SnowModule
 
         IEnumerable<Assembly> assemblies = services
             .GetSingletonInstance<IModuleContainer>()
-            .Modules
-            .SelectMany(module => module.AllAssemblies)
+            .Modules.SelectMany(module => module.AllAssemblies)
             .Append(Assembly.GetEntryAssembly()!)
             .Where(assembly => assembly is not null)
             .Distinct();

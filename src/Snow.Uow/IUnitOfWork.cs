@@ -62,7 +62,21 @@ public interface IUnitOfWork : IDisposable, IAsyncDisposable
     void OnRollback(Func<CancellationToken, Task> callback);
 
     /// <summary>
-    /// 提交: 依次执行提交前回调、事务提交回调、提交后回调
+    /// 待派发的本地事件(按登记顺序)
+    /// </summary>
+    IReadOnlyList<UnitOfWorkEventRecord> LocalEvents { get; }
+
+    /// <summary>
+    /// 把领域事件登记到工作单元, 提交时按 <see cref="UnitOfWorkEventRecord.EventOrder"/> 派发
+    /// </summary>
+    /// <param name="eventRecord">事件记录</param>
+    /// <param name="replacePredicate">命中该条件的旧记录先被替换掉, 为 null 表示只追加</param>
+    void AddOrReplaceLocalEvent(UnitOfWorkEventRecord eventRecord,
+        Predicate<UnitOfWorkEventRecord>? replacePredicate = null);
+
+    /// <summary>
+    /// 提交: 依次执行提交前回调(刷库)、派发本地事件(派发后再刷一次库, 直到事件队列为空)、
+    /// 事务提交回调、提交后回调
     /// </summary>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>异步任务</returns>

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Snow.Http;
 
 namespace Snow.Http.Client;
 
@@ -184,8 +185,19 @@ public class SnowHttpServiceProxy<T> : DispatchProxy where T : class
 
         if (!response.IsSuccessStatusCode)
         {
+            var statusCode = response.StatusCode;
             string responseBody = await response.Content.ReadAsStringAsync(context.CancellationToken).ConfigureAwait(false);
             response.Dispose();
+
+            // 响应体是 Snow 的错误信封时, 抛出携带原始错误体的远程调用异常, 让上层按 Code / ValidationErrors 处理
+            SnowRemoteServiceErrorResponse? errorResponse = TryReadErrorResponse(responseBody);
+            if (errorResponse?.Error is not null)
+            {
+                throw new SnowRemoteCallException(errorResponse.Error)
+                {
+                    HttpStatusCode = (int)statusCode,
+                };
+            }
 
             if (responseBody.Length > 2000)
             {
@@ -193,14 +205,31 @@ public class SnowHttpServiceProxy<T> : DispatchProxy where T : class
             }
 
             throw new SnowHttpServiceException(
-                "声明式 HTTP 请求返回 " + (int)response.StatusCode + " " + response.StatusCode + ": " + context.Method + " " + url,
+                "声明式 HTTP 请求返回 " + (int)statusCode + " " + statusCode + ": " + context.Method + " " + url,
                 context.Method,
                 url,
-                response.StatusCode,
+                statusCode,
                 responseBody);
         }
 
         return response;
+    }
+
+    private SnowRemoteServiceErrorResponse? TryReadErrorResponse(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<SnowRemoteServiceErrorResponse>(body, SerializerOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private async Task<TResult> ReadAsync<TResult>(HttpResponseMessage response, CancellationToken cancellationToken)

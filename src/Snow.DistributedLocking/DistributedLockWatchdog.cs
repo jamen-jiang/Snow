@@ -41,7 +41,7 @@ public class DistributedLockWatchdog
     /// <param name="handle">锁句柄</param>
     /// <param name="key">锁 key, 只用于日志</param>
     /// <returns>续期循环</returns>
-    public LockRenewal Start(IDistributedLockHandle handle, string key)
+    public LockRenewal Start(ISnowDistributedLockHandle handle, string key)
     {
         ArgumentNullException.ThrowIfNull(handle);
         ArgumentException.ThrowIfNullOrWhiteSpace(key);

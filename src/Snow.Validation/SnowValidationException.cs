@@ -9,7 +9,7 @@ namespace Snow.Validation;
 /// 参数校验失败异常: 携带字段级错误明细
 /// <para>业务层与接口层都抛它, 由异常处理包翻译成 400 与字段错误列表。</para>
 /// </summary>
-public class SnowValidationException : SnowException, IHasLogLevel
+public class SnowValidationException : SnowException, IHasValidationErrors, IHasLogLevel
 {
     /// <summary>
     /// 构造器

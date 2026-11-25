@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.AspNetCore;
@@ -23,11 +22,6 @@ public sealed class SnowAspNetCoreMultiTenancyModule : SnowModule
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-
-        if (context.Configuration.GetSection("MultiTenancy:AspNetCore").Exists())
-        {
-            Configure<SnowAspNetCoreMultiTenancyOptions>(context.Configuration.GetSection("MultiTenancy:AspNetCore"));
-        }
 
         context.Services.TryAddEnumerable(ServiceDescriptor.Transient<ITenantResolveContributor, QueryStringTenantResolveContributor>());
         context.Services.TryAddEnumerable(ServiceDescriptor.Transient<ITenantResolveContributor, RouteTenantResolveContributor>());

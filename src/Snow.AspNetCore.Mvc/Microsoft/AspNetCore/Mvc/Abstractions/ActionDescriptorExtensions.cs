@@ -1,7 +1,6 @@
 using System;
 using System.Reflection;
 using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.AspNetCore.Mvc.RazorPages;
 using Snow.AspNetCore.Mvc;
 using Snow.Reflection;
 
@@ -71,29 +70,5 @@ public static class ActionDescriptorExtensions
         return actionDescriptor is ControllerActionDescriptor;
     }
 
-    /// <summary>
-    /// 是不是 Razor 页面动作
-    /// </summary>
-    /// <param name="actionDescriptor">动作描述符</param>
-    /// <returns>是返回 <see langword="true"/></returns>
-    public static bool IsPageAction(this ActionDescriptor actionDescriptor)
-    {
-        return actionDescriptor is PageActionDescriptor;
-    }
 
-    /// <summary>
-    /// 当作 Razor 页面动作描述符返回, 不是则抛异常
-    /// </summary>
-    /// <param name="actionDescriptor">动作描述符</param>
-    /// <returns>页面动作描述符</returns>
-    public static PageActionDescriptor AsPageAction(this ActionDescriptor actionDescriptor)
-    {
-        if (!actionDescriptor.IsPageAction())
-        {
-            throw new InvalidOperationException(
-                nameof(actionDescriptor) + " 应当是 " + typeof(PageActionDescriptor).AssemblyQualifiedName + " 类型");
-        }
-
-        return (PageActionDescriptor)actionDescriptor;
-    }
 }

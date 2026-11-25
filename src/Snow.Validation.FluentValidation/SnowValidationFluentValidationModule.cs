@@ -1,6 +1,5 @@
 using System.Reflection;
 using FluentValidation;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.DependencyInjection;
@@ -21,7 +20,7 @@ public sealed class SnowValidationFluentValidationModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        context.Services.Configure<SnowFluentValidationOptions>(options => context.Configuration.GetSection("Validation:FluentValidation").Bind(options));
+        // 选项不读配置节(与 ABP 一致): 宿主在 PreConfigureServices 里 Configure<SnowFluentValidationOptions>(...)
         SnowFluentValidationOptions options = context.Services.GetOptions<SnowFluentValidationOptions>();
 
         if (!options.Enabled)

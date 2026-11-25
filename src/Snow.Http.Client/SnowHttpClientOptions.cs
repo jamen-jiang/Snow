@@ -1,14 +1,15 @@
 namespace Snow.Http.Client;
 
 /// <summary>
-/// HTTP 客户端选项(配置节 <c>HttpClient</c>): 顶层值是所有客户端的默认值,
-/// 具名节 <c>HttpClient:{名字}</c> 覆盖个别客户端(名字规则见 <see cref="SnowHttpClientNames.For(Type)"/>)
+/// HTTP 客户端选项: <see cref="BaseAddress"/> / <see cref="Timeout"/> / <see cref="UserAgent"/> / <see cref="DefaultHeaders"/>
+/// 是默认客户端与所有按契约派生的客户端的基准值, <see cref="Clients"/> 里的具名项覆盖个别客户端
+/// (名字规则见 <see cref="SnowHttpClientNames.For(Type)"/>)
+/// <para>模块不读配置节: 宿主在 <c>PreConfigureServices</c> 里 <c>Configure&lt;SnowHttpClientOptions&gt;(options => ...)</c>
+/// 或 <c>Configure&lt;SnowHttpClientOptions&gt;(context.Configuration.GetSection("HttpClient"))</c> 给出。</para>
 /// <para>业务自己的类型化客户端照常写 <c>services.AddHttpClient&lt;TClient&gt;(...)</c>, 不受这里影响。</para>
 /// </summary>
 public class SnowHttpClientOptions
 {
-    private static readonly string[] OptionKeys = ["BaseAddress", "Timeout", "UserAgent", "DefaultHeaders"];
-
     /// <summary>
     /// 基础地址(如 https://api.example.com)。相对路径请求会拼在它后面
     /// </summary>
@@ -30,6 +31,11 @@ public class SnowHttpClientOptions
     public IDictionary<string, string> DefaultHeaders { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// 具名客户端的专属选项(键是客户端名, 如 <c>HkoTracking</c>), 整份替换默认值而不是叠加
+    /// </summary>
+    public IDictionary<string, SnowHttpClientOptions> Clients { get; } = new Dictionary<string, SnowHttpClientOptions>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// 复制一份(默认请求头深拷贝), 供按契约派生独立选项时作为基准
     /// </summary>
     /// <returns>新的选项实例</returns>
@@ -48,15 +54,5 @@ public class SnowHttpClientOptions
         }
 
         return clone;
-    }
-
-    /// <summary>
-    /// 判断配置节下的某个键是否本选项自身的属性(用于区分「客户端名」与「选项键」)
-    /// </summary>
-    /// <param name="key">配置节子键</param>
-    /// <returns>是选项键返回 true</returns>
-    internal static bool IsOptionKey(string key)
-    {
-        return Array.Exists(OptionKeys, optionKey => string.Equals(optionKey, key, StringComparison.OrdinalIgnoreCase));
     }
 }

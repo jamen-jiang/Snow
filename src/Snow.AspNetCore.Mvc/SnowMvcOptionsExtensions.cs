@@ -13,9 +13,9 @@ using Snow.AspNetCore.Mvc.Validation;
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
-/// MVC 选项扩展, 对应 ABP 的 <c>AbpMvcOptionsExtensions</c>。
+/// MVC 选项扩展。
 /// <para>把约定路由、全局过滤器等统一挂到这里, 模块只负责调用一次
-/// <see cref="AddSnow(MvcOptions, IServiceCollection)"/>。</para>
+/// <see cref="AddSnow(MvcOptions, IServiceProvider)"/>。</para>
 /// </summary>
 internal static class SnowMvcOptionsExtensions
 {
@@ -23,15 +23,14 @@ internal static class SnowMvcOptionsExtensions
     /// 应用 Snow 的 MVC 选项配置。
     /// </summary>
     /// <param name="options">MVC 选项</param>
-    /// <param name="services">服务集合, 约定路由需要创建 Wrapper</param>
-    public static void AddSnow(this MvcOptions options, IServiceCollection services)
+    /// <param name="serviceProvider">服务提供者, 约定路由从容器创建</param>
+    public static void AddSnow(this MvcOptions options, IServiceProvider serviceProvider)
     {
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        AddConventions(options, services);
+        AddConventions(options, serviceProvider);
         AddActionFilters(options);
-        AddPageFilters(options);
         AddFormatters(options);
     }
 
@@ -39,21 +38,21 @@ internal static class SnowMvcOptionsExtensions
     {
         options.OutputFormatters.Insert(0, new RemoteStreamContentOutputFormatter());
         var systemTextJsonOutputFormatter = options.OutputFormatters
-            .Where(f => f is SystemTextJsonOutputFormatter)
-            .Cast<SystemTextJsonOutputFormatter>().FirstOrDefault();
+            .OfType<SystemTextJsonOutputFormatter>()
+            .FirstOrDefault();
 
         if (systemTextJsonOutputFormatter != null)
         {
-            options.OutputFormatters.Remove(systemTextJsonOutputFormatter);
+            var index = options.OutputFormatters.IndexOf(systemTextJsonOutputFormatter);
             var jsonOptions = new JsonSerializerOptions(systemTextJsonOutputFormatter.SerializerOptions);
             jsonOptions.Converters.RemoveAll(x => x is ObjectToInferredTypesConverter);
-            options.OutputFormatters.Add(new SystemTextJsonOutputFormatter(jsonOptions));
+            options.OutputFormatters[index] = new SystemTextJsonOutputFormatter(jsonOptions);
         }
     }
 
-    private static void AddConventions(MvcOptions options, IServiceCollection services)
+    private static void AddConventions(MvcOptions options, IServiceProvider serviceProvider)
     {
-        options.Conventions.Add(new SnowServiceConventionWrapper(services));
+        options.Conventions.Add(serviceProvider.GetRequiredService<SnowServiceConvention>());
     }
 
     private static void AddActionFilters(MvcOptions options)
@@ -63,8 +62,4 @@ internal static class SnowMvcOptionsExtensions
         options.Filters.AddService(typeof(SnowExceptionFilter));
     }
 
-    private static void AddPageFilters(MvcOptions options)
-    {
-        // 预留 View/PageFilter 的注册入口; 当前纯 API 不需要页面过滤器。
-    }
 }

@@ -3,8 +3,6 @@ using Elsa.Http.Features;
 using Elsa.Persistence.EFCore.Extensions;
 using Elsa.Persistence.EFCore.Modules.Management;
 using Elsa.Persistence.EFCore.Modules.Runtime;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.DependencyInjection;
 using Snow.Modularity;
@@ -16,6 +14,8 @@ namespace Snow.Workflows.Elsa;
 /// <para>工作流 HTTP 中间件由宿主自己挂: 在启动模块的 OnApplicationInitialization 里调
 /// <c>context.GetApplicationBuilder().UseSnowWorkflows()</c>, 放在授权之后: 它是终端分支, 早于授权就对匿名请求可见。</para>
 /// <para><see cref="SnowElsaOptions.EnableHttp"/> 为 false 时不要挂即可, 管理 API 仍在。</para>
+/// <para>运行工作流所需的最小特性集(表达式、JavaScript 引擎、内存缓存、管理与运行时缓存)总是挂上;
+/// 想省依赖或用别的实现, 在 <see cref="SnowElsaOptions.ConfigureElsa"/> 里补。</para>
 /// </summary>
 [DependsOn(typeof(SnowWorkflowsModule))]
 public sealed class SnowElsaModule : SnowModule
@@ -25,13 +25,13 @@ public sealed class SnowElsaModule : SnowModule
     {
         IServiceCollection services = context.Services;
 
-        services.Configure<SnowElsaOptions>(options => services.GetConfiguration().GetSection("Workflows:Elsa").Bind(options));
+        // 选项不读配置节(与 ABP 一致): 宿主在 PreConfigureServices 里 Configure<SnowElsaOptions>(...)
         SnowElsaOptions options = services.GetOptions<SnowElsaOptions>();
 
         // 收尾阶段挂中间件要读 EnableHttp, 把算好的最终选项放进容器
         services.AddSingleton(options);
 
-        bool useSqlite = options.Database == SnowElsaDatabaseProvider.Sqlite && !string.IsNullOrWhiteSpace(options.ConnectionString);
+        bool useSqlite = !string.IsNullOrWhiteSpace(options.ConnectionString);
 
         foreach (Type workflowType in options.WorkflowTypes)
         {
@@ -40,18 +40,9 @@ public sealed class SnowElsaModule : SnowModule
 
         services.AddElsa(elsa =>
         {
-            // 运行工作流所需的最小特性集: 表达式、JS 引擎与内存缓存。取舍项(如身份)不放在这里。
-            if (options.UseDefaultFeatures)
-            {
-                elsa.UseExpressions(_ => { });
-
-                if (options.UseJavaScript)
-                {
-                    elsa.UseJavaScript((global::Elsa.Expressions.JavaScript.Features.JavaScriptFeature _) => { });
-                }
-
-                elsa.UseMemoryCache(_ => { });
-            }
+            elsa.UseExpressions(_ => { });
+            elsa.UseJavaScript((global::Elsa.Expressions.JavaScript.Features.JavaScriptFeature _) => { });
+            elsa.UseMemoryCache(_ => { });
 
             elsa.UseWorkflowManagement(management =>
             {
@@ -60,16 +51,13 @@ public sealed class SnowElsaModule : SnowModule
                     management.UseEntityFrameworkCore(ef =>
                     {
                         ef.UseSqlite(options.ConnectionString!);
-                        ef.RunMigrations = options.RunMigrations;
+
+                        // 启动即迁移: 表结构与包版本对不上时先建/补, 免得第一次跑工作流才炸
+                        ef.RunMigrations = true;
                     });
                 }
 
-                options.ConfigureWorkflowManagement?.Invoke(management);
-
-                if (options.UseDefaultFeatures)
-                {
-                    management.UseCache(_ => { });
-                }
+                management.UseCache(_ => { });
             });
 
             elsa.UseWorkflowRuntime(runtime =>
@@ -79,37 +67,21 @@ public sealed class SnowElsaModule : SnowModule
                     runtime.UseEntityFrameworkCore(ef =>
                     {
                         ef.UseSqlite(options.ConnectionString!);
-                        ef.RunMigrations = options.RunMigrations;
+                        ef.RunMigrations = true;
                     });
                 }
 
-                options.ConfigureWorkflowRuntime?.Invoke(runtime);
-
-                if (options.UseDefaultFeatures)
-                {
-                    runtime.UseCache(_ => { });
-                    runtime.UseDefaultRuntime(_ => { });
-                }
+                runtime.UseCache(_ => { });
+                runtime.UseDefaultRuntime(_ => { });
             });
 
             if (options.EnableHttp)
             {
                 elsa.UseHttp(http =>
                 {
-                    if (options.UseDefaultFeatures)
-                    {
-                        http.UseCache(_ => { });
-                    }
+                    http.UseCache(_ => { });
 
-                    http.ConfigureHttpOptions = httpOptions =>
-                    {
-                        if (options.HttpBaseUrl is not null)
-                        {
-                            httpOptions.BaseUrl = options.HttpBaseUrl;
-                        }
-
-                        httpOptions.BasePath = options.HttpBasePath;
-                    };
+                    http.ConfigureHttpOptions = httpOptions => httpOptions.BasePath = options.HttpBasePath;
                 });
             }
 
@@ -121,5 +93,4 @@ public sealed class SnowElsaModule : SnowModule
             options.ConfigureElsa?.Invoke(elsa);
         });
     }
-
 }

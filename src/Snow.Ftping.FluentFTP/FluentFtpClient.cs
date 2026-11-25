@@ -7,69 +7,119 @@ using System.Threading;
 using System.Threading.Tasks;
 using global::FluentFTP;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Snow.DependencyInjection;
+using Snow.Ftping.Configuration;
 
 namespace Snow.Ftping.FluentFTP;
 
 /// <summary>
 /// 基于 FluentFTP 的异步 FTP 客户端: 每次调用建一条连接, 用完即断
 /// <para>顶替契约包的 <see cref="IFtpClient"/>: 引入本包后注入到的就是它。</para>
-/// <para>所有方法异步且支持取消; 需要一次连接做多件事时用 <see cref="IFluentFtpClient.BuildClient"/> 自管连接。</para>
-/// <para>连接加密方式只由 <see cref="FtpOptions.UseSsl"/> 决定: true 走显式 FTPS(AUTH TLS), false 走明文 FTP。</para>
+/// <para>所有方法异步且支持取消; 需要一次连接做多件事时用 <see cref="IFluentFtpClient.BuildClientAsync"/> 自管连接。</para>
+/// <para>连接加密方式只由配置项 <see cref="FtpSettingNames.UseSsl"/> 决定: true 走显式 FTPS(AUTH TLS), false 走明文 FTP。</para>
+/// <para>连接参数每次操作现读配置项(见 <see cref="IFtpConfiguration"/>), 改配置不必重启。</para>
 /// </summary>
 [TransientService(ReplaceServices = true)]
 public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
 {
-    private readonly FtpOptions _options;
+    private readonly IFtpConfiguration _configuration;
     private readonly ILogger<FluentFtpClient>? _logger;
 
     /// <summary>
     /// 构造器
     /// </summary>
-    /// <param name="options">FTP 配置</param>
+    /// <param name="configuration">FTP 配置(值来自配置项系统)</param>
     /// <param name="logger">日志</param>
     public FluentFtpClient(
-        IOptions<FtpOptions> options,
+        IFtpConfiguration configuration,
         ILogger<FluentFtpClient>? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(configuration);
 
-        _options = options.Value;
+        _configuration = configuration;
         _logger = logger;
     }
 
     /// <inheritdoc />
-    public AsyncFtpClient BuildClient()
+    /// <param name="cancellationToken">取消令牌</param>
+    public async Task<AsyncFtpClient> BuildClientAsync(CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.FtpHost))
-        {
-            throw new InvalidOperationException("未配置 FTP 服务器地址: 请设置 Ftp:FtpHost。");
-        }
+        FtpSettings settings = await LoadSettingsAsync().ConfigureAwait(false);
 
+        return BuildClient(settings);
+    }
+
+    /// <summary>
+    /// 现读全部连接配置项: 值可能来自配置节之外的来源(数据库等), 所以每次操作读一遍
+    /// </summary>
+    private async Task<FtpSettings> LoadSettingsAsync()
+    {
+        return new FtpSettings
+        {
+            Host = await _configuration.GetHostAsync().ConfigureAwait(false),
+            Port = await _configuration.GetPortAsync().ConfigureAwait(false),
+            UserName = await _configuration.GetUserNameAsync().ConfigureAwait(false),
+            Password = await _configuration.GetPasswordAsync().ConfigureAwait(false),
+            UseSsl = await _configuration.GetUseSslAsync().ConfigureAwait(false),
+            EncodingName = await _configuration.GetEncodingNameAsync().ConfigureAwait(false),
+            ConnectTimeout = await _configuration.GetConnectTimeoutAsync().ConfigureAwait(false),
+            ReadTimeout = await _configuration.GetReadTimeoutAsync().ConfigureAwait(false),
+            IgnoreCertificateErrors = await _configuration.GetIgnoreCertificateErrorsAsync().ConfigureAwait(false),
+            RetryAttempts = await _configuration.GetRetryAttemptsAsync().ConfigureAwait(false),
+        };
+    }
+
+    private AsyncFtpClient BuildClient(FtpSettings settings)
+    {
         // 匿名的标准用户名是 anonymous: 留空时 FluentFTP 会直接拒绝空用户名
-        string userName = string.IsNullOrWhiteSpace(_options.UserName) ? "anonymous" : _options.UserName;
+        string userName = string.IsNullOrWhiteSpace(settings.UserName) ? "anonymous" : settings.UserName;
 
         AsyncFtpClient client = new(
-            _options.FtpHost,
-            new NetworkCredential(userName, _options.Password),
-            _options.Port,
+            settings.Host,
+            new NetworkCredential(userName, settings.Password),
+            settings.Port,
             new FtpConfig())
         {
-            Encoding = ResolveEncoding(),
+            Encoding = ResolveEncoding(settings.EncodingName),
         };
 
-        client.Config.EncryptionMode = _options.UseSsl ? FtpEncryptionMode.Explicit : FtpEncryptionMode.None;
-        client.Config.ConnectTimeout = _options.ConnectTimeout;
-        client.Config.ReadTimeout = _options.ReadTimeout;
-        client.Config.WriteTimeout = _options.ReadTimeout;
-        client.Config.DataConnectionConnectTimeout = _options.ConnectTimeout;
-        client.Config.DataConnectionReadTimeout = _options.ReadTimeout;
-        client.Config.DataConnectionWriteTimeout = _options.ReadTimeout;
-        client.Config.ValidateAnyCertificate = _options.IgnoreCertificateErrors;
-        client.Config.RetryAttempts = _options.RetryAttempts;
+        client.Config.EncryptionMode = settings.UseSsl ? FtpEncryptionMode.Explicit : FtpEncryptionMode.None;
+        client.Config.ConnectTimeout = settings.ConnectTimeout;
+        client.Config.ReadTimeout = settings.ReadTimeout;
+        client.Config.WriteTimeout = settings.ReadTimeout;
+        client.Config.DataConnectionConnectTimeout = settings.ConnectTimeout;
+        client.Config.DataConnectionReadTimeout = settings.ReadTimeout;
+        client.Config.DataConnectionWriteTimeout = settings.ReadTimeout;
+        client.Config.ValidateAnyCertificate = settings.IgnoreCertificateErrors;
+        client.Config.RetryAttempts = settings.RetryAttempts;
 
         return client;
+    }
+
+    /// <summary>
+    /// 一次操作要用到的连接参数快照
+    /// </summary>
+    private sealed class FtpSettings
+    {
+        public string Host { get; init; } = string.Empty;
+
+        public int Port { get; init; }
+
+        public string? UserName { get; init; }
+
+        public string? Password { get; init; }
+
+        public bool UseSsl { get; init; }
+
+        public string EncodingName { get; init; } = string.Empty;
+
+        public int ConnectTimeout { get; init; }
+
+        public int ReadTimeout { get; init; }
+
+        public bool IgnoreCertificateErrors { get; init; }
+
+        public int RetryAttempts { get; init; }
     }
 
     /// <inheritdoc />
@@ -79,7 +129,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync<byte[]?>(path, async (client, token) =>
+        return ExecuteAsync<byte[]?>(path, async (client, settings, token) =>
         {
             if (!await client.FileExists(path, token).ConfigureAwait(false))
             {
@@ -97,7 +147,8 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        AsyncFtpClient client = BuildClient();
+        FtpSettings settings = await LoadSettingsAsync().ConfigureAwait(false);
+        AsyncFtpClient client = BuildClient(settings);
         try
         {
             await client.Connect(cancellationToken).ConfigureAwait(false);
@@ -107,7 +158,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
         catch (Exception exception) when (exception is not FtpOperationException and not OperationCanceledException)
         {
             await client.DisposeAsync().ConfigureAwait(false);
-            throw Wrap(path, exception);
+            throw Wrap(settings.Host, path, exception);
         }
     }
 
@@ -120,17 +171,17 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
         ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
         ArgumentNullException.ThrowIfNull(destination);
 
-        return ExecuteAsync(remotePath, async (client, token) =>
+        return ExecuteAsync(remotePath, async (client, settings, token) =>
         {
             if (!await client.FileExists(remotePath, token).ConfigureAwait(false))
             {
-                throw new FtpOperationException("要下载的文件不存在: " + remotePath, _options.FtpHost, remotePath);
+                throw new FtpOperationException("要下载的文件不存在: " + remotePath, settings.Host, remotePath);
             }
 
             bool success = await client.DownloadStream(destination, remotePath, 0, null, token).ConfigureAwait(false);
             if (!success)
             {
-                throw new FtpOperationException("下载失败: " + remotePath, _options.FtpHost, remotePath);
+                throw new FtpOperationException("下载失败: " + remotePath, settings.Host, remotePath);
             }
 
             return true;
@@ -147,7 +198,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
         ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
 
-        return ExecuteAsync(remotePath, async (client, token) =>
+        return ExecuteAsync(remotePath, async (client, settings, token) =>
         {
             FtpStatus status = await client
                 .DownloadFile(localPath, remotePath, overwrite ? FtpLocalExists.Overwrite : FtpLocalExists.Skip, FtpVerify.None, null, token)
@@ -155,7 +206,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
 
             if (status != FtpStatus.Success)
             {
-                throw new FtpOperationException("下载失败(" + status + "): " + remotePath + " -> " + localPath, _options.FtpHost, remotePath);
+                throw new FtpOperationException("下载失败(" + status + "): " + remotePath + " -> " + localPath, settings.Host, remotePath);
             }
 
             return true;
@@ -172,7 +223,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
 
-        return ExecuteAsync(remotePath, async (client, token) =>
+        return ExecuteAsync(remotePath, async (client, settings, token) =>
         {
             FtpStatus status = await client
                 .UploadStream(source, remotePath, ToRemoteExists(overwrite), true, null, token)
@@ -180,7 +231,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
 
             if (status != FtpStatus.Success)
             {
-                throw new FtpOperationException("上传失败(" + status + "): " + remotePath, _options.FtpHost, remotePath);
+                throw new FtpOperationException("上传失败(" + status + "): " + remotePath, settings.Host, remotePath);
             }
 
             return true;
@@ -202,7 +253,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
             throw new FileNotFoundException("要上传的本地文件不存在: " + localPath, localPath);
         }
 
-        return ExecuteAsync(remotePath, async (client, token) =>
+        return ExecuteAsync(remotePath, async (client, settings, token) =>
         {
             FtpStatus status = await client
                 .UploadFile(localPath, remotePath, ToRemoteExists(overwrite), true, FtpVerify.None, null, token)
@@ -210,7 +261,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
 
             if (status != FtpStatus.Success)
             {
-                throw new FtpOperationException("上传失败(" + status + "): " + localPath + " -> " + remotePath, _options.FtpHost, remotePath);
+                throw new FtpOperationException("上传失败(" + status + "): " + localPath + " -> " + remotePath, settings.Host, remotePath);
             }
 
             return true;
@@ -224,7 +275,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync(path, async (client, token) =>
+        return ExecuteAsync(path, async (client, settings, token) =>
         {
             if (await client.FileExists(path, token).ConfigureAwait(false))
             {
@@ -243,7 +294,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync(path, async (client, token) =>
+        return ExecuteAsync(path, async (client, settings, token) =>
         {
             if (!await client.DirectoryExists(path, token).ConfigureAwait(false))
             {
@@ -270,7 +321,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync(path, (client, token) => client.CreateDirectory(path, true, token), cancellationToken);
+        return ExecuteAsync(path, (client, settings, token) => client.CreateDirectory(path, true, token), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -283,12 +334,12 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
 
-        return ExecuteAsync(sourcePath, async (client, token) =>
+        return ExecuteAsync(sourcePath, async (client, settings, token) =>
         {
             bool moved = await client.MoveFile(sourcePath, destinationPath, ToRemoteExists(overwrite), token).ConfigureAwait(false);
             if (!moved)
             {
-                throw new FtpOperationException("移动失败: " + sourcePath + " -> " + destinationPath, _options.FtpHost, sourcePath);
+                throw new FtpOperationException("移动失败: " + sourcePath + " -> " + destinationPath, settings.Host, sourcePath);
             }
 
             return true;
@@ -306,7 +357,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
 
         string destinationPath = CombineRemotePath(GetRemoteDirectory(path), newName);
 
-        return ExecuteAsync(path, (client, token) => client.Rename(path, destinationPath, token), cancellationToken);
+        return ExecuteAsync(path, (client, settings, token) => client.Rename(path, destinationPath, token), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -316,7 +367,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync(path, (client, token) => client.FileExists(path, token), cancellationToken);
+        return ExecuteAsync(path, (client, settings, token) => client.FileExists(path, token), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -324,7 +375,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync(path, (client, token) => client.DirectoryExists(path, token), cancellationToken);
+        return ExecuteAsync(path, (client, settings, token) => client.DirectoryExists(path, token), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -332,7 +383,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync<FtpFileInfo?>(path, async (client, token) =>
+        return ExecuteAsync<FtpFileInfo?>(path, async (client, settings, token) =>
         {
             FtpListItem? item = await client.GetObjectInfo(path, true, token).ConfigureAwait(false);
             if (item is null || item.Type == FtpObjectType.Directory)
@@ -355,7 +406,7 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        return ExecuteAsync<IReadOnlyList<FtpEntry>>(path, async (client, token) =>
+        return ExecuteAsync<IReadOnlyList<FtpEntry>>(path, async (client, settings, token) =>
         {
             FtpListItem[] items = await client.GetListing(path, token).ConfigureAwait(false);
 
@@ -390,13 +441,14 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     /// <summary>
     /// 统一执行: 建连接 → 连接 → 执行 → 断开释放
     /// </summary>
-    private async Task<T> ExecuteAsync<T>(string path, Func<AsyncFtpClient, CancellationToken, Task<T>> action, CancellationToken cancellationToken)
+    private async Task<T> ExecuteAsync<T>(string path, Func<AsyncFtpClient, FtpSettings, CancellationToken, Task<T>> action, CancellationToken cancellationToken)
     {
-        AsyncFtpClient client = BuildClient();
+        FtpSettings settings = await LoadSettingsAsync().ConfigureAwait(false);
+        AsyncFtpClient client = BuildClient(settings);
         try
         {
             await client.Connect(cancellationToken).ConfigureAwait(false);
-            return await action(client, cancellationToken).ConfigureAwait(false);
+            return await action(client, settings, cancellationToken).ConfigureAwait(false);
         }
         catch (FtpOperationException)
         {
@@ -408,8 +460,8 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
         }
         catch (Exception exception)
         {
-            _logger?.LogError(exception, "FTP 操作失败: 远端路径为 {Path}, 服务器为 {Host}:{Port}", path, _options.FtpHost, _options.Port);
-            throw Wrap(path, exception);
+            _logger?.LogError(exception, "FTP 操作失败: 远端路径为 {Path}, 服务器为 {Host}:{Port}", path, settings.Host, settings.Port);
+            throw Wrap(settings.Host, path, exception);
         }
         finally
         {
@@ -432,20 +484,20 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     /// <summary>
     /// 统一执行(无返回值)
     /// </summary>
-    private Task ExecuteAsync(string path, Func<AsyncFtpClient, CancellationToken, Task> action, CancellationToken cancellationToken)
+    private Task ExecuteAsync(string path, Func<AsyncFtpClient, FtpSettings, CancellationToken, Task> action, CancellationToken cancellationToken)
     {
-        return ExecuteAsync(path, async (client, token) =>
+        return ExecuteAsync(path, async (client, settings, token) =>
         {
-            await action(client, token).ConfigureAwait(false);
+            await action(client, settings, token).ConfigureAwait(false);
             return true;
         }, cancellationToken);
     }
 
-    private FtpOperationException Wrap(string path, Exception exception)
+    private static FtpOperationException Wrap(string host, string path, Exception exception)
     {
         return new FtpOperationException(
             "FTP 操作失败: " + path,
-            _options.FtpHost,
+            host,
             path,
             exception);
     }
@@ -485,9 +537,9 @@ public sealed class FluentFtpClient : IFtpClient, IFluentFtpClient
     /// <summary>
     /// 按配置解析文件名编码
     /// </summary>
-    private Encoding ResolveEncoding()
+    private Encoding ResolveEncoding(string encodingName)
     {
-        string name = string.IsNullOrWhiteSpace(_options.EncodingName) ? "utf-8" : _options.EncodingName;
+        string name = string.IsNullOrWhiteSpace(encodingName) ? "utf-8" : encodingName;
 
         try
         {

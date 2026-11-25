@@ -5,22 +5,20 @@ using Microsoft.Extensions.Options;
 namespace Snow.Localization;
 
 /// <summary>
-/// 基于选项资源的字符串本地化器
+/// 基于选项资源的字符串本地化器: 按资源及其父资源依次查 json 文本
 /// </summary>
 public sealed class SnowStringLocalizer : IStringLocalizer
 {
     private readonly string _resourceName;
     private readonly IOptions<SnowLocalizationOptions> _options;
+    private readonly IServiceProvider _serviceProvider;
 
-    /// <summary>
-    /// 构造器
-    /// </summary>
-    /// <param name="resourceName">资源名</param>
-    /// <param name="options">本地化选项</param>
-    public SnowStringLocalizer(string resourceName, IOptions<SnowLocalizationOptions> options)
+    /// <summary>构造器</summary>
+    public SnowStringLocalizer(string resourceName, IOptions<SnowLocalizationOptions> options, IServiceProvider serviceProvider)
     {
         _resourceName = resourceName;
         _options = options;
+        _serviceProvider = serviceProvider;
     }
 
     /// <inheritdoc />
@@ -28,8 +26,8 @@ public sealed class SnowStringLocalizer : IStringLocalizer
     {
         get
         {
-            string? value = Find(name);
-            return new LocalizedString(name, value ?? name, resourceNotFound: value is null);
+            LocalizedString? value = Find(name);
+            return value ?? new LocalizedString(name, name, resourceNotFound: true);
         }
     }
 
@@ -38,88 +36,110 @@ public sealed class SnowStringLocalizer : IStringLocalizer
     {
         get
         {
-            string? format = Find(name);
-            string value = format is null
-                ? name
-                : string.Format(CultureInfo.CurrentCulture, format, arguments);
-            return new LocalizedString(name, value, resourceNotFound: format is null);
+            LocalizedString? format = Find(name);
+            if (format is null)
+            {
+                return new LocalizedString(name, name, resourceNotFound: true);
+            }
+
+            return new LocalizedString(name, string.Format(CultureInfo.CurrentCulture, format.Value, arguments), resourceNotFound: false);
         }
     }
 
     /// <inheritdoc />
     public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures)
     {
-        LocalizationResource? resource = ResolveResource();
-        if (resource is null)
+        foreach (LocalizationResource resource in ResolveResources())
         {
-            yield break;
-        }
+            var texts = new Dictionary<string, LocalizedString>(StringComparer.Ordinal);
+            foreach (string culture in ResolveCultureCandidates(resource, includeParentCultures))
+            {
+                resource.Fill(culture, texts);
+            }
 
-        string culture = ResolveCulture(resource);
-        if (!resource.Texts.TryGetValue(culture, out Dictionary<string, string>? texts))
-        {
-            yield break;
-        }
-
-        foreach (KeyValuePair<string, string> pair in texts)
-        {
-            yield return new LocalizedString(pair.Key, pair.Value, resourceNotFound: false);
+            foreach (LocalizedString value in texts.Values)
+            {
+                yield return value;
+            }
         }
     }
 
-    private string? Find(string name)
+    private LocalizedString? Find(string name)
     {
-        LocalizationResource? resource = ResolveResource();
-        if (resource is null)
+        foreach (LocalizationResource resource in ResolveResources())
         {
-            return null;
-        }
-
-        foreach (string culture in ResolveCultureCandidates(resource))
-        {
-            if (resource.Texts.TryGetValue(culture, out Dictionary<string, string>? texts)
-                && texts.TryGetValue(name, out string? value))
+            foreach (string culture in ResolveCultureCandidates(resource, includeParentCultures: true))
             {
-                return value;
+                LocalizedString? value = resource.GetOrNull(culture, name);
+                if (value is not null)
+                {
+                    return value;
+                }
             }
         }
 
         return null;
     }
 
-    private LocalizationResource? ResolveResource()
+    private IEnumerable<LocalizationResource> ResolveResources()
     {
         SnowLocalizationOptions options = _options.Value;
+        var queue = new Queue<LocalizationResource>();
+
         if (options.Resources.TryGetValue(_resourceName, out LocalizationResource? resource))
         {
-            return resource;
+            queue.Enqueue(resource);
+        }
+        else if (options.DefaultResourceType is not null)
+        {
+            string defaultResourceName = LocalizationResourceNameAttribute.GetName(options.DefaultResourceType);
+            if (options.Resources.TryGetValue(defaultResourceName, out LocalizationResource? fallback))
+            {
+                queue.Enqueue(fallback);
+            }
         }
 
-        return options.Resources.TryGetValue(options.DefaultResourceName, out LocalizationResource? fallback) ? fallback : null;
+        var visited = new HashSet<LocalizationResource>();
+        while (queue.Count > 0)
+        {
+            LocalizationResource current = queue.Dequeue();
+            if (!visited.Add(current))
+            {
+                continue;
+            }
+
+            current.EnsureLoaded(_serviceProvider);
+            yield return current;
+
+            foreach (string baseResourceName in current.BaseResourceNames)
+            {
+                if (options.Resources.TryGetValue(baseResourceName, out LocalizationResource? baseResource))
+                {
+                    queue.Enqueue(baseResource);
+                }
+            }
+        }
     }
 
-    private string ResolveCulture(LocalizationResource resource)
-        => ResolveCultureCandidates(resource).First();
-
-    private IEnumerable<string> ResolveCultureCandidates(LocalizationResource resource)
+    private IEnumerable<string> ResolveCultureCandidates(LocalizationResource resource, bool includeParentCultures)
     {
-        CultureInfo current = CultureInfo.CurrentUICulture;
+        SnowLocalizationOptions options = _options.Value;
+        string currentCultureName = CultureInfo.CurrentUICulture.Name;
 
-        yield return current.Name;
+        yield return currentCultureName;
 
-        if (current.Parent is not null && !string.IsNullOrEmpty(current.Parent.Name) && current.Parent.Name != current.Name)
+        if (includeParentCultures && options.TryToGetFromBaseCulture && currentCultureName.Contains('-'))
         {
-            yield return current.Parent.Name;
+            int separatorIndex = currentCultureName.IndexOf('-');
+            if (separatorIndex > 0)
+            {
+                yield return currentCultureName[..separatorIndex];
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(resource.DefaultCulture))
+        if (includeParentCultures && options.TryToGetFromDefaultCulture && !resource.DefaultCultureName.IsNullOrEmpty())
         {
-            yield return resource.DefaultCulture;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_options.Value.DefaultCulture))
-        {
-            yield return _options.Value.DefaultCulture;
+            yield return resource.DefaultCultureName;
         }
     }
 }

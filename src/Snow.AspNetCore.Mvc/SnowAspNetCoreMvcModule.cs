@@ -1,12 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Mvc.DataAnnotations;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Snow.AspNetCore.Mvc.DataAnnotations;
 using Snow.AspNetCore.Mvc.Json;
 using Snow.Json;
 using Snow.Modularity;
@@ -32,8 +29,6 @@ public sealed class SnowAspNetCoreMvcModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        context.Services.Configure<SnowAspNetCoreMvcOptions>(options => context.Configuration.GetSection("Mvc").Bind(options));
-
         // 框架过滤器统一用 [TransientService] 注解自动登记; SnowMvcOptionsExtensions 里只生成 ServiceFilterAttribute 从容器取实例
 
         // 关掉 [ApiController] 自带的 ModelState 过滤器, 统一由 SnowValidationActionFilter 处理模型校验
@@ -48,12 +43,8 @@ public sealed class SnowAspNetCoreMvcModule : SnowModule
         context.Services.AddSnowOptions<MvcOptions>()
             .Configure<IServiceProvider>((mvcOptions, serviceProvider) =>
             {
-                mvcOptions.AddSnow(context.Services);
+                mvcOptions.AddSnow(serviceProvider);
             });
-
-        // DataAnnotations 适配器: 对应 ABP 的 AbpValidationAttributeAdapterProvider, 支持动态长度/范围与枚举本地化
-        context.Services.Replace(ServiceDescriptor.Singleton<IValidationAttributeAdapterProvider, SnowValidationAttributeAdapterProvider>());
-        context.Services.AddSingleton<ValidationAttributeAdapterProvider>();
 
         // 动作描述符定型后摘掉框架过滤器, 对应 ABP 的 AbpMvcActionDescriptorProvider
         context.Services.TryAddEnumerable(ServiceDescriptor.Transient<IActionDescriptorProvider, SnowMvcActionDescriptorProvider>());

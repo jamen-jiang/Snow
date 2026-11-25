@@ -13,17 +13,17 @@ public abstract class AuditedAggregateRoot : CreationAuditedAggregateRoot, IModi
     /// <summary>
     /// 更新人Id
     /// </summary>
-    public long? LastModifierId { get; set; }
+    public long? LastModifierId { get; protected set; }
 
     /// <summary>
     /// 更新人名称
     /// </summary>
-    public string? LastModifier { get; set; }
+    public string? LastModifier { get; protected set; }
 
     /// <summary>
     /// 更新时间
     /// </summary>
-    public DateTime? LastModificationTime { get; set; }
+    public DateTime? LastModificationTime { get; protected set; }
 
     /// <summary>
     /// 设置更新审计信息

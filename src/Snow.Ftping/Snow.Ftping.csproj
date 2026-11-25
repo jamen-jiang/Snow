@@ -6,12 +6,13 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Description>FTP 客户端契约: 接口、文件模型与配置(不含实现, 实现见 Snow.Ftping.FluentFTP)</Description>
+    <Description>FTP 客户端契约: 接口、文件模型与配置项(不含实现, 实现见 Snow.Ftping.FluentFTP)</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- 模块基类(SnowModule / ServiceConfigurationContext)与生命周期标记都在 Snow.Core -->
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Settings\Snow.Settings.csproj" />
   </ItemGroup>
 
 </Project>

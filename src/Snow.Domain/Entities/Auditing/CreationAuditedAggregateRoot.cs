@@ -13,17 +13,17 @@ public abstract class CreationAuditedAggregateRoot : DeletionAuditedAggregateRoo
     /// <summary>
     /// 创建人Id
     /// </summary>
-    public long CreatorId { get; set; }
+    public long CreatorId { get; protected set; }
 
     /// <summary>
     /// 创建人名称
     /// </summary>
-    public string Creator { get; set; } = string.Empty;
+    public string Creator { get; protected set; } = string.Empty;
 
     /// <summary>
     /// 创建时间
     /// </summary>
-    public DateTime CreationTime { get; set; }
+    public DateTime CreationTime { get; protected set; }
 
     /// <summary>
     /// 设置创建审计信息;dateTime 为空时取当前时间

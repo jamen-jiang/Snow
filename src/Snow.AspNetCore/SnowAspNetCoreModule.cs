@@ -1,12 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Snow.AspNetCore.Authorization;
 using Snow.AspNetCore.ExceptionHandling;
 using Snow.Authorization;
@@ -21,7 +17,7 @@ using Snow.Validation;
 namespace Snow.AspNetCore;
 
 /// <summary>
-/// Web 宿主模块: 做 Web 层接线, 并在应用初始化阶段合并静态资源
+/// Web 宿主模块: 做 Web 层接线(上下文访问器、对象访问器、选项容器)
 /// <para>对齐 ABP 的 <c>AbpAspNetCoreModule</c>: 保证 HTTP 上下文访问器可用,
 /// 把只有宿主才有的对象放进对象访问器, 并把各包带的静态资源合并进 WebRoot。</para>
 /// <para><b>管道由宿主自己写</b>: 框架不铺骨架、也不映射端点。宿主在 <c>Program.cs</c> 里调一次
@@ -29,7 +25,7 @@ namespace Snow.AspNetCore;
 /// <c>OnApplicationInitialization</c> 里用 <c>context.GetApplicationBuilder()</c> 按顺序手写
 /// <c>app.UseXxx()</c>(链路标识、路由、认证、授权以及各能力包的 UseSnowXxx), 最后调
 /// <c>app.UseSnowEndpoints()</c> 映射端点 —— 与 ABP 模板的 <c>await app.InitializeApplicationAsync()</c> 同理。</para>
-/// <para>本模块只负责: 上下文访问器、对象访问器、端点选项容器、静态资源合并。</para>
+/// <para>本模块只负责: 上下文访问器、对象访问器、端点选项容器与异常状态码选项容器。</para>
 /// <para>依赖 <see cref="SnowSecurityModule"/>: 当前主体以 <c>HttpContext.User</c> 为准, 需要它的上下文访问器。</para>
 /// <para>依赖列表参照 ABP 的 <c>AbpAspNetCoreModule</c>: 安全、授权、工作单元在这里。
 /// 其余能力模块(缓存 / 分布式锁 / 后台作业 / 事件总线 / 消息 / 邮件 / FTP / HTTP 客户端)只随包提供契约,
@@ -43,6 +39,7 @@ namespace Snow.AspNetCore;
     typeof(SnowAuthorizationModule),
     typeof(SnowUowModule),
     typeof(SnowTracingModule),
+    typeof(SnowExceptionHandlingModule),
     typeof(SnowValidationModule)
 )]
 public sealed class SnowAspNetCoreModule : SnowModule
@@ -82,84 +79,8 @@ public sealed class SnowAspNetCoreModule : SnowModule
         // 端点清单的选项容器: 模块用 Configure<SnowEndpointRouterOptions>(...) 把映射动作交进来
         context.Services.AddOptions<SnowEndpointRouterOptions>();
 
-        Configure<SnowAspNetCoreOptions>(context.Services.GetConfiguration().GetSection("Snow"));
-
-        // 异常 → 错误信封的转换器: 由 UseSnowExceptionHandling() 中间件消费(对应 ABP 的 AspNetCore.ExceptionHandling 子模块)
-        context.Services.AddSingleton<IExceptionToErrorInfoConverter, DefaultExceptionToErrorInfoConverter>();
-
-        // 异常通知器 / 状态码解析器 / 授权异常处理器均由 [TransientService] 注解约定注册, 这里只登记对应的选项对象
+        // 异常转换器 / SnowExceptionHandlingOptions 及其本地化资源统一由 SnowExceptionHandlingModule 登记(见 DependsOn);
+        // 状态码解析器与授权异常处理器由 [TransientService] 注解约定注册, 这里只登记状态码选项对象
         context.Services.AddOptions<SnowExceptionHttpStatusCodeOptions>();
-        context.Services.AddOptions<SnowExceptionHandlingOptions>();
-
-        if (context.Configuration.GetSection("ExceptionHandling").Exists())
-        {
-            Configure<SnowExceptionHandlingOptions>(context.Configuration.GetSection("ExceptionHandling"));
-        }
-    }
-
-    /// <inheritdoc />
-    /// <param name="context">上下文</param>
-    public override void OnApplicationInitialization(ApplicationInitializationContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        MergeStaticAssets(context);
-    }
-
-    /// <summary>
-    /// 把各包带的静态资源合并进 WebRoot
-    /// </summary>
-    /// <param name="context">应用初始化上下文</param>
-    private static void MergeStaticAssets(ApplicationInitializationContext context)
-    {
-        SnowAspNetCoreOptions options = context
-            .ServiceProvider.GetRequiredService<IOptions<SnowAspNetCoreOptions>>()
-            .Value;
-        if (options.StaticAssetFileProviders.Count == 0)
-        {
-            return;
-        }
-
-        if (!options.MergeStaticAssets)
-        {
-            // 登记了却被开关静默丢掉等于资源凭空消失, 与管道跳过贡献者一样要在启动日志里留线索
-            context
-                .ServiceProvider.GetService<ILogger<SnowAspNetCoreModule>>()
-                ?.LogWarning(
-                    "静态资源合并已关闭(MergeStaticAssets=false): 已登记的 {Count} 个文件提供器全部跳过: {Providers}。"
-                        + "若这不是本意, 把 SnowAspNetCoreOptions.MergeStaticAssets 置回 true。",
-                    options.StaticAssetFileProviders.Count,
-                    string.Join(
-                        ", ",
-                        options.StaticAssetFileProviders.Select(provider =>
-                            provider.GetType().FullName
-                        )
-                    )
-                );
-            return;
-        }
-
-        IWebHostEnvironment? environment =
-            context.ServiceProvider.GetService<IWebHostEnvironment>();
-        if (environment is null)
-        {
-            // 与上面 MergeStaticAssets=false 是两种完全不同的原因, 日志必须分开:
-            // 那条是「宿主主动关掉」, 这条是「宿主根本不是 Web 应用, 没有 WebRoot 可并」。
-            // 对应 ABP 里 StaticWebAssetsLoader 加载清单失败时那条「清单没加载, 静态资源不可用」的告警。
-            context
-                .ServiceProvider.GetService<ILogger<SnowAspNetCoreModule>>()
-                ?.LogWarning(
-                    "静态资源合并跳过: 当前宿主不是 Web 应用(取不到 {Type}), 已登记的 {Count} 个文件提供器不会生效。"
-                        + "静态资源清单类告警(构建产物里没有清单)与这里的原因不同, 看日志时别混。",
-                    nameof(IWebHostEnvironment),
-                    options.StaticAssetFileProviders.Count
-                );
-            return;
-        }
-
-        // 保持原 WebRoot 在最前面, 包内资源只做补充: 同名文件仍以宿主自己的为准
-        List<IFileProvider> fileProviders = [environment.WebRootFileProvider];
-        fileProviders.AddRange(options.StaticAssetFileProviders);
-        environment.WebRootFileProvider = new CompositeFileProvider(fileProviders);
     }
 }

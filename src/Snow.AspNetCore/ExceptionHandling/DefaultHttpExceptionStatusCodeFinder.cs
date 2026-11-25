@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Snow.Authorization;
 using Snow.Data;
 using Snow.DependencyInjection;
+using Snow.Domain.Entities;
 using Snow.Exceptions;
 using Snow.Validation;
 
@@ -57,10 +58,15 @@ public class DefaultHttpExceptionStatusCodeFinder : IHttpExceptionStatusCodeFind
                 : HttpStatusCode.Unauthorized;
         }
 
-        // (4)-(9) 按异常类型兜底
+        // (4)-(7) 按异常类型兜底
         if (exception is SnowValidationException)
         {
             return HttpStatusCode.BadRequest;
+        }
+
+        if (exception is EntityNotFoundException)
+        {
+            return HttpStatusCode.NotFound;
         }
 
         if (exception is SnowDbConcurrencyException)

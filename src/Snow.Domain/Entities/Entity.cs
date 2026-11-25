@@ -9,7 +9,7 @@ namespace Snow.Domain.Entities;
 public abstract class Entity : IEntity
 {
     /// <inheritdoc/>
-    public long Id { get; protected set; }
+    public long Id { get; private set; }
 
     /// <inheritdoc/>
     public override string ToString()

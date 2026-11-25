@@ -41,22 +41,6 @@ public static class SnowApplicationBuilderExtensions
     }
 
     /// <summary>
-    /// 初始化应用(同步版本)
-    /// </summary>
-    /// <param name="app">应用构建器</param>
-    public static void InitializeApplication(this IApplicationBuilder app)
-    {
-        ArgumentNullException.ThrowIfNull(app);
-
-        SnowApplication application = app.ApplicationServices.GetRequiredService<SnowApplication>();
-
-        FillObjectAccessors(app);
-        RegisterShutdown(app, application);
-
-        application.InitializeAsync(app.ApplicationServices).GetAwaiter().GetResult();
-    }
-
-    /// <summary>
     /// 挂上链路标识(对应 ABP 的 <c>UseCorrelationId()</c>, 同在 <c>AbpApplicationBuilderExtensions</c> 这个类里)
     /// <para>必须放在所有可能短路的地方之外 —— 认证失败、授权拒绝、路由没匹配时, 响应也要能带回 <c>X-Correlation-Id</c>。</para>
     /// </summary>

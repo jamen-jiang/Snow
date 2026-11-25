@@ -1,7 +1,9 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Snow.Uow;
 
 /// <summary>
-/// 默认工作单元实现: 回调链 + 共享对象容器
+/// 默认工作单元实现: 回调链 + 共享对象容器 + 待派发事件队列
 /// </summary>
 public sealed class SnowUnitOfWork : IUnitOfWork
 {
@@ -9,8 +11,11 @@ public sealed class SnowUnitOfWork : IUnitOfWork
     private readonly List<Func<CancellationToken, Task>> _commitCallbacks = [];
     private readonly List<Func<Task>> _completedCallbacks = [];
     private readonly List<Func<CancellationToken, Task>> _rollbackCallbacks = [];
+    private readonly List<UnitOfWorkEventRecord> _localEvents = [];
 
     private readonly IUnitOfWorkAccessor _accessor;
+
+    private bool _isCompleting;
 
     /// <summary>
     /// 构造器
@@ -42,6 +47,9 @@ public sealed class SnowUnitOfWork : IUnitOfWork
 
     /// <inheritdoc />
     public IServiceProvider ServiceProvider { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<UnitOfWorkEventRecord> LocalEvents => _localEvents.AsReadOnly();
 
     /// <inheritdoc />
     public void OnPreComplete(Func<CancellationToken, Task> callback)
@@ -76,20 +84,44 @@ public sealed class SnowUnitOfWork : IUnitOfWork
     }
 
     /// <inheritdoc />
+    public void AddOrReplaceLocalEvent(UnitOfWorkEventRecord eventRecord,
+        Predicate<UnitOfWorkEventRecord>? replacePredicate = null)
+    {
+        ArgumentNullException.ThrowIfNull(eventRecord);
+
+        if (replacePredicate is not null)
+        {
+            _localEvents.RemoveAll(replacePredicate);
+        }
+
+        _localEvents.Add(eventRecord);
+    }
+
+    /// <inheritdoc />
     public async Task CompleteAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsActive)
+        // 派发中处理器可能又保存数据并再进来一次, 让外层循环统一收尾
+        if (!IsActive || IsCompleted || _isCompleting)
         {
             return;
         }
 
-        IsActive = false;
+        _isCompleting = true;
 
         try
         {
-            foreach (Func<CancellationToken, Task> callback in _preCompleteCallbacks)
+            await RunPreCompleteCallbacksAsync(cancellationToken);
+
+            // 派发事件后再刷一次库(处理器可能改了数据, 也可能又攒了事件), 直到队列空。
+            // 事务提交放在派发之后: 派发失败就整体回滚, 不会出现事件发了而数据没落。
+            while (_localEvents.Count > 0)
             {
-                await callback(cancellationToken);
+                UnitOfWorkEventRecord[] localEvents = [.. _localEvents.OrderBy(record => record.EventOrder)];
+                _localEvents.Clear();
+
+                await PublishLocalEventsAsync(localEvents, cancellationToken);
+
+                await RunPreCompleteCallbacksAsync(cancellationToken);
             }
 
             foreach (Func<CancellationToken, Task> callback in _commitCallbacks)
@@ -99,12 +131,15 @@ public sealed class SnowUnitOfWork : IUnitOfWork
         }
         catch
         {
+            IsActive = false;
             await RunRollbackCallbacksAsync(cancellationToken);
             ClearAmbient();
 
             throw;
         }
 
+        // 提交回调跑完才算结束: 派发期间工作单元仍是活动的, 处理器登记的新事件会继续被派发
+        IsActive = false;
         IsCompleted = true;
 
         foreach (Func<Task> callback in _completedCallbacks)
@@ -143,6 +178,39 @@ public sealed class SnowUnitOfWork : IUnitOfWork
         {
             await RollbackAsync();
         }
+    }
+
+    /// <summary>
+    /// 顺序执行提交前回调(刷库); 回调执行中新增的回调不参与本轮
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    private async Task RunPreCompleteCallbacksAsync(CancellationToken cancellationToken)
+    {
+        Func<CancellationToken, Task>[] callbacks = [.. _preCompleteCallbacks];
+
+        foreach (Func<CancellationToken, Task> callback in callbacks)
+        {
+            await callback(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// 把事件交给工作单元事件派发器
+    /// </summary>
+    /// <param name="localEvents">已排序的事件</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    private async Task PublishLocalEventsAsync(UnitOfWorkEventRecord[] localEvents,
+        CancellationToken cancellationToken)
+    {
+        IUnitOfWorkEventPublisher? publisher = ServiceProvider.GetService<IUnitOfWorkEventPublisher>();
+        if (publisher is null)
+        {
+            return;
+        }
+
+        await publisher.PublishLocalEventsAsync(localEvents, cancellationToken);
     }
 
     /// <summary>

@@ -378,5 +378,8 @@ CONVERSION.md
 *.db-shm
 *.db-wal
 
+# 示例共用的演示库: 表结构与演示数据随仓库带走, 让示例克隆下来就能直接启动
+!samples/Snow.Sample.Web/DataBase/snow.db
+
 # Elsa 运行时目录(默认的文件锁根目录, 启动时自动重建, 不入库)
 App_Data/

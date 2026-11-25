@@ -6,11 +6,12 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Description>邮件发送契约与配置</Description>
+    <Description>邮件发送契约与配置项</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Settings\Snow.Settings.csproj" />
   </ItemGroup>
 
 </Project>
