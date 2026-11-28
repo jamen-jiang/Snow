@@ -21,8 +21,8 @@ namespace Snow.AspNetCore.Mvc.ExceptionHandling;
 
 /// <summary>
 /// 异常过滤器(对应 ABP 的 <c>AbpExceptionFilter</c>): 把控制器抛出的异常翻译成统一的远端错误响应。
-/// <para>流程与 ABP 一致: <see cref="ShouldHandleException"/> 判定是否接管 → <see cref="HandleAndWrapException"/> 通知订阅者、
-/// 设置错误格式响应头与状态码、把结果换成 <see cref="SnowRemoteServiceErrorResponse"/>; 授权异常交给授权异常处理器。</para>
+/// <para>流程与 ABP 一致: <see cref="ShouldHandleException"/> 判定是否接管 → <see cref="HandleAndWrapException"/> 设置状态码、
+/// 把结果换成 <see cref="SnowRemoteServiceErrorResponse"/>; 授权异常交给授权异常处理器。</para>
 /// </summary>
 [TransientService]
 public class SnowExceptionFilter : IAsyncExceptionFilter, ISnowFilter
@@ -69,16 +69,12 @@ public class SnowExceptionFilter : IAsyncExceptionFilter, ISnowFilter
     }
 
     /// <summary>
-    /// 通知订阅者并把异常包装成统一错误响应
+    /// 把异常包装成统一错误响应
     /// </summary>
     /// <param name="context">异常上下文</param>
     protected virtual async Task HandleAndWrapException(ExceptionContext context)
     {
         LogException(context, out var remoteServiceErrorInfo);
-
-        await context.HttpContext.RequestServices
-            .GetRequiredService<IExceptionNotifier>()
-            .NotifyAsync(new ExceptionNotificationContext(context.Exception));
 
         if (context.Exception is SnowAuthorizationException)
         {
@@ -90,7 +86,6 @@ public class SnowExceptionFilter : IAsyncExceptionFilter, ISnowFilter
         {
             if (!context.HttpContext.Response.HasStarted)
             {
-                context.HttpContext.Response.Headers.Append(SnowHttpConsts.SnowErrorFormat, "true");
                 context.HttpContext.Response.StatusCode = (int)context.HttpContext.RequestServices
                     .GetRequiredService<IHttpExceptionStatusCodeFinder>()
                     .GetStatusCode(context.HttpContext, context.Exception);

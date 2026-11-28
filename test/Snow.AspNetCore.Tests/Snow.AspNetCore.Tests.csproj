@@ -17,14 +17,24 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Snow.Castle\Snow.Castle.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore\Snow.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.Mvc\Snow.AspNetCore.Mvc.csproj" />
     <ProjectReference Include="..\..\src\Snow.Domain\Snow.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Messaging\Snow.Messaging.csproj" />
     <ProjectReference Include="..\..\src\Snow.Guids\Snow.Guids.csproj" />
-    <ProjectReference Include="..\..\src\Snow.Threading\Snow.Threading.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Uow\Snow.Uow.csproj" />
+    <ProjectReference Include="..\..\src\Snow.DistributedLocking\Snow.DistributedLocking.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Settings\Snow.Settings.csproj" />
+    <ProjectReference Include="..\..\src\Snow.EntityFrameworkCore\Snow.EntityFrameworkCore.csproj" />
+
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.Authentication\Snow.AspNetCore.Authentication.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Http.Client\Snow.Http.Client.csproj" />
+    <ProjectReference Include="..\..\src\Snow.OpenApi\Snow.OpenApi.csproj" />
   </ItemGroup>
 
 </Project>

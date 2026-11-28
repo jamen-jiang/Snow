@@ -6,7 +6,7 @@ namespace Snow.Validation;
 public sealed class SnowValidationOptions
 {
     /// <summary>
-    /// 总开关, 关闭后 [SnowValidation] 不做任何检查
+    /// 总开关, 关闭后 [Validation] 不做任何检查
     /// </summary>
     public bool Enabled { get; set; } = true;
 

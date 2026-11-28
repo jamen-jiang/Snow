@@ -1,4 +1,5 @@
 using Snow.Domain.Entities;
+using Snow.Exceptions;
 
 namespace Snow.Domain.Repositories;
 

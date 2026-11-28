@@ -121,35 +121,19 @@ public class SnowAspNetCorePipelineTests
     }
 
     /// <summary>
-    /// 两段初始化按顺序执行: 第一段 → 收尾段; 收尾段重复调用幂等
+    /// 公开入口重复调用幂等: 三个阶段都只执行一次
     /// </summary>
     [Fact]
-    public async Task Lifecycle_RunsFirstPhaseThenPostPhase()
+    public async Task Initialize_CalledTwice_RunsAllPhasesOnce()
     {
         List<string> executed = [];
         ServiceProvider provider = CreateProvider(executed);
         SnowApplication application = provider.GetRequiredService<SnowApplication>();
 
-        await application.InitializeModulesAsync(provider);
-        Assert.Equal(["on"], executed);
+        await application.InitializeAsync(provider);
+        await application.InitializeAsync(provider);
 
-        await application.PostInitializeModulesAsync();
-        Assert.Equal(["on", "post"], executed);
-
-        await application.PostInitializeModulesAsync();
-        Assert.Equal(["on", "post"], executed);
-    }
-
-    /// <summary>
-    /// 第一段没跑就跑到收尾段要抛异常: 否则模块会以为骨架已经展开
-    /// </summary>
-    [Fact]
-    public async Task PostPhase_BeforeFirstPhase_Throws()
-    {
-        ServiceProvider provider = CreateProvider([]);
-        SnowApplication application = provider.GetRequiredService<SnowApplication>();
-
-        await Assert.ThrowsAsync<SnowInitializationException>(application.PostInitializeModulesAsync);
+        Assert.Equal(["pre", "on", "post"], executed);
     }
 
     /// <summary>

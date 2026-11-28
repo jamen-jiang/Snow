@@ -80,8 +80,15 @@ public sealed class SnowApplication
             }
         }
 
-        // 第二趟: 约定扫描 + 全部模块的中段。显式登记全部落地后再统一写入约定登记,
-        // 这样宿主与模块的显式登记稳定排在约定登记之前, TryAdd / Add / Replace 都能顶掉默认实现
+        // 第二趟: 全部模块的中段。约定扫描要等这里跑完 —— 各模块在 ConfigureServices 里用
+        // services.OnRegistered(...) 挂上拦截器登记动作, 扫描时才能问出「这个实现类型要挂哪些拦截器」(对齐 ABP)。
+        // 显式登记全部落地后再统一写入约定登记, 这样宿主与模块的显式登记稳定排在约定登记之前,
+        // TryAdd / Add / Replace 都能顶掉默认实现
+        foreach (SnowModuleDescriptor module in Modules)
+        {
+            await module.Instance.ConfigureServicesAsync(context);
+        }
+
         HashSet<Assembly> scannedAssemblies = new HashSet<Assembly>();
         List<ServiceCollectionExtensions.ConventionalRegistration> conventionalCandidates = new();
 
@@ -92,7 +99,7 @@ public sealed class SnowApplication
 
         if (scannedAssemblies.Add(coreAssembly))
         {
-            conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(coreAssembly));
+            conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(Services, coreAssembly));
         }
 
         foreach (SnowModuleDescriptor module in Modules)
@@ -104,13 +111,14 @@ public sealed class SnowApplication
                 {
                     if (scannedAssemblies.Add(assembly))
                     {
-                        conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(assembly));
+                        conventionalCandidates.AddRange(ServiceCollectionExtensions.CollectCandidates(Services, assembly));
                     }
                 }
             }
-
-            await module.Instance.ConfigureServicesAsync(context);
         }
+
+        // 外部约定登记器(如消息模块的处理器登记器)送进来的候选与程序集扫描候选合并
+        ServiceCollectionExtensions.AppendRegistrarCandidates(Services, conventionalCandidates);
 
         // 第三趟: 全部模块的后段。此时所有中段登记都在, 适合替换默认实现或补装饰器
         foreach (SnowModuleDescriptor module in Modules)
@@ -153,7 +161,7 @@ public sealed class SnowApplication
 
     /// <summary>
     /// 跑完整个应用初始化: 预初始化 → 第一段 → 收尾段
-    /// <para>非 Web 宿主直接用它一次跑完; Web 宿主由 <c>app.InitializeApplicationAsync()</c> 代跑, 那个扩展方法按同样顺序调下面三个方法。</para>
+    /// <para>非 Web 宿主直接用它一次跑完; Web 宿主由 <c>app.InitializeApplicationAsync()</c> 代跑, 同样只走这个公开入口。</para>
     /// </summary>
     /// <param name="serviceProvider">根服务提供者</param>
     /// <returns>表示初始化过程的任务</returns>
@@ -171,7 +179,7 @@ public sealed class SnowApplication
     /// </summary>
     /// <param name="serviceProvider">根服务提供者</param>
     /// <returns>表示初始化过程的任务</returns>
-    public async Task PreInitializeModulesAsync(IServiceProvider serviceProvider)
+    private async Task PreInitializeModulesAsync(IServiceProvider serviceProvider)
     {
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
@@ -199,7 +207,7 @@ public sealed class SnowApplication
     /// </summary>
     /// <param name="serviceProvider">根服务提供者</param>
     /// <returns>表示初始化过程的任务</returns>
-    public async Task InitializeModulesAsync(IServiceProvider serviceProvider)
+    private async Task InitializeModulesAsync(IServiceProvider serviceProvider)
     {
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
@@ -224,11 +232,11 @@ public sealed class SnowApplication
 
     /// <summary>
     /// 应用初始化收尾段: 逐个模块执行 <see cref="SnowModule.OnPostApplicationInitializationAsync"/>
-    /// <para>必须在第一段之后调用; Web 宿主的 <c>InitializeApplicationAsync()</c> 紧跟第一段调它,
+    /// <para>必须在第一段之后调用; <see cref="InitializeAsync"/> 紧跟第一段调它,
     /// 模块在这一段挂的中间件因此落在宿主手写的整条管道之后。重复调用幂等。</para>
     /// </summary>
     /// <returns>表示初始化过程的任务</returns>
-    public async Task PostInitializeModulesAsync()
+    private async Task PostInitializeModulesAsync()
     {
         if (!_initializedModules)
         {

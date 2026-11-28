@@ -1,11 +1,13 @@
+using Snow.DependencyInjection;
+
 namespace Snow.Uow;
 
 /// <summary>
 /// 工作单元: 一次业务操作的边界
-/// <para>提供三件事: 按工作单元共享的对象容器(<see cref="Items"/>, 例如同一个 DbContext)、
-/// 提交前后的回调链(保存数据 / 提交事务 / 提交后副作用), 以及回滚回调链。</para>
+/// <para>提供三件事: 数据库/事务 API 的登记与取用、提交后与回滚回调(用于释放上下文等收尾),
+/// 以及待派发的本地事件队列(提交时按顺序派发)。</para>
 /// </summary>
-public interface IUnitOfWork : IDisposable, IAsyncDisposable
+public interface IUnitOfWork : IDisposable, IAsyncDisposable, IServiceProviderAccessor
 {
     /// <summary>
     /// 工作单元标识
@@ -28,29 +30,56 @@ public interface IUnitOfWork : IDisposable, IAsyncDisposable
     UnitOfWorkOptions Options { get; }
 
     /// <summary>
-    /// 工作单元内的共享对象容器, 键由写入方约定
+    /// 外层工作单元; 最外层为 null
     /// </summary>
-    IDictionary<string, object?> Items { get; }
+    IUnitOfWork? Outer { get; }
 
     /// <summary>
-    /// 创建该工作单元的服务提供者
+    /// 是否已释放
     /// </summary>
-    IServiceProvider ServiceProvider { get; }
+    bool IsDisposed { get; }
 
     /// <summary>
-    /// 注册提交前回调(按注册顺序执行, 通常用于各 DbContext 的 SaveChanges)
+    /// 释放完成时触发: 工作单元管理器据此恢复环境工作单元并销毁本工作单元的 DI 作用域
     /// </summary>
-    /// <param name="callback">回调</param>
-    void OnPreComplete(Func<CancellationToken, Task> callback);
+    event EventHandler? Disposed;
 
     /// <summary>
-    /// 注册事务提交回调(如 DbContext 事务的 Commit)
+    /// 设置外层工作单元
     /// </summary>
-    /// <param name="callback">回调</param>
-    void OnCommit(Func<CancellationToken, Task> callback);
+    /// <param name="outer">外层工作单元; 可为 null</param>
+    void SetOuter(IUnitOfWork? outer);
 
     /// <summary>
-    /// 注册提交成功后的回调(已脱离事务, 适合派发领域事件、写缓存)
+    /// 初始化选项: 工作单元管理器创建后立即调用, 一个工作单元只能初始化一次
+    /// </summary>
+    /// <param name="options">选项</param>
+    void Initialize(UnitOfWorkOptions options);
+
+    /// <summary>
+    /// 按类型查找已登记的数据库/事务 API(同一个上下文类型只会登记一个)
+    /// </summary>
+    /// <typeparam name="T">API 类型</typeparam>
+    /// <returns>找到返回该实例, 否则 null</returns>
+    T? FindApi<T>() where T : class;
+
+    /// <summary>
+    /// 按类型取或登记数据库/事务 API: 同一类型只创建一次, 之后的调用直接拿回已有实例
+    /// </summary>
+    /// <typeparam name="T">API 类型</typeparam>
+    /// <param name="factory">尚未登记时用来创建实例的工厂</param>
+    /// <returns>API 实例</returns>
+    T GetOrAddApi<T>(Func<T> factory) where T : class;
+
+    /// <summary>
+    /// 保存所有支持保存的数据库 API(只刷数据, 不提交事务)
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    Task SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 注册提交成功后的回调(已脱离事务, 适合释放上下文、写缓存)
     /// </summary>
     /// <param name="callback">回调</param>
     void OnCompleted(Func<Task> callback);
@@ -75,8 +104,7 @@ public interface IUnitOfWork : IDisposable, IAsyncDisposable
         Predicate<UnitOfWorkEventRecord>? replacePredicate = null);
 
     /// <summary>
-    /// 提交: 依次执行提交前回调(刷库)、派发本地事件(派发后再刷一次库, 直到事件队列为空)、
-    /// 事务提交回调、提交后回调
+    /// 提交: 刷库、派发本地事件(派发后再刷一次库, 直到事件队列为空)、提交事务、执行提交后回调
     /// </summary>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>异步任务</returns>

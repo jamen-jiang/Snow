@@ -3,45 +3,32 @@ using Snow.Exceptions;
 namespace Snow.Settings;
 
 /// <summary>
-/// <see cref="ISettingDefinitionContext"/> 的默认实现: 一个按名字索引的字典
+/// 配置项定义上下文: 收集各模块声明的 <see cref="SettingDefinition"/>
 /// </summary>
-public class SettingDefinitionContext : ISettingDefinitionContext
+public sealed class SettingDefinitionContext
 {
     private readonly Dictionary<string, SettingDefinition> _definitions = new();
 
-    /// <summary>
-    /// 已登记的定义(按名字索引)
-    /// </summary>
+    /// <summary>已声明的配置项</summary>
     public IReadOnlyDictionary<string, SettingDefinition> Definitions => _definitions;
 
-    /// <inheritdoc />
-    public SettingDefinition? GetOrNull(string name)
-    {
-        return _definitions.GetValueOrDefault(name);
-    }
+    /// <summary>按名称取得定义; 不存在时返回 null</summary>
+    public SettingDefinition? GetOrNull(string name) => _definitions.GetValueOrDefault(name);
 
-    /// <inheritdoc />
+    /// <summary>添加定义; 重名时抛出异常</summary>
     public void Add(params SettingDefinition[] definitions)
     {
         ArgumentNullException.ThrowIfNull(definitions);
 
         foreach (SettingDefinition definition in definitions)
         {
-            if (_definitions.ContainsKey(definition.Name))
+            if (!_definitions.TryAdd(definition.Name, definition))
             {
                 throw new SnowException("该配置项已被定义过: " + definition.Name);
             }
-
-            _definitions[definition.Name] = definition;
         }
     }
 
-    /// <summary>
-    /// 删除一个定义(用于 <see cref="SnowSettingOptions.DeletedSettings"/>)
-    /// </summary>
-    /// <param name="name">配置项名</param>
-    public void Remove(string name)
-    {
-        _definitions.Remove(name);
-    }
+    /// <summary>移除定义</summary>
+    public void Remove(string name) => _definitions.Remove(name);
 }

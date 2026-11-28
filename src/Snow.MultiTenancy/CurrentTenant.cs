@@ -47,22 +47,4 @@ public sealed class CurrentTenant : ICurrentTenant
 
         return new DisposeAction(() => _accessor.Current = parent);
     }
-
-    /// <summary>
-    /// 空释放器: 多租户关闭时用它顶替, 免得多分配
-    /// </summary>
-    private sealed class NullDisposable : IDisposable
-    {
-        /// <summary>
-        /// 共享实例
-        /// </summary>
-        public static readonly NullDisposable Instance = new();
-
-        /// <summary>
-        /// 什么都不做
-        /// </summary>
-        public void Dispose()
-        {
-        }
-    }
 }

@@ -6,22 +6,15 @@ using Snow.Security.Encryption;
 namespace Snow.Settings;
 
 /// <summary>
-/// <see cref="ISettingEncryptionService"/> 的默认实现: 交给 <see cref="IStringEncryptionService"/>;
-/// 解密失败时按 <see cref="SnowSettingOptions.ReturnOriginalValueIfDecryptFailed"/> 决定返回原文还是空串
+/// 配置值解密器: 解密失败时按选项决定返回原文还是空串
 /// </summary>
 [TransientService]
-public class SettingEncryptionService : ISettingEncryptionService
+internal sealed class SettingEncryptionService
 {
     private readonly IStringEncryptionService _encryptionService;
     private readonly SnowSettingOptions _options;
     private readonly ILogger<SettingEncryptionService> _logger;
 
-    /// <summary>
-    /// 构造器
-    /// </summary>
-    /// <param name="encryptionService">文本加解密</param>
-    /// <param name="options">配置项选项</param>
-    /// <param name="logger">日志</param>
     public SettingEncryptionService(
         IStringEncryptionService encryptionService,
         IOptions<SnowSettingOptions> options,
@@ -36,20 +29,7 @@ public class SettingEncryptionService : ISettingEncryptionService
         _logger = logger;
     }
 
-    /// <inheritdoc />
-    public string? Encrypt(SettingDefinition setting, string? plainValue)
-    {
-        ArgumentNullException.ThrowIfNull(setting);
-
-        if (plainValue is null)
-        {
-            return null;
-        }
-
-        return _encryptionService.Encrypt(plainValue);
-    }
-
-    /// <inheritdoc />
+    /// <summary>解密配置值; null 直接返回</summary>
     public string? Decrypt(SettingDefinition setting, string? cipherValue)
     {
         ArgumentNullException.ThrowIfNull(setting);

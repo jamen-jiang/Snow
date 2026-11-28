@@ -24,6 +24,9 @@ public sealed class SnowMessagingModule : SnowModule
             .Distinct()
             .ToArray();
 
+        // 处理器登记器: 让处理器走约定注册管道, 模块挂的拦截器(如工作单元)才能作用到处理器上
+        context.Services.AddConventionalRegistrar(new CommandHandlerConventionalRegistrar());
+
         ServiceRegistrar.AddMessagingClassesWithTimeout(context.Services, assemblies);
     }
 }

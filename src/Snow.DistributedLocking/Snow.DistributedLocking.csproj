@@ -7,13 +7,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Snow.DistributedLocking</RootNamespace>
-    <Description>分布式锁: 契约 + 默认的进程内实现 + Redisson 式看门狗; Redis 后端见 Snow.DistributedLocking.Redis</Description>
+    <Description>分布式锁(与 ABP 的 Volo.Abp.DistributedLocking 同形): 契约、选项、key 归一化、进程内 KeyedLock 实现与空实现, 以及基于 Medallion 的分布式实现</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Snow.DistributedLocking.Redis" />
+    <PackageReference Include="DistributedLock.Core" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />
+    <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
   </ItemGroup>
 </Project>

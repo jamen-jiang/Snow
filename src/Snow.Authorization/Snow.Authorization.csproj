@@ -9,8 +9,9 @@
     <RootNamespace>Snow.Authorization</RootNamespace>
     <Description>授权: 权限定义树、权限校验器、多值提供器与动态策略提供器</Description>
   </PropertyGroup>
+
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authorization" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />

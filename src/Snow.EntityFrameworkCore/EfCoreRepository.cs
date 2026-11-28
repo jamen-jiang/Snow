@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Snow.Domain.Entities;
 using Snow.EntityFrameworkCore;
+using Snow.Exceptions;
 
 namespace Snow.Domain.Repositories.EntityFrameworkCore;
 

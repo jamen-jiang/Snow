@@ -26,7 +26,7 @@ namespace Snow.AspNetCore;
 /// <c>app.UseXxx()</c>(链路标识、路由、认证、授权以及各能力包的 UseSnowXxx), 最后调
 /// <c>app.UseSnowEndpoints()</c> 映射端点 —— 与 ABP 模板的 <c>await app.InitializeApplicationAsync()</c> 同理。</para>
 /// <para>本模块只负责: 上下文访问器、对象访问器、端点选项容器与异常状态码选项容器。</para>
-/// <para>依赖 <see cref="SnowSecurityModule"/>: 当前主体以 <c>HttpContext.User</c> 为准, 需要它的上下文访问器。</para>
+/// <para>依赖 <see cref="SnowSecurityModule"/>: 当前主体以 <c>HttpContext.User</c> 为准, 本包提供 HTTP 上下文访问器与 Web 端主体实现 <c>HttpContextCurrentPrincipalAccessor</c>。</para>
 /// <para>依赖列表参照 ABP 的 <c>AbpAspNetCoreModule</c>: 安全、授权、工作单元在这里。
 /// 其余能力模块(缓存 / 分布式锁 / 后台作业 / 事件总线 / 消息 / 邮件 / FTP / HTTP 客户端)只随包提供契约,
 /// 由宿主在自己的模块里按需 <c>DependsOn</c> —— 与 ABP 把 Caching / EventBus / BackgroundJobs 留给宿主声明同理。
@@ -69,6 +69,10 @@ public sealed class SnowAspNetCoreModule : SnowModule
 
         // 上下文访问器是 Web 层所有能力的地基(当前用户、当前请求)
         context.Services.AddHttpContextAccessor();
+
+        // 授权服务: 策略提供器/处理器由 Snow.Authorization 提供, 但 AddAuthorization 属于 ASP.NET Core 集成件
+        // (对齐 ABP: 该调用在 AbpAspNetCoreModule, 不在 Volo.Abp.Authorization)
+        context.Services.AddAuthorization();
 
         // 由 InitializeApplicationAsync() 填值, 单例里也能取到当前应用对象
         context.Services.AddObjectAccessor<IApplicationBuilder>();

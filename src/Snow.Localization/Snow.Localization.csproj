@@ -9,9 +9,6 @@
     <Description>本地化: 资源定义、IStringLocalizer 实现与按请求文化解析(对应 ABP 的 Volo.Abp.Localization)</Description>
   </PropertyGroup>
 
-  <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />

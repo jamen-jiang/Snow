@@ -23,6 +23,11 @@ public static class AssemblyTypeCache
         return Cache.GetOrAdd(assembly, static asm => LoadTypes(asm));
     }
 
+    /// <summary>
+    /// 真正枚举程序集里的类型; 部分类型加载失败时只取成功加载的那部分
+    /// </summary>
+    /// <param name="assembly">程序集</param>
+    /// <returns>类型数组</returns>
     private static Type[] LoadTypes(Assembly assembly)
     {
         try

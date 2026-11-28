@@ -12,6 +12,7 @@ using Snow.AspNetCore.Filters;
 using Snow.DependencyInjection;
 using Snow.Reflection;
 using Snow.Validation;
+using ValidationAttribute = Snow.Validation.ValidationAttribute;
 
 namespace Snow.AspNetCore.Mvc.Validation;
 
@@ -21,7 +22,7 @@ namespace Snow.AspNetCore.Mvc.Validation;
 /// 与 <c>Volo.Abp.AspNetCore.Mvc.Validation.AbpValidationActionFilter</c> 同构。</para>
 /// <para>控制流与 ABP 逐段对应: <c>IsControllerAction &amp;&amp; HasObjectResult</c> 门控 → AutoModelValidation 开关 →
 /// 三处 <see cref="DisableValidationAttribute"/> 判断(方法 / 控制器类型 / 改写后的方法) → <see cref="IModelStateValidator"/> 校验模型状态 →
-/// <c>context.Controller is IValidationEnabled</c> 时 <see cref="ValidateActionArgumentsAsync"/> 校验参数(有错抛异常) → next。</para>
+/// 控制器类型或 Action 方法上标了 <see cref="ValidationAttribute"/> 时 <see cref="ValidateActionArgumentsAsync"/> 校验参数(有错抛异常) → next。</para>
 /// <para>与 ABP 的差异(Snow 侧基建不同所致): 都用 <c>IMethodInvocationValidator</c> 校验方法参数, 区别在底层用 <see cref="ISnowObjectValidator"/>
 /// 聚合 <see cref="ValidationResult"/> 后抛 <see cref="SnowValidationException"/>(ABP 抛 <c>AbpValidationException</c>), 异常信封与状态码由异常处理统一产出。</para>
 /// <para>排在管线最前(Order = -1000), 使校验失败先于业务代码与结果包装。</para>
@@ -74,7 +75,7 @@ public class SnowValidationActionFilter : IAsyncActionFilter, ISnowFilter
 
         context.GetRequiredService<IModelStateValidator>().Validate(context.ModelState);
 
-        if (context.Controller is IValidationEnabled)
+        if (HasValidationAttribute(context, effectiveMethod))
         {
             await ValidateActionArgumentsAsync(context, effectiveMethod);
         }
@@ -100,6 +101,23 @@ public class SnowValidationActionFilter : IAsyncActionFilter, ISnowFilter
             x.Name == baseMethod.Name &&
             x.ReturnType == baseMethod.ReturnType &&
             x.GetParameters().Select(p => p.ToString()).SequenceEqual(baseMethod.GetParameters().Select(p => p.ToString())));
+    }
+
+    /// <summary>
+    /// 控制器类型或 Action 方法上是否标了 <see cref="ValidationAttribute"/>: 标了才校验参数
+    /// </summary>
+    /// <param name="context">动作执行上下文</param>
+    /// <param name="effectiveMethod">解析后的方法(可为 null, 回退到描述符方法)</param>
+    /// <returns>需要校验 Action 参数时返回 <see langword="true"/></returns>
+    private static bool HasValidationAttribute(ActionExecutingContext context, MethodInfo? effectiveMethod)
+    {
+        if (ReflectionHelper.GetSingleAttributeOfMemberOrDeclaringTypeOrDefault<ValidationAttribute>(context.Controller.GetType()) is not null)
+        {
+            return true;
+        }
+
+        MethodInfo methodInfo = effectiveMethod ?? context.ActionDescriptor.GetMethodInfo();
+        return ReflectionHelper.GetSingleAttributeOfMemberOrDeclaringTypeOrDefault<ValidationAttribute>(methodInfo) is not null;
     }
 
     /// <summary>

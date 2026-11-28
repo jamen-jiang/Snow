@@ -8,32 +8,18 @@ namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// 服务集合的通用扩展(对应 ABP 的 <c>ServiceCollectionCommonExtensions</c>)。
-/// <para>覆盖 ABP 该文件里 Snow 现有基础设施可支撑的全部方法: 是否已登记、单例实例读取、
-/// 从工厂/默认方式构建容器、注册阶段之后的服务解析(含 Lazy 变体)、以及取已登记的服务提供者。</para>
+/// <para>只保留 Snow 真正需要的三件事: 单例实例读取、按工厂/默认方式构建容器、
+/// 登记阶段取一次选项快照。ABP 里那些「登记期从集合反查服务」的成员
+/// (IsAdded / GetService / GetRequiredService / GetServiceLazy / GetRequiredServiceLazy /
+/// GetServiceProviderOrNull)在 Snow 全仓零调用, 已删除。</para>
 /// </summary>
 public static class ServiceCollectionCommonExtensions
 {
-    /// <summary>
-    /// 该服务类型是否已登记(对应 ABP 的 IsAdded&lt;T&gt;)
-    /// </summary>
-    public static bool IsAdded<T>(this IServiceCollection services)
-    {
-        return services.IsAdded(typeof(T));
-    }
-
-    /// <summary>
-    /// 该服务类型是否已登记(对应 ABP 的 IsAdded(Type))
-    /// </summary>
-    public static bool IsAdded(this IServiceCollection services, Type type)
-    {
-        return services.Any(d => d.ServiceType == type);
-    }
-
     // GetTypeFinder 暂未移植:
     //   ABP 版为 public static ITypeFinder GetTypeFinder(this IServiceCollection services)
     //       => services.GetSingletonInstance<ITypeFinder>();
     //   Snow 目前没有 Snow.Reflection.ITypeFinder 抽象(也没有默认实现),
-    //   补上 ITypeFinder 后再按上面一行原样加回即可。其余方法不依赖该抽象, 已全部移植。
+    //   补上 ITypeFinder 后再按上面一行原样加回即可。
 
     /// <summary>
     /// 取指定类型的单例, 不存在返回 null(对应 ABP 的 GetSingletonInstanceOrNull)。
@@ -111,94 +97,6 @@ public static class ServiceCollectionCommonExtensions
         var builder = serviceProviderFactory.CreateBuilder(services);
         builderAction?.Invoke(builder);
         return serviceProviderFactory.CreateServiceProvider(builder);
-    }
-
-    /// <summary>
-    /// 在依赖注入登记阶段结束后, 用已创建的应用根服务提供者解析一个服务, 取不到返回 null。
-    /// <para>对应 ABP 的 GetService&lt;T&gt;(internal): ABP 解析 IAbpApplication.ServiceProvider,
-    /// Snow 对齐为解析 SnowApplication.ServiceProvider。</para>
-    /// </summary>
-    internal static T? GetService<T>(this IServiceCollection services)
-    {
-        return services
-            .GetSingletonInstance<SnowApplication>()
-            .ServiceProvider
-            .GetService<T>();
-    }
-
-    /// <summary>
-    /// 在依赖注入登记阶段结束后, 用已创建的应用根服务提供者解析一个服务, 取不到返回 null。
-    /// </summary>
-    internal static object? GetService(this IServiceCollection services, Type type)
-    {
-        return services
-            .GetSingletonInstance<SnowApplication>()
-            .ServiceProvider
-            .GetService(type);
-    }
-
-    /// <summary>
-    /// 在依赖注入登记阶段结束后, 用已创建的应用根服务提供者解析一个服务, 未登记则抛异常
-    /// (对应 ABP 的 GetRequiredService&lt;T&gt;)。
-    /// </summary>
-    public static T GetRequiredService<T>(this IServiceCollection services) where T : notnull
-    {
-        return services
-            .GetSingletonInstance<SnowApplication>()
-            .ServiceProvider
-            .GetRequiredService<T>();
-    }
-
-    /// <summary>
-    /// 在依赖注入登记阶段结束后, 用已创建的应用根服务提供者解析一个服务, 未登记则抛异常
-    /// (对应 ABP 的 GetRequiredService(Type))。
-    /// </summary>
-    public static object GetRequiredService(this IServiceCollection services, Type type)
-    {
-        return services
-            .GetSingletonInstance<SnowApplication>()
-            .ServiceProvider
-            .GetRequiredService(type);
-    }
-
-    /// <summary>
-    /// 返回一个延迟解析服务的 Lazy(对应 ABP 的 GetServiceLazy&lt;T&gt;): 首次取值时才开始解析
-    /// </summary>
-    public static Lazy<T?> GetServiceLazy<T>(this IServiceCollection services)
-    {
-        return new Lazy<T?>(() => services.GetService<T>(), true);
-    }
-
-    /// <summary>
-    /// 返回一个延迟解析服务的 Lazy(对应 ABP 的 GetServiceLazy(Type))
-    /// </summary>
-    public static Lazy<object?> GetServiceLazy(this IServiceCollection services, Type type)
-    {
-        return new Lazy<object?>(() => services.GetService(type), true);
-    }
-
-    /// <summary>
-    /// 返回一个延迟解析服务的 Lazy, 未登记则首次取值时抛异常(对应 ABP 的 GetRequiredServiceLazy&lt;T&gt;)
-    /// </summary>
-    public static Lazy<T> GetRequiredServiceLazy<T>(this IServiceCollection services) where T : notnull
-    {
-        return new Lazy<T>(() => services.GetRequiredService<T>(), true);
-    }
-
-    /// <summary>
-    /// 返回一个延迟解析服务的 Lazy, 未登记则首次取值时抛异常(对应 ABP 的 GetRequiredServiceLazy(Type))
-    /// </summary>
-    public static Lazy<object> GetRequiredServiceLazy(this IServiceCollection services, Type type)
-    {
-        return new Lazy<object>(() => services.GetRequiredService(type), true);
-    }
-
-    /// <summary>
-    /// 取已登记在集合里的服务提供者(对象访问器), 没有返回 null(对应 ABP 的 GetServiceProviderOrNull)。
-    /// </summary>
-    public static IServiceProvider? GetServiceProviderOrNull(this IServiceCollection services)
-    {
-        return services.GetObjectOrNull<IServiceProvider>();
     }
 
     /// <summary>

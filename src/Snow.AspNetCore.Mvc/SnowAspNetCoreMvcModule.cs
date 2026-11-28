@@ -12,10 +12,9 @@ using Snow.Validation;
 namespace Snow.AspNetCore.Mvc;
 
 /// <summary>
-/// MVC 与自动 API 模块
-/// <para>对应 ABP 的 <c>AbpAspNetCoreMvcModule</c>。三件事: 给远程服务控制器按约定算路由与动词(应用模型约定)、
-/// 统一异常响应(全局过滤器)、统一参数与模型校验。</para>
-/// <para>依赖 <see cref="SnowAspNetCoreModule"/>: 自动 API 跑在它提供的 HTTP 上下文之上。</para>
+/// MVC 模块
+/// <para>对应 ABP 的 <c>AbpAspNetCoreMvcModule</c>。两件事: 统一异常响应(全局过滤器)、统一参数与模型校验。</para>
+/// <para>依赖 <see cref="SnowAspNetCoreModule"/>: MVC 跑在它提供的 HTTP 上下文之上。</para>
 /// <para>依赖 <see cref="SnowValidationModule"/>: 自动校验过滤器用 <see cref="ISnowObjectValidator"/> 跑 DataAnnotations 与 FluentValidation,
 /// 与 ABP 把 <c>AbpValidationActionFilter</c> 放在 Volo.Abp.AspNetCore.Mvc 里同形 —— 校验只有一个包, 不需要 AspNetCore 后缀的校验包。</para>
 /// <para>端点与 ABP 一样由模块声明(AbpEndpointRouterOptions.EndpointConfigureActions 同形的 SnowEndpointRouterOptions),
@@ -40,7 +39,7 @@ public sealed class SnowAspNetCoreMvcModule : SnowModule
         mvcCoreBuilder.AddSnowJson();
 
         IMvcBuilder builder = context.Services.AddControllers();
-        context.Services.AddSnowOptions<MvcOptions>()
+        context.Services.AddOptions<MvcOptions>()
             .Configure<IServiceProvider>((mvcOptions, serviceProvider) =>
             {
                 mvcOptions.AddSnow(serviceProvider);

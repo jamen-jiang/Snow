@@ -9,9 +9,7 @@
     <RootNamespace>Snow.Settings</RootNamespace>
     <Description>配置项系统: 定义、取值提供器、加密与读取(对应 ABP 的 Volo.Abp.Settings)</Description>
   </PropertyGroup>
-  <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />
     <ProjectReference Include="../Snow.Security/Snow.Security.csproj" />

@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
+using Snow.AspNetCore.ExceptionHandling;
 using Snow.Authorization;
 using Snow.DependencyInjection;
 

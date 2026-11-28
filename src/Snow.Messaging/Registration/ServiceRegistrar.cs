@@ -119,9 +119,23 @@ public static class ServiceRegistrar
             }
         }
 
+        // 具体处理器先交给约定登记器: 处理器由约定管道登记, 模块挂的拦截器(如工作单元)才问得到它
+        var conventionalConcretions = new HashSet<Type>();
+
+        foreach (var type in concretions)
+        {
+            if (services.TryAddConventionalType(type))
+            {
+                conventionalConcretions.Add(type);
+            }
+        }
+
         foreach (var @interface in interfaces)
         {
-            var exactMatches = concretions.Where(x => x.CanBeCastTo(@interface)).ToList();
+            var exactMatches = concretions
+                .Where(x => x.CanBeCastTo(@interface))
+                .Where(x => !conventionalConcretions.Contains(x))
+                .ToList();
             if (addIfAlreadyExists)
             {
                 foreach (var type in exactMatches)

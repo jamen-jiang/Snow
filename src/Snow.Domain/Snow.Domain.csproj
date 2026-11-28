@@ -11,9 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\Snow.EventBus\Snow.EventBus.csproj" />
-    <ProjectReference Include="..\Snow.ExceptionHandling\Snow.ExceptionHandling.csproj" />
     <ProjectReference Include="..\Snow.Guids\Snow.Guids.csproj" />
-    <ProjectReference Include="..\Snow.Threading\Snow.Threading.csproj" />
     <ProjectReference Include="..\Snow.MultiTenancy\Snow.MultiTenancy.csproj" />
     <ProjectReference Include="..\Snow.Timing\Snow.Timing.csproj" />
   </ItemGroup>

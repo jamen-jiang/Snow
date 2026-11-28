@@ -80,22 +80,4 @@ public class DataFilter<TFilter> : IDataFilter<TFilter>
             ? state.Clone()
             : new DataFilterState(true);
     }
-
-    /// <summary>
-    /// 空释放器: 状态本来就是想要的时候用它, 避免多分配一次
-    /// </summary>
-    private sealed class NullDisposable : IDisposable
-    {
-        /// <summary>
-        /// 共享实例
-        /// </summary>
-        public static readonly NullDisposable Instance = new();
-
-        /// <summary>
-        /// 什么都不做
-        /// </summary>
-        public void Dispose()
-        {
-        }
-    }
 }

@@ -11,16 +11,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.Localization.Abstractions" />
     <PackageReference Include="System.Linq.Dynamic.Core" />
     <PackageReference Include="DynamicExpresso.Core" />
-  </ItemGroup>
-  <ItemGroup>
-    <!-- AOP 拦截契约(AspectContext / AspectDelegate / SnowInterceptorAttribute / IAopProxyFactory)就在本程序集的
-         Snow.Aop 命名空间里, 全是公开类型, 代理实现 Snow.Aop.Castle 不需要任何 internal 特权 -->
   </ItemGroup>
 </Project>

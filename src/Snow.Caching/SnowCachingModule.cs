@@ -15,6 +15,9 @@ public sealed class SnowCachingModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // 对齐 ABP: 缓存拦截器由登记器按 [Cacheable] / [CacheEvict] 挂上去
+        context.Services.OnRegistered(SnowCachingInterceptorRegistrar.RegisterIfNeeded);
+
         // 进程内兜底: 宿主已注册 IDistributedCache(如 Redis)时 TryAdd 不会覆盖
         context.Services.AddMemoryCache();
         context.Services.AddDistributedMemoryCache();

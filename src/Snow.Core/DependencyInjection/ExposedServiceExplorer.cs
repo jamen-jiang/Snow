@@ -3,7 +3,7 @@ namespace Snow.DependencyInjection;
 /// <summary>
 /// 暴露服务类型解析器:优先读取 ExposeServicesAttribute,否则按默认规则推断
 /// </summary>
-public static class ExposedServiceExplorer
+internal static class ExposedServiceExplorer
 {
     private static readonly ExposeServicesAttribute DefaultExposeServices = new ExposeServicesAttribute
     {
@@ -18,12 +18,12 @@ public static class ExposedServiceExplorer
     /// <returns>服务类型集合</returns>
     public static Type[] GetExposedServices(Type type)
     {
-        IExposedServiceTypesProvider? provider = type
-            .GetCustomAttributes(typeof(IExposedServiceTypesProvider), true)
-            .Cast<IExposedServiceTypesProvider>()
+        ExposeServicesAttribute? provider = type
+            .GetCustomAttributes(typeof(ExposeServicesAttribute), true)
+            .Cast<ExposeServicesAttribute>()
             .FirstOrDefault();
 
-        IExposedServiceTypesProvider effectiveProvider = provider ?? DefaultExposeServices;
+        ExposeServicesAttribute effectiveProvider = provider ?? DefaultExposeServices;
         return effectiveProvider.GetExposedServiceTypes(type);
     }
 

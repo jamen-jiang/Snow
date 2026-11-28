@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <Import Project="$(MSBuildThisFileDirectory)..\..\common.props" />
 
@@ -6,12 +6,15 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+	<AssemblyName>Snow.AspNetCore.RateLimiting</AssemblyName>
+	<PackageId>Snow.AspNetCore.RateLimiting</PackageId>
+	<OutputType>Library</OutputType>
+	<IsPackable>true</IsPackable>
+	<NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+	<!-- 能力包只含模块与扩展方法, 不含静态资源; 关掉 StaticWebAssets 以免 SDK 报 scoped css bundle 缺端点 -->
+	<StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
     <Description>限流: 微软自带 RateLimiting 中间件的模块化登记, 无自有选项</Description>
   </PropertyGroup>
-
-  <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />

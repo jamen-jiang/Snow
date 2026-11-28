@@ -24,7 +24,7 @@ public static class MvcCoreBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.Services
-            .AddSnowOptions<JsonOptions>()
+            .AddOptions<JsonOptions>()
             .Configure<IServiceProvider>((options, rootServiceProvider) =>
             {
                 options.JsonSerializerOptions.ReadCommentHandling = JsonCommentHandling.Skip;

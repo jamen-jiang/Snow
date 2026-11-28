@@ -7,7 +7,7 @@ namespace Snow.Validation.FluentValidation;
 
 /// <summary>
 /// 校验管线: 先跑 DataAnnotations 特性, 再跑 FluentValidation 校验器, 错误合成一份
-/// <para>这是本框架里 <see cref="ISnowObjectValidator"/> 的最终实现, 所以 [SnowValidation] 拦截器
+/// <para>这是本框架里 <see cref="ISnowObjectValidator"/> 的最终实现, 所以 [Validation] 拦截器
 /// 与应用代码显式调用校验器都会同时覆盖两套规则, 不需要改调用处。</para>
 /// </summary>
 public sealed class FluentValidationObjectValidator : ISnowObjectValidator

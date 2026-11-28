@@ -3,9 +3,7 @@ using System.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Snow.Authorization;
-using Snow.Data;
 using Snow.DependencyInjection;
-using Snow.Domain.Entities;
 using Snow.Exceptions;
 using Snow.Validation;
 

@@ -95,7 +95,7 @@ public sealed class BackgroundJobWorker : BackgroundService
     /// <returns>下一轮之前的等待时长</returns>
     private async Task<TimeSpan> RunOnceAsync(CancellationToken cancellationToken)
     {
-        ISnowDistributedLock? distributedLock = _options.UseDistributedLock ? _serviceProvider.GetService<ISnowDistributedLock>() : null;
+        IDistributedLock? distributedLock = _options.UseDistributedLock ? _serviceProvider.GetService<IDistributedLock>() : null;
 
         if (distributedLock is null)
         {
@@ -104,8 +104,12 @@ public sealed class BackgroundJobWorker : BackgroundService
             return _options.PollInterval;
         }
 
-        await using ISnowDistributedLockHandle? handle = await distributedLock
-            .TryAcquireAsync(_options.DistributedLockName, TimeSpan.Zero, cancellationToken: cancellationToken)
+        await using IDistributedLockHandle? handle = await distributedLock
+            .TryAcquireAsync(
+                _options.DistributedLockName,
+                TimeSpan.Zero,
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
         // 没抢到锁说明别的实例在跑: 退避一会儿再来, 否则这里会变成热循环

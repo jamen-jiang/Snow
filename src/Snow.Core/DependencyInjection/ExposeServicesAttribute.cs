@@ -4,7 +4,7 @@ namespace Snow.DependencyInjection;
 /// 指定实现类型对外暴露的服务类型,覆盖默认的"以 I 开头的接口加自身"(对应 ABP ExposeServicesAttribute)
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
-public sealed class ExposeServicesAttribute : Attribute, IExposedServiceTypesProvider
+public sealed class ExposeServicesAttribute : Attribute
 {
     /// <summary>
     /// 显式指定的服务类型

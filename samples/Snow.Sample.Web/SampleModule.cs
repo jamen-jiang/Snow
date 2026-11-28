@@ -1,21 +1,25 @@
 using Elsa.Extensions;
 using Hangfire;
 using Hangfire.Storage.SQLite;
-using Snow.Aop.Castle;
+using Snow.Castle;
 using Snow.AspNetCore;
 using Snow.AspNetCore.MultiTenancy;
 using Snow.AspNetCore.Mvc;
 using Snow.AspNetCore.RateLimiting;
 using Snow.AspNetCore.Serilog;
 using Snow.AspNetCore.SignalR;
-using Snow.Authentication;
+using Snow.AspNetCore.Authentication;
 using Snow.Authorization;
 using Snow.BackgroundJobs;
 using Snow.BackgroundJobs.Hangfire;
 using Snow.Caching.StackExchangeRedis;
 using Snow.Validation;
 using Snow.Data;
+using Medallion.Threading;
+using Medallion.Threading.Redis;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.DistributedLocking;
+using StackExchange.Redis;
 using Snow.Emailing.MailKit;
 using Snow.EntityFrameworkCore;
 using Snow.EventBus;
@@ -44,7 +48,7 @@ namespace Snow.Sample.Web;
 /// <para>按 Snow 约定, 管道由启动模块在 <see cref="OnApplicationInitialization"/> 里手写。</para>
 /// </summary>
 [DependsOn(
-    typeof(SnowAopModule),
+    typeof(SnowCastleCoreModule),
     typeof(SnowAspNetCoreModule),
     typeof(SnowAspNetCoreMultiTenancyModule),
     typeof(SnowAspNetCoreMvcModule),
@@ -57,7 +61,6 @@ namespace Snow.Sample.Web;
     typeof(SnowHangfireModule),
     typeof(SnowCachingStackExchangeRedisModule),
     typeof(SnowDataModule),
-    typeof(SnowDistributedLockRedisModule),
     typeof(SnowEmailingMailKitModule),
     typeof(SnowEntityFrameworkCoreModule),
     typeof(SnowEntityFrameworkCoreMySqlModule),
@@ -162,6 +165,10 @@ public sealed class SampleModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        // 分布式锁: 与 ABP 一样, 框架包不带任何远程后端 —— 宿主自己引用 DistributedLock.Redis 并注册锁提供者。
+        context.Services.TryAddSingleton<IDistributedLockProvider>(provider =>
+            new RedisDistributedSynchronizationProvider(provider.GetRequiredService<IConnectionMultiplexer>().GetDatabase()));
+
         // 认证选项不读配置节由模块自己决定, 这里按示例宿主的习惯显式绑一节
         Configure<SnowAuthenticationOptions>(context.Configuration.GetSection("Authentication"));
 
@@ -235,9 +242,6 @@ public sealed class SampleModule : SnowModule
         // 2) 请求级日志上下文增强: 尽量靠外, 让后续中间件与业务日志都带上 用户 / 租户 / 链路;
         //    要能读到链路标识, 所以排在 UseSnowCorrelationId 之内
         app.UseSnowSerilogEnrichers();
-
-        // 3) 登录态异常转 401/403: 必须在 UseAuthentication() 之前, 才能包住 JwtBearer 认证阶段抛出的令牌异常
-        app.UseSnowTokenExceptionHandling();
 
         // 4) 路由: 后续限流与端点映射都依赖它先把 endpoint 解析出来
         app.UseRouting();

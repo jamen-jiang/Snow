@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Snow.Authorization.Permissions;
@@ -25,7 +24,7 @@ public sealed class SnowAuthorizationModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        context.Services.AddAuthorization();
+        // 授权服务(AddAuthorization)由 Web 模块登记: 它属于 ASP.NET Core 集成件, 与 ABP 把该调用放在 AbpAspNetCoreModule 同理。
 
         // 动态策略提供器(SnowAuthorizationPolicyProvider 标了 [SingletonService(ReplaceServices = true)])
         // 由约定注册顶掉框架自带的 DefaultAuthorizationPolicyProvider, 这里不用再登记。

@@ -14,7 +14,7 @@
   <!-- 全模块示例: 引用框架全部 src 工程(含每一个能力模块与各实现提供者) -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Snow\Snow.csproj" />
-    <ProjectReference Include="..\..\src\Snow.Aop.Castle\Snow.Aop.Castle.csproj" />
+    <ProjectReference Include="..\..\src\Snow.Castle\Snow.Castle.csproj" />
     <ProjectReference Include="..\..\src\Snow.Application\Snow.Application.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore\Snow.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.MultiTenancy\Snow.AspNetCore.MultiTenancy.csproj" />
@@ -22,7 +22,7 @@
     <ProjectReference Include="..\..\src\Snow.AspNetCore.RateLimiting\Snow.AspNetCore.RateLimiting.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.Serilog\Snow.AspNetCore.Serilog.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.SignalR\Snow.AspNetCore.SignalR.csproj" />
-    <ProjectReference Include="..\..\src\Snow.Authentication\Snow.Authentication.csproj" />
+    <ProjectReference Include="..\..\src\Snow.AspNetCore.Authentication\Snow.AspNetCore.Authentication.csproj" />
     <ProjectReference Include="..\..\src\Snow.Authorization\Snow.Authorization.csproj" />
     <ProjectReference Include="..\..\src\Snow.BackgroundJobs\Snow.BackgroundJobs.csproj" />
     <ProjectReference Include="..\..\src\Snow.BackgroundJobs.Hangfire\Snow.BackgroundJobs.Hangfire.csproj" />
@@ -31,7 +31,7 @@
     <ProjectReference Include="..\..\src\Snow.Core\Snow.Core.csproj" />
     <ProjectReference Include="..\..\src\Snow.Data\Snow.Data.csproj" />
     <ProjectReference Include="..\..\src\Snow.DistributedLocking\Snow.DistributedLocking.csproj" />
-    <ProjectReference Include="..\..\src\Snow.DistributedLocking.Redis\Snow.DistributedLocking.Redis.csproj" />
+    <PackageReference Include="DistributedLock.Redis" />
     <ProjectReference Include="..\..\src\Snow.Domain\Snow.Domain.csproj" />
     <ProjectReference Include="..\..\src\Snow.Emailing\Snow.Emailing.csproj" />
     <ProjectReference Include="..\..\src\Snow.Emailing.MailKit\Snow.Emailing.MailKit.csproj" />

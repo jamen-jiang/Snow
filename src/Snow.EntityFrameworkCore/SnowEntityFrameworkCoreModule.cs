@@ -75,10 +75,10 @@ public sealed class SnowEntityFrameworkCoreModule : SnowModule
             object options = DbContextOptionsFactory.Create(serviceProvider, dbContextType);
             object instance = ActivatorUtilities.CreateInstance(serviceProvider, dbContextType, options);
 
-            // 把应用服务提供者交给上下文: 审计要取 ICurrentUser, 领域事件要取 IEventBus
+            // 把上下文需要的应用服务交给它: 审计要取 ICurrentUser, 领域事件要取 IEventBus
             if (instance is SnowDbContext snowDbContext)
             {
-                snowDbContext.ApplicationServiceProvider = serviceProvider;
+                snowDbContext.Initialize(serviceProvider);
             }
 
             return instance;

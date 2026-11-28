@@ -9,11 +9,11 @@ namespace Snow.EntityFrameworkCore;
 public static class SnowDbContextOptionsPostgreSqlExtensions
 {
     /// <summary>
-    /// 使用 PostgreSQL 作为数据库提供程序
+    /// 使用 PostgreSQL 作为数据库提供程序(命名对齐 EF Core 的 <c>UseNpgsql</c>)
     /// </summary>
     /// <param name="options">上下文配置集合</param>
     /// <param name="postgreSqlOptionsAction">PostgreSQL 细项配置</param>
-    public static void UsePostgreSql(
+    public static void UseNpgsql(
         this SnowDbContextOptions options,
         Action<NpgsqlDbContextOptionsBuilder>? postgreSqlOptionsAction = null)
     {

@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Snow/Snow.csproj" />
-    <Project Path="src/Snow.Aop.Castle/Snow.Aop.Castle.csproj" />
     <Project Path="src/Snow.Application/Snow.Application.csproj" />
     <Project Path="src/Snow.AspNetCore/Snow.AspNetCore.csproj" />
     <Project Path="src/Snow.AspNetCore.MultiTenancy/Snow.AspNetCore.MultiTenancy.csproj" />
@@ -9,16 +8,18 @@
     <Project Path="src/Snow.AspNetCore.RateLimiting/Snow.AspNetCore.RateLimiting.csproj" />
     <Project Path="src/Snow.AspNetCore.Serilog/Snow.AspNetCore.Serilog.csproj" />
     <Project Path="src/Snow.AspNetCore.SignalR/Snow.AspNetCore.SignalR.csproj" />
-    <Project Path="src/Snow.Authentication/Snow.Authentication.csproj" />
+    <Project Path="src/Snow.AspNetCore.Authentication/Snow.AspNetCore.Authentication.csproj" />
     <Project Path="src/Snow.Authorization/Snow.Authorization.csproj" />
     <Project Path="src/Snow.BackgroundJobs/Snow.BackgroundJobs.csproj" />
     <Project Path="src/Snow.BackgroundJobs.Hangfire/Snow.BackgroundJobs.Hangfire.csproj" />
     <Project Path="src/Snow.Caching/Snow.Caching.csproj" />
     <Project Path="src/Snow.Caching.StackExchangeRedis/Snow.Caching.StackExchangeRedis.csproj" />
+    <Project Path="src/Snow.Castle/Snow.Castle.csproj" />
+
     <Project Path="src/Snow.Core/Snow.Core.csproj" />
     <Project Path="src/Snow.Data/Snow.Data.csproj" />
     <Project Path="src/Snow.DistributedLocking/Snow.DistributedLocking.csproj" />
-    <Project Path="src/Snow.DistributedLocking.Redis/Snow.DistributedLocking.Redis.csproj" />
+
     <Project Path="src/Snow.Domain/Snow.Domain.csproj" />
     <Project Path="src/Snow.Emailing/Snow.Emailing.csproj" />
     <Project Path="src/Snow.Emailing.MailKit/Snow.Emailing.MailKit.csproj" />
@@ -43,7 +44,6 @@
     <Project Path="src/Snow.OpenApi/Snow.OpenApi.csproj" />
     <Project Path="src/Snow.Security/Snow.Security.csproj" />
     <Project Path="src/Snow.Settings/Snow.Settings.csproj" />
-    <Project Path="src/Snow.Threading/Snow.Threading.csproj" />
     <Project Path="src/Snow.Timing/Snow.Timing.csproj" />
     <Project Path="src/Snow.Tracing/Snow.Tracing.csproj" />
     <Project Path="src/Snow.Uow/Snow.Uow.csproj" />

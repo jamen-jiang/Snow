@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
-    <ProjectReference Include="..\Snow.Aop.Castle\Snow.Aop.Castle.csproj" />
+    <ProjectReference Include="..\Snow.Castle\Snow.Castle.csproj" />
   </ItemGroup>
 
 </Project>

@@ -12,7 +12,7 @@ namespace Snow.BackgroundJobs;
 /// <para>选项不读配置节(与 ABP 的 <c>AbpBackgroundJobsModule</c> 一样): 宿主在 ConfigureServices 里
 /// <c>Configure&lt;BackgroundJobOptions&gt;(...)</c> 给出, 本模块一律用默认值。</para>
 /// </summary>
-[DependsOn(typeof(SnowDistributedLockModule), typeof(SnowTimingModule))]
+[DependsOn(typeof(SnowDistributedLockingModule), typeof(SnowTimingModule))]
 public sealed class BackgroundJobsModule : SnowModule
 {
     /// <inheritdoc />

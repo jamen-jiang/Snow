@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Snow;
@@ -10,6 +9,7 @@ using Snow.Data;
 using Snow.Domain.Entities;
 using Snow.Domain.Events;
 using Snow.EventBus;
+using Snow.Exceptions;
 using Snow.Security.Users;
 using Snow.Uow;
 
@@ -22,6 +22,7 @@ namespace Snow.EntityFrameworkCore;
 /// <para>3) 带软删除契约的实体自动挂全局查询过滤, 过滤掉已删除数据;</para>
 /// <para>4) 保存前采集聚合根上挂的领域事件, 有工作单元时交给工作单元在提交事务之前统一派发,
 ///    没有工作单元时保存成功后立即派发;</para>
+/// <para>5) 并发更新冲突(<see cref="DbUpdateConcurrencyException"/>)统一翻译为 <see cref="SnowDbConcurrencyException"/>, 由异常处理层映射为 409。</para>
 /// <para>表映射与 DbSet 由具体上下文自己声明。</para>
 /// </summary>
 public abstract class SnowDbContext : DbContext, ISnowDbContext
@@ -38,21 +39,51 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
     /// <inheritdoc />
     DbContext ISnowDbContext.DbContext => this;
 
-    /// <summary>
-    /// 框架创建上下文时注入的应用服务提供者(EF Core 自带的内部提供者里没有业务服务)
-    /// </summary>
-    internal IServiceProvider? ApplicationServiceProvider { get; set; }
+    private ICurrentUser? _currentUser;
+    private IDataFilter<ISoftDelete>? _softDeleteFilter;
+    private IUnitOfWorkManager? _unitOfWorkManager;
+    private IUnitOfWorkEventPublisher? _eventPublisher;
+    private IEventBus? _eventBus;
+    private bool _initialized;
 
     /// <summary>
-    /// 当前服务提供者(取 <see cref="ICurrentUser"/> 与 <see cref="IEventBus"/> 用)
+    /// 由框架在创建上下文后调用一次: 把需要的应用服务解析好存下来, 上下文本身不持有容器
     /// </summary>
-    protected IServiceProvider ServiceProvider => ApplicationServiceProvider ?? ((IInfrastructure<IServiceProvider>)this).Instance;
+    /// <param name="serviceProvider">当前作用域的服务提供者</param>
+    internal void Initialize(IServiceProvider serviceProvider)
+    {
+        ArgumentNullException.ThrowIfNull(serviceProvider);
+
+        _currentUser = serviceProvider.GetService<ICurrentUser>();
+        _softDeleteFilter = serviceProvider.GetService<IDataFilter<ISoftDelete>>();
+        _unitOfWorkManager = serviceProvider.GetService<IUnitOfWorkManager>();
+        _eventPublisher = serviceProvider.GetService<IUnitOfWorkEventPublisher>();
+        _eventBus = serviceProvider.GetService<IEventBus>();
+        _initialized = true;
+    }
+
+    /// <summary>
+    /// 确认上下文由 Snow 创建并已完成依赖初始化
+    /// </summary>
+    private void EnsureInitialized()
+    {
+        if (!_initialized)
+        {
+            throw new InvalidOperationException($"{GetType().Name}: 上下文未经 Snow 创建, 缺少应用服务。请通过 Snow 模块注册或 UnitOfWorkDbContextProvider 创建上下文。");
+        }
+    }
 
     /// <summary>
     /// 软删除过滤是否启用: 业务代码用 <c>IDataFilter&lt;ISoftDelete&gt;.Disable()</c> 临时关掉它查回收站数据
     /// </summary>
     protected virtual bool IsSoftDeleteFilterEnabled
-        => ServiceProvider.GetService<IDataFilter<ISoftDelete>>()?.IsEnabled ?? true;
+    {
+        get
+        {
+            EnsureInitialized();
+            return _softDeleteFilter?.IsEnabled ?? true;
+        }
+    }
 
     /// <summary>
     /// 审计时间来源, 子类可重写以接管时钟
@@ -71,7 +102,15 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
         // 事件在写库之前采集并清空(与 ABP 的 AbpDbContext.CreateEventReport 一致)
         List<UnitOfWorkEventRecord> domainEvents = CollectDomainEvents();
 
-        int result = base.SaveChanges(acceptAllChangesOnSuccess);
+        int result;
+        try
+        {
+            result = base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new SnowDbConcurrencyException(ex.Message, ex);
+        }
 
         // 同步入口只能阻塞等待异步处理器
         DispatchDomainEventsAsync(domainEvents, CancellationToken.None).GetAwaiter().GetResult();
@@ -86,7 +125,15 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
 
         List<UnitOfWorkEventRecord> domainEvents = CollectDomainEvents();
 
-        int result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        int result;
+        try
+        {
+            result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new SnowDbConcurrencyException(ex.Message, ex);
+        }
 
         await DispatchDomainEventsAsync(domainEvents, cancellationToken);
 
@@ -117,7 +164,9 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
     /// </summary>
     protected virtual void ApplyBeforeSaveConventions()
     {
-        ICurrentUser? currentUser = ServiceProvider.GetService<ICurrentUser>();
+        EnsureInitialized();
+
+        ICurrentUser? currentUser = _currentUser;
         DateTime now = GetAuditTime();
         long? userId = currentUser?.Id;
         string userName = ResolveUserName(currentUser);
@@ -288,7 +337,9 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
             return;
         }
 
-        IUnitOfWork? unitOfWork = ServiceProvider.GetService<IUnitOfWorkManager>()?.Current;
+        EnsureInitialized();
+
+        IUnitOfWork? unitOfWork = _unitOfWorkManager?.Current;
         if (unitOfWork is not null)
         {
             foreach (UnitOfWorkEventRecord domainEvent in domainEvents)
@@ -299,7 +350,7 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
             return;
         }
 
-        IUnitOfWorkEventPublisher? publisher = ServiceProvider.GetService<IUnitOfWorkEventPublisher>();
+        IUnitOfWorkEventPublisher? publisher = _eventPublisher;
         if (publisher is not null)
         {
             await publisher.PublishLocalEventsAsync(domainEvents, cancellationToken);
@@ -307,7 +358,7 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
             return;
         }
 
-        IEventBus? eventBus = ServiceProvider.GetService<IEventBus>();
+        IEventBus? eventBus = _eventBus;
         if (eventBus is null)
         {
             return;

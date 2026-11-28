@@ -12,11 +12,5 @@ public interface IDbContextProvider<TDbContext>
     /// 取当前作用域内的上下文
     /// </summary>
     /// <returns>上下文实例</returns>
-    TDbContext GetDbContext();
-
-    /// <summary>
-    /// 异步取当前作用域内的上下文
-    /// </summary>
-    /// <returns>上下文实例</returns>
     Task<TDbContext> GetDbContextAsync();
 }

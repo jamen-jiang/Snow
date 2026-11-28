@@ -1,17 +1,8 @@
-using Microsoft.Extensions.Caching.Distributed;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Snow.Aop;
-using Snow.Expressions;
-using BclDistributedCache = Microsoft.Extensions.Caching.Distributed.IDistributedCache;
-
 namespace Snow.Caching;
 
 /// <summary>
-/// 方法级缓存失效注解(对应 Spring 的 @CacheEvict): 默认在目标方法成功执行后清理, 抛异常则不清理。
-/// <para>第一个参数是缓存区名, 与 Spring 的 <c>@CacheEvict(value, key = "#id")</c> 同位置, 必填(失效方法通常返回
-/// <see cref="Task"/> / <see cref="void"/>, 没有返回类型可推导)。缓存键是具名表达式 <see cref="Key"/>。</para>
+/// 方法级缓存失效标记(对应 Spring 的 @CacheEvict): 默认在目标方法成功执行后清理, 抛异常则不清理。
+/// <para>第一个参数是缓存区名, 与 Spring 的 <c>@CacheEvict(value, key = "#id")</c> 同位置, 必填。缓存键是具名表达式 <see cref="Key"/>。</para>
 /// <example>
 /// <code>
 /// [CacheEvict("Acme.Company", AllEntries = true)]
@@ -19,25 +10,16 @@ namespace Snow.Caching;
 ///
 /// [CacheEvict("Acme.Company", Key = "id")]
 /// public Task TouchAsync(long id) { ... }
-///
-/// [CacheEvict("Acme.Company", Key = "input.Id", Condition = "input.NeedRefresh")]
-/// public Task RefreshAsync(CompanyInput input) { ... }
 /// </code>
 /// </example>
-/// <para><see cref="AllEntries"/> 为 true 时清空整个缓存区(代际自增), 此时不需要 <see cref="Key"/>; 为 false 时必须提供。</para>
-/// <para><see cref="Key"/> / <see cref="Condition"/> 按 C# 表达式交给 <see cref="ExpressionEngine"/> 求值。</para>
+/// <para>本特性只是元数据, 干活的是 <see cref="CacheEvictInterceptor"/>, 由
+/// <see cref="SnowCachingInterceptorRegistrar"/> 按它的存在挂上去。</para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-public sealed class CacheEvictAttribute : SnowInterceptorAttribute
+public sealed class CacheEvictAttribute : Attribute
 {
     /// <summary>
     /// 构造器: 给缓存区名
-    /// <example>
-    /// <code>
-    /// [CacheEvict("Acme.Company", AllEntries = true)]
-    /// [CacheEvict("Acme.Company", Key = "id")]
-    /// </code>
-    /// </example>
     /// </summary>
     /// <param name="cacheName">缓存区名, 按字面使用</param>
     public CacheEvictAttribute(string cacheName)
@@ -71,54 +53,4 @@ public sealed class CacheEvictAttribute : SnowInterceptorAttribute
     /// 是否在目标方法执行前清理
     /// </summary>
     public bool BeforeInvocation { get; set; }
-
-    /// <inheritdoc />
-    public override async Task InvokeAsync(AspectContext context, AspectDelegate next, CancellationToken cancellationToken = default)
-    {
-        BclDistributedCache cache = context.ServiceProvider.GetRequiredService<BclDistributedCache>();
-        DistributedCacheOptions options = context.ServiceProvider.GetRequiredService<IOptions<DistributedCacheOptions>>().Value;
-        ILogger? logger = context.ServiceProvider.GetService<ILoggerFactory>()?.CreateLogger<CacheEvictAttribute>();
-
-        if (BeforeInvocation)
-        {
-            await EvictAsync(cache, options, logger, context).ConfigureAwait(false);
-        }
-
-        await next(context, cancellationToken).ConfigureAwait(false);
-
-        if (!BeforeInvocation)
-        {
-            await EvictAsync(cache, options, logger, context).ConfigureAwait(false);
-        }
-    }
-
-    private async Task EvictAsync(BclDistributedCache cache, DistributedCacheOptions options, ILogger? logger, AspectContext context)
-    {
-        if (!string.IsNullOrWhiteSpace(Condition) && !ExpressionEngine.EvaluateBoolean(Condition, ExpressionContextFactory.Create(context)))
-        {
-            return;
-        }
-
-        try
-        {
-            if (AllEntries)
-            {
-                await DistributedCacheKey.BumpVersionAsync(cache, CacheName, CancellationToken.None).ConfigureAwait(false);
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(Key))
-            {
-                throw new InvalidOperationException("[" + nameof(CacheEvictAttribute) + "] 在 " + nameof(AllEntries) + " = false 时必须提供 " + nameof(Key) + "。");
-            }
-
-            string version = await DistributedCacheKey.ReadVersionAsync(cache, CacheName, CancellationToken.None).ConfigureAwait(false);
-            string key = ExpressionEngine.EvaluateString(Key, ExpressionContextFactory.Create(context));
-
-            await cache.RemoveAsync(DistributedCacheKey.DataKey(CacheName, options.KeyPrefix, version, key)).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (DistributedCacheKey.HandleException(exception, null, options, logger, CacheName))
-        {
-        }
-    }
 }
