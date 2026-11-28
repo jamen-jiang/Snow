@@ -17,11 +17,6 @@ public class SnowAspNetCoreSerilogOptions
     public class AllEnricherPropertyNames
     {
         /// <summary>
-        /// 租户Id。默认 "TenantId"
-        /// </summary>
-        public string TenantId { get; set; } = "TenantId";
-
-        /// <summary>
         /// 用户Id。默认 "UserId"
         /// </summary>
         public string UserId { get; set; } = "UserId";

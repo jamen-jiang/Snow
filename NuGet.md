@@ -95,7 +95,7 @@ public interface ISnowModule
 - 三个阶段由宿主显式触发(对齐 ABP): Web 宿主在 `builder.Build()` 之后调一次 `await app.InitializeApplicationAsync()`, 它填好四个 Web 对象访问器、把关停挂到 `ApplicationStopping`、再按"预初始化 → 第一段 → 收尾段"跑完, 启动模块就在其中的第一段里写管道; 非 Web 宿主(控制台 / Worker)调 `await serviceProvider.InitializeAsync()` 一次把三段跑完(也可以 `PreInitializeModulesAsync()` / `InitializeModulesAsync()` / `PostInitializeModulesAsync()` 分开跑), 退出前 `serviceProvider.Shutdown()`。框架不注册 `IStartupFilter`, `builder.Build()` 里不会偷偷初始化。
 - 中间件由宿主在启动模块的第一段里手写(`context.GetApplicationBuilder()` 拿构建器, 按行序 `app.UseXxx()`), 能力包只提供 `UseXxx()` 扩展方法; 不需要 `Order`、不登记、不实现接口 —— 位置就是代码行序(见下文「中间件管道」)。
 - 关停阶段的服务解析走独立作用域, 所以关停里可以正常注入 Scoped 服务; 重复调用幂等。
-- 需要「在 `AddApplication` 之前」生效的选项(`AddSnowOpenApi` / `AddSnowRateLimiting` 等), 直接在 `builder.Services` 上调用, 不要塞进模块的 `ConfigureServices` —— 那时被依赖模块可能已经跑过, 动作就晚了。
+- 需要「在 `AddApplication` 之前」生效的选项(`AddSnowOpenApi` 等), 直接在 `builder.Services` 上调用, 不要塞进模块的 `ConfigureServices` —— 那时被依赖模块可能已经跑过, 动作就晚了。
 
 ## Web 宿主: 模块只做接线
 
@@ -282,7 +282,6 @@ Configure<SnowCorrelationIdOptions>(context.Configuration.GetSection("Correlatio
     typeof(SnowAspNetCoreModule),
     typeof(SnowAspNetCoreSerilogModule),
     typeof(SnowAuthenticationModule),
-    typeof(SnowAspNetCoreMultiTenancyModule),
     typeof(SnowRateLimitingModule),
     typeof(SnowHangfireModule))]
 public sealed class MyHttpApiHostModule : SnowModule
@@ -295,12 +294,11 @@ public sealed class MyHttpApiHostModule : SnowModule
         app.UseSnowSerilogEnrichers();         // 2  日志上下文, 也要包住认证
         app.UseRouting();                      // 3  路由
         app.UseAuthentication();               // 4  认证
-        app.UseSnowMultiTenancy();             // 5  多租户, 认证之后才读得到租户声明
-        app.UseSnowRateLimiting();             // 6  限流, 路由之后才读得到端点元数据
-        app.UseAuthorization();                // 7  授权
-        app.UseSnowHangfireDashboard();        // 8  终端分支, 必须晚于授权
-        app.UseSnowWorkflows();                // 9  终端分支
-        app.UseSnowEndpoints();                // 10 端点, 永远最后
+        app.UseSnowRateLimiting();             // 5  限流, 路由之后才读得到端点元数据
+        app.UseAuthorization();                // 6  授权
+        app.UseSnowHangfireDashboard();        // 7  终端分支, 必须晚于授权
+        app.UseSnowWorkflows();                // 8  终端分支
+        app.UseSnowEndpoints();                // 9  端点, 永远最后
     }
 }
 ```
@@ -308,15 +306,14 @@ public sealed class MyHttpApiHostModule : SnowModule
 - `UseSnowEndpoints()` 执行各模块在 `SnowEndpointRouterOptions.EndpointConfigureActions` 里登记的映射动作(与 ABP 的 `UseConfiguredEndpoints()` 同形); 之前挂的每一层中间件都自动落在端点之前。
 - `DependsOn` 只决定模块加载与初始化顺序(被依赖的先初始化), **不再决定中间件位置** —— 位置由上面这段代码的行序直接决定, 一眼可见, 不需要 `Order`、不登记、不实现接口。
 - 每个 `UseXxx()` 都是包内 `Microsoft/AspNetCore/Builder/` 目录下的扩展方法, 命名空间 `Microsoft.AspNetCore.Builder`(与 ABP 一致: 补全列表里所有 `UseXxx` 在一起)。包的 `UseXxx()` 只负责把原生中间件包一层, 不做幂等判断。
-- 类的归属也照 ABP 分: `InitializeApplicationAsync()` / `InitializeApplication()` / `UseSnowCorrelationId()` 三个都在 `SnowApplicationBuilderExtensions`(对应 ABP 把 `InitializeApplicationAsync` 与 `UseCorrelationId` 一起放在 `AbpApplicationBuilderExtensions`); `UseSnowEndpoints()` 在 `SnowAspNetCoreApplicationBuilderExtensions`(对应 ABP 的 `AbpAspNetCoreApplicationBuilderExtensions.UseConfiguredEndpoints`); 其余能力包的 `UseXxx()` 各自落在自己包的 `Microsoft/AspNetCore/Builder/` 下 —— 与 ABP 的 `AbpAspNetCoreSerilogApplicationBuilderExtensions` / `AbpAspNetCoreMultiTenancyApplicationBuilderExtensions` / `AbpHangfireApplicationBuilderExtensions` 一一对应。
+- 类的归属也照 ABP 分: `InitializeApplicationAsync()` / `InitializeApplication()` / `UseSnowCorrelationId()` 三个都在 `SnowApplicationBuilderExtensions`(对应 ABP 把 `InitializeApplicationAsync` 与 `UseCorrelationId` 一起放在 `AbpApplicationBuilderExtensions`); `UseSnowEndpoints()` 在 `SnowAspNetCoreApplicationBuilderExtensions`(对应 ABP 的 `AbpAspNetCoreApplicationBuilderExtensions.UseConfiguredEndpoints`); 其余能力包的 `UseXxx()` 各自落在自己包的 `Microsoft/AspNetCore/Builder/` 下 —— 与 ABP 的 `AbpAspNetCoreSerilogApplicationBuilderExtensions` / `AbpHangfireApplicationBuilderExtensions` 一一对应。
 - 其余类型也按 ABP 的落位规则放进被扩展类型自己的命名空间, 所以 `using` 天然就有、不用额外引 `Snow.*`: `SnowEndpointRouterOptions` / `SnowEndpointRouteBuilderContext` → `Microsoft.AspNetCore.Routing`(`Snow.AspNetCore` 的 `Microsoft/AspNetCore/Routing/`); `SnowAspNetCoreServiceCollectionExtensions.GetHostingEnvironment()` → `Microsoft.Extensions.DependencyInjection`(`Snow.AspNetCore` 的 `Microsoft/Extensions/DependencyInjection/`)。
 - `ActionDescriptor` 扩展方法叫 `ActionDescriptorExtensions`(类名与 ABP 完全一样, 不带 `Snow` 前缀), 在 `Snow.AspNetCore.Mvc` 的 `Microsoft/AspNetCore/Mvc/Abstractions/`(命名空间 `Microsoft.AspNetCore.Mvc.Abstractions`), 与 ABP 同包同位置(`Volo.Abp.AspNetCore.Mvc`)—— 接线包 `Snow.AspNetCore` 不能反向引用 MVC 包, 这层桥只能落在 MVC 包。五个方法与 ABP 一一对应: `AsControllerActionDescriptor()` / `GetMethodInfo()` / `GetReturnType()` / `HasObjectResult()` / `IsControllerAction()`; 它们只做取值, 与 `[DisableSnowFeatures]` 无关。落位规矩: 放进 `Microsoft.*` 命名空间的类型, 类名照抄 ABP(ABP 带 `Abp` 前缀的照旧带, 如 `SnowEndpointRouterOptions` 对 `AbpEndpointRouterOptions`; ABP 不带的也不带), 这样从 ABP 搬过来的代码一行都不用改。
 - 开关判定本身在 `Snow.Core` 的 `SnowFeatureSwitches`(收 `Type?`), 不认识 MVC 类型; 用不到 MVC 的项目直接问它即可, 不必引 `Snow.AspNetCore.Mvc`。
 
-四条顺序约束(实测出来的):
+顺序约束(实测出来的):
 
 - **限流 `UseSnowRateLimiting()` 在 `UseRouting()` 之后**: 策略挂在端点元数据上, 路由之前读不到, 会静默全放行且不报错。
-- **多租户 `UseSnowMultiTenancy()` 在 `UseAuthentication()` 之后**: "当前用户"出资者要读已认证主体的租户声明; 写在认证之前会静默回落到 Host 租户。
 - **终端分支(仪表盘、工作流)在 `UseAuthorization()` 之后**: 命中就自己写响应、不调 `next`, 放太前会绕过授权。
 
 日志上下文与链路标识通常放最外层: 认证失败、授权拒绝、路由没匹配时, 响应也要带回 `X-Correlation-Id` 并进日志上下文 —— 它们在内层才做得到。
@@ -573,169 +570,3 @@ await tokenService.DisableAsync(42, TimeSpan.FromHours(1)); // 封禁: 踢人 + 
 await tokenService.EnableAsync(42);
 ```
 
-同一账号允许同时登录多处。会话靠滑动续期维持: 一直在用就一直有效, 停用超过 `Expiration` 一个窗口自己到期。
-被泄露的令牌不会自己过期 —— 改密码、改角色、禁用账号时记得调 `KickoutAsync`。
-
-### 4. 存储
-
-存储只有一个实现 `DistributedCacheTokenSessionStore`, 全部落在 `IDistributedCache` 里, 三类键:
-`snow:jsonwebtoken:`(会话, 校验要读)、`snow:jsonwebtoken-account:`(账号 → 令牌索引)、
-`snow:jsonwebtoken-disabled:`(封禁)。续期时会话键与账号索引一起续, 长期在线的账号不会出现索引先过期导致踢人漏设备。
-账号索引的寿命另给 30 天下限, 不跟单条会话的到期时间走:
-否则同账号先登录的长会话会被后登录的短会话把索引 TTL 压短, 索引先死会让踢人与在线数漏掉仍然有效的令牌。
-模块**不注册** `IDistributedCache`, 只在解析会话存储时取容器里已有的实例:
-宿主接 `Snow.Caching.StackExchangeRedis`(或任何 `IDistributedCache` 实现)就是分布式存储, 多实例共享, 踢人与封禁跨实例生效;
-一个都没接才回退进程内实现, 单实例开箱可用, 启动时会打一条 warning 提示多实例下不生效。
-
-所以换后端不用改代码, 也不用管模块装配顺序: 本模块不占用那个注册槽位, 宿主在它之前或之后登记缓存都生效。
-
-注意: 所有实例必须共享同一个 `IDistributedCache`, 否则对方实例查不到会话, 令牌会被判为无效
-(不是踢人不生效, 是全部登不上)。
-
-当前登录态直接读 `HttpContext.User`(账号、名称、角色都在令牌声明里), 本包不再提供静态门面。
-登录、登出、踢人、封禁请构造注入 `ITokenService`, 权限校验请用 `IPermissionChecker`。
-
-### 5. 异常映射
-
-三个异常都继承 `SnowException` 并实现 `IHasHttpStatusCode`, 由全局 `UseSnowExceptionHandling()` 统一翻译, 本包不再自带中间件或 MVC 过滤器:
-
-| 异常 | 状态码 | 说明 |
-| --- | --- | --- |
-| `TokenNotLoginException` | 401 | 未登录 |
-| `TokenNotRoleException` | 403 | 缺少角色 |
-| `TokenDisabledException` | 403 | 账号已被封禁 |
-
-响应体是统一的 `SnowRemoteServiceErrorResponse`, 与其它框架异常同一形状; 管道里挂了 `UseSnowExceptionHandling()`(见"宿主管道")即可, 无需额外步骤。
-`JwtBearer` 在认证阶段抛出的令牌异常同样会被它兜住, 链路标识仍在最外层带回 `X-Correlation-Id`。
-
-
-## 权限: 定义一次, 注解即用
-
-`Snow.Authorization` 管"能干什么", 认证(谁是你)由 `Snow.AspNetCore.Authentication` 负责。权限本身随令牌以声明形式传递, 框架不维护授予表。
-
-### 1. 定义权限
-
-继承 `PermissionDefinitionProvider`, 只覆写 `Define`:
-
-```csharp
-public sealed class OrdersPermissionDefinitionProvider : PermissionDefinitionProvider
-{
-    public override void Define(PermissionDefinitionContext context)
-    {
-        PermissionGroupDefinition group = context.AddGroup("Orders", "订单管理");
-
-        PermissionDefinition create = group.AddPermission("Snow.Orders.Create", "新建订单");
-        create.AddChild("Snow.Orders.Create.Batch", "批量新建");
-
-        // 停用的权限永远校验不通过
-        group.AddPermission("Snow.Orders.Delete", "删除订单").Disable();
-    }
-}
-```
-
-**不需要任何手动登记**: 模块在 `ConfigureServices` 里扫一遍模块清单的全部程序集, 找到所有
-`PermissionDefinitionProvider` 的子类自动登记(约定注册只按接口或自身类型登记, 不会登记抽象基类的实现,
-所以这里补扫一遍)。只要你的模块程序集进了 `[DependsOn]` 链, 类型就在扫描范围内。定义只在第一次访问时构建一次,
-之后走缓存。
-
-### 2. 注解鉴权
-
-```csharp
-[Permission("Snow.Orders.Create")]                                  // 一个权限
-[Permission("Snow.Orders.Create", "Snow.Orders.Update")]            // 多个, 满足其一即可
-[Permission("Snow.Orders.Create", "Snow.Orders.Update",
-                     Mode = PermissionMatchMode.All)]                        // 多个, 都要有
-```
-
-策略名由注解自己编出来(`perm-any:A,B` / `perm-all:A,B`), 再交给 `SnowAuthorizationPolicyProvider` 解析成
-"要求已登录 + 权限要求", 不用为每个权限写 `AddPolicy`。策略对象构造一次后缓存。
-
-**为什么不用 `[Authorize("A", "B")]`** —— 框架的 `AuthorizeAttribute` 只有无参与单参两个构造, 双参写不出来:
-
-```text
-error CS1729: "AuthorizeAttribute"不包含采用 2 个参数的构造函数
-```
-
-单参的 `[Authorize("A")]` 仍然可用(等价于 `[Permission("A")]`); 逗号字符串 `[Authorize("A,B")]` 也兼容,
-含义是"满足其一", 但容易被误读成一个长权限名, 所以推荐用 `Permission`.
-
-三种多个权限的写法, 语义对照:
-
-| 写法 | 语义 | 由谁实现 |
-| --- | --- | --- |
-| `[Permission("A","B")]` | 满足其一 | `AnyPermissionRequirement` |
-| `[Permission("A","B", Mode = PermissionMatchMode.All)]` | 都要有 | 每个权限一条 `PermissionRequirement` |
-| `[Authorize("A")] [Authorize("B")]` | 都要有 | ASP.NET Core 合并多个特性, 与提供器无关 |
-
-"满足其一"的处理器按书写顺序逐个问 `IPermissionChecker`, 命中即停; 全部不命中才 403。
-
-前提是每个权限都已被 `PermissionDefinitionProvider` 定义: 多个名字里只要有一个没定义, 请求时拿不到策略,
-授权中间件就抛 `InvalidOperationException`(500) —— 拼错的权限名不会因为旁边那个是对的而被放过。
-
-### 3. 代码里手判
-
-```csharp
-public sealed class OrderAppService(IPermissionChecker permissionChecker)
-{
-    public async Task CreateAsync()
-    {
-        if (!await permissionChecker.IsGrantedAsync("Snow.Orders.Create"))
-        {
-            throw new UnauthorizedAccessException("没有新建订单的权限。");
-        }
-    }
-}
-```
-
-没有批量重载: 要判多个权限就逐个 `await`。单次判定是纯内存的声明比对, 不发 IO。
-
-### 4. 权限从哪来: 令牌里的声明
-
-框架不保存"谁被授予了什么"。签发令牌时把该用户拥有的权限名写成 `permission` 声明(可多条):
-
-```csharp
-string token = await tokenService.LoginAsync(
-    userId: 42,
-    userName: "admin",
-    name: "管理员",
-    claims:
-    [
-        new(UserClaimTypes.Role, "admin"),
-        new(ClaimsPermissionChecker.PermissionClaimType, "Snow.Orders.Create"),
-        new(ClaimsPermissionChecker.PermissionClaimType, "Snow.Orders.Delete"),
-    ]);
-```
-
-判定就是一次声明比对(`ClaimsPermissionChecker`): 身份里存在同名 `permission` 声明就算拥有; 带 `"*"`
-(`ClaimsPermissionChecker.AllPermission`)等于拥有全部权限。没有存储调用, 没有跨实例同步, 重启不丢 ——
-权限跟着令牌走。
-
-代价写在明处: **权限变更要等令牌重新签发**。要求改动立刻生效, 就把令牌有效期调短配合刷新, 或者换掉校验器按请求查库(见下)。
-
-角色怎么映射成权限由你决定: 签发时按角色展开成一条条 `permission` 声明, 或者让校验器自己去查角色表, 框架不预设。
-
-### 判定规则
-
-| 条件 | 结果 |
-| --- | --- |
-| 权限未定义 / 被 `Disable()` | 不通过(先于声明比对, 打错字不会因为同名声明而放行) |
-| 身份里没有同名 `permission` 声明 | 不通过 |
-| 身份里有 `permission = 权限名` 或 `permission = *` | 通过 |
-
-换校验器就是顶掉 `IPermissionChecker` 的登记, 一行 `Replace`:
-
-```csharp
-services.Replace(ServiceDescriptor.Transient<IPermissionChecker, DbPermissionChecker>());   // 按请求查库, 改动立刻生效
-```
-
-框架不额外提供包装方法: 生命周期必须与默认实现一致(Transient), 写成 Singleton 会把 `ICurrentPrincipalAccessor` 变成 captive dependency。
-
-**为什么框架不自己存授予表** —— 一张"谁被授予了什么"的表放进程里, 重启清空、多实例各存一份; 放数据库又等于替宿主
-定了数据模型。Sa-Token 不存(每次回调宿主接口去查), ABP 存库(EF Core 实体), 我们跟随前者: 权限跟着令牌走,
-改动靠重新签发。需要"改了立刻生效"的宿主, 用自定义校验器那一行换掉即可。
-
-## HTTP 客户端
-
-`Snow.Http.Client` 把 ASP.NET Core 的 `IHttpClientFactory` 接进来, 对外只有两种用法: **声明式接口**(对应 Spring 的 `@HttpExchange` 接口, 推荐) 和 **低层访问器**(对应注入一个配好的 `RestClient`, 用于流、非 JSON 与一次性调用)。
-
-```csharp

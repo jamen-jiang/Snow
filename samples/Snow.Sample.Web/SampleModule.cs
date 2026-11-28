@@ -3,7 +3,6 @@ using Hangfire;
 using Hangfire.Storage.SQLite;
 using Snow.Castle;
 using Snow.AspNetCore;
-using Snow.AspNetCore.MultiTenancy;
 using Snow.AspNetCore.Mvc;
 using Snow.AspNetCore.RateLimiting;
 using Snow.AspNetCore.Serilog;
@@ -30,9 +29,9 @@ using Snow.Json.Newtonsoft;
 using Snow.Localization;
 using Snow.Messaging;
 using Snow.Modularity;
-using Snow.MultiTenancy;
 using Snow.ObjectMapping.Mapster;
 using Snow.OpenApi;
+using Snow.Sample.Web.Behaviors;
 using Snow.Sample.Web.Workflows;
 using Snow.Security;
 using Snow.Timing;
@@ -50,7 +49,6 @@ namespace Snow.Sample.Web;
 [DependsOn(
     typeof(SnowCastleCoreModule),
     typeof(SnowAspNetCoreModule),
-    typeof(SnowAspNetCoreMultiTenancyModule),
     typeof(SnowAspNetCoreMvcModule),
     typeof(SnowRateLimitingModule),
     typeof(SnowAspNetCoreSerilogModule),
@@ -74,7 +72,6 @@ namespace Snow.Sample.Web;
     typeof(SnowJsonNewtonsoftModule),
     typeof(SnowLocalizationModule),
     typeof(SnowMessagingModule),
-    typeof(SnowMultiTenancyModule),
     typeof(SnowObjectMappingMapsterModule),
     typeof(SnowOpenApiModule),
     typeof(SnowSecurityModule),
@@ -102,6 +99,21 @@ public sealed class SampleModule : SnowModule
         Configure<SnowOpenApiOptions>(context.Configuration.GetSection("OpenApi"));
         Configure<SnowValidationOptions>(context.Configuration.GetSection("Validation"));
         Configure<SnowCachingRedisOptions>(context.Configuration.GetSection("Redis"));
+        // 事件总线同样按显式程序集扫描处理器: 不配就没有任何订阅者。
+        Configure<SnowEventBusOptions>(options =>
+            options.RegisterServicesFromAssemblyContaining<SampleModule>());
+        // 消息模块按显式程序集扫描处理器: 不配就没有 handler, 这里登记示例宿主自身程序集。
+        Configure<SnowMessagingOptions>(options =>
+        {
+            // 处理器扫描范围: 示例宿主自身程序集。
+            options.RegisterServicesFromAssemblyContaining<SampleModule>();
+
+            // 管道行为: 一行登记一个开放泛型行为, 对所有命令/查询生效(默认瞬态)。
+            options.AddOpenBehavior(typeof(LoggingBehavior<,>));
+
+            // 需要指定生命周期时: options.AddOpenBehavior(typeof(LoggingBehavior<,>), ServiceLifetime.Scoped);
+            // 只对某一个封闭类型生效时: options.Behaviors.Add(new SnowMessagingBehavior(typeof(LoggingBehavior<GetUserQuery, string>), ServiceLifetime.Transient));
+        });
         // ==== Elsa 选项示例: SnowElsaOptions 的每一项都在这里用代码点一遍 ====
         // 模块不读配置节, 选项全由宿主给。这里用 SnowModule.Configure<TOptions>(Action<TOptions>) 直接写代码。
         string contentRootPath = context.Services.GetHostingEnvironment().ContentRootPath;
@@ -239,33 +251,29 @@ public sealed class SampleModule : SnowModule
         // 1) 链路标识: 必须最外层 —— 认证失败 / 授权拒绝 / 路由没匹配(404) 的响应也要带回 X-Correlation-Id
         app.UseSnowCorrelationId();
 
-        // 2) 请求级日志上下文增强: 尽量靠外, 让后续中间件与业务日志都带上 用户 / 租户 / 链路;
+        // 2) 请求级日志上下文增强: 尽量靠外, 让后续中间件与业务日志都带上 用户 / 链路;
         //    要能读到链路标识, 所以排在 UseSnowCorrelationId 之内
         app.UseSnowSerilogEnrichers();
 
-        // 4) 路由: 后续限流与端点映射都依赖它先把 endpoint 解析出来
+        // 3) 路由: 后续限流与端点映射都依赖它先把 endpoint 解析出来
         app.UseRouting();
 
-        // 5) 限流: 必须在 UseRouting() 之后 —— 限流策略挂在端点元数据上, 路由之前读不到会静默失效
+        // 4) 限流: 必须在 UseRouting() 之后 —— 限流策略挂在端点元数据上, 路由之前读不到会静默失效
         app.UseSnowRateLimiting();
 
-        // 6) 认证
+        // 5) 认证
         app.UseAuthentication();
 
-        // 7) 多租户解析: 必须在 UseAuthentication() 之后 —— 路由出资者要读路由值, 当前用户出资者要读已认证主体;
-        //    未启用多租户时中间件原样放行, 零开销
-        app.UseSnowMultiTenancy();
-
-        // 8) 授权
+        // 6) 授权
         app.UseAuthorization();
 
-        // 9) 后台作业仪表盘(/hangfire): 授权之后、端点之前 —— 终端分支, 早于授权就对匿名请求可见
+        // 7) 后台作业仪表盘(/hangfire): 授权之后、端点之前 —— 终端分支, 早于授权就对匿名请求可见
         app.UseSnowHangfireDashboard();
 
-        // 10) 工作流 HTTP 端点(/workflows): 同上, 终端分支, 落点必须在授权之后
+        // 8) 工作流 HTTP 端点(/workflows): 同上, 终端分支, 落点必须在授权之后
         app.UseSnowWorkflows();
 
-        // 11) 端点映射: 管道最后一步, 统一展开各模块登记的端点(含 OpenAPI / Scalar 文档)
+        // 9) 端点映射: 管道最后一步, 统一展开各模块登记的端点(含 OpenAPI / Scalar 文档)
         app.UseSnowEndpoints();
     }
 }

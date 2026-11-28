@@ -13,8 +13,8 @@ namespace Snow.AspNetCore.Tests;
 
 /// <summary>
 /// 命令/查询处理器走约定注册管道后自动带工作单元: 命令成功即提交、抛异常即回滚、查询不参与。
-/// <para>处理器不写任何服务注解, 由 <c>CommandHandlerConventionalRegistrar</c> 交给约定注册;
-/// 类上贴 [UnitOfWork] 后, 工作单元拦截器就会挂上。</para>
+/// <para>处理器按 MediatR 方式登记为瞬态实现; 工作单元由命令总线的 <c>UnitOfWorkBehavior</c> 统一包裹,
+/// 不再依赖 Castle 代理或处理器上的 [UnitOfWork] 特性。</para>
 /// </summary>
 public class MessagingUowTests
 {
@@ -69,18 +69,17 @@ public class MessagingUowTests
     }
 
     /// <summary>
-    /// 处理器由约定注册登记: 解析得到的是被代理的对象, 方法执行前后各经过一次工作单元拦截
+    /// 处理器按 MediatR 方式登记: 解析到的就是实现类型本身(无 Castle 代理)
     /// </summary>
     [Fact]
-    public async Task CommandHandler_IsRegisteredByConvention()
+    public async Task CommandHandler_IsRegisteredAsItsImplementation()
     {
         using ServiceProvider provider = await BuildProviderAsync();
 
         ICommandHandler<ProbeCommand> handler = provider.GetRequiredService<ICommandHandler<ProbeCommand>>();
 
-        Assert.NotEqual(typeof(ProbeCommandHandler), handler.GetType());
-        await handler.HandleAsync(new ProbeCommand(), CancellationToken.None);
-        Assert.Equal(1, ProbeDatabaseApi.Last!.SaveCount);
+        Assert.Equal(typeof(ProbeCommandHandler), handler.GetType());
+        await Task.CompletedTask;
     }
 
     private static async Task<ServiceProvider> BuildProviderAsync()
@@ -104,6 +103,11 @@ public class MessagingUowTests
 
     private sealed class MessagingUowTestModule : SnowModule
     {
+        /// <inheritdoc />
+        public override void PreConfigureServices(ServiceConfigurationContext context)
+        {
+            Configure<SnowMessagingOptions>(o => o.RegisterServicesFromAssemblyContaining<MessagingUowTests>());
+        }
     }
 
     /// <summary>
@@ -118,10 +122,8 @@ public class MessagingUowTests
     }
 
     /// <summary>
-    /// 探针命令处理器: 类上贴 [UnitOfWork] 自动带工作单元;
-    /// 方法必须是 virtual, Castle 类代理才拦得到
+    /// 探针命令处理器: 经命令总线派发时由 UnitOfWorkBehavior 提供环境工作单元
     /// </summary>
-    [UnitOfWork]
     public class ProbeCommandHandler : ICommandHandler<ProbeCommand>
     {
         private readonly IUnitOfWorkManager _unitOfWorkManager;

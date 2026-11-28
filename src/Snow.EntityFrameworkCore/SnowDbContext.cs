@@ -428,9 +428,9 @@ public abstract class SnowDbContext : DbContext, ISnowDbContext
             return string.Empty;
         }
 
-        if (!string.IsNullOrEmpty(currentUser.Name))
+        if (!currentUser.Name.IsNullOrEmpty())
         {
-            return currentUser.Name!;
+            return currentUser.Name;
         }
 
         return currentUser.UserName ?? string.Empty;

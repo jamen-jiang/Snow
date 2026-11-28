@@ -13,13 +13,12 @@
 	<NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
 	<!-- 能力包只含模块与扩展方法, 不含静态资源; 关掉 StaticWebAssets 以免 SDK 报 scoped css bundle 缺端点 -->
 	<StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
-    <Description>日志: Serilog 集成(宿主一行接入 + 租户/当前用户/链路标识等字段自动写入日志上下文)</Description>
+    <Description>日志: Serilog 集成(宿主一行接入 + 当前用户/链路标识等字段自动写入日志上下文)</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Snow.AspNetCore\Snow.AspNetCore.csproj" />
     <ProjectReference Include="..\Snow.Core\Snow.Core.csproj" />
-    <ProjectReference Include="..\Snow.MultiTenancy\Snow.MultiTenancy.csproj" />
     <ProjectReference Include="..\Snow.Security\Snow.Security.csproj" />
     <ProjectReference Include="..\Snow.Tracing\Snow.Tracing.csproj" />
   </ItemGroup>

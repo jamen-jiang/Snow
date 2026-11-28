@@ -21,39 +21,41 @@ public abstract class EventHandlerWrapper
 }
 
 /// <summary>
-/// 指定事件类型的处理器包装器实现: 从容器取 <c>IEventHandler&lt;TEvent&gt;</c> 的全部实现,
-/// 为每个处理器创建独立作用域后再执行
+/// 指定事件类型的处理器包装器实现: 每次发布创建一个 DI 作用域, 在该作用域内解析并执行全部
+/// <c>IEventHandler&lt;TEvent&gt;</c> 实现
 /// </summary>
 /// <typeparam name="TEvent">事件类型</typeparam>
 public sealed class EventHandlerWrapperImpl<TEvent> : EventHandlerWrapper where TEvent : IEvent
 {
     /// <inheritdoc />
     /// <param name="event">事件对象</param>
-    /// <param name="serviceProvider">服务提供者</param>
+    /// <param name="serviceProvider">服务提供器</param>
     /// <param name="publishAsync">事件发布委托</param>
     /// <param name="cancellationToken">取消令牌</param>
-    public override Task HandleAsync(IEvent @event, IServiceProvider serviceProvider,
+    public override async Task HandleAsync(IEvent @event, IServiceProvider serviceProvider,
         Func<IEnumerable<EventHandlerExecutor>, IEvent, CancellationToken, Task> publishAsync,
         CancellationToken cancellationToken)
     {
         IServiceScopeFactory scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
 
+        // 处理器可能是 Scoped: 解析和调用必须落在同一个作用域里,
+        // 否则从根容器解析会变成 captive 实例(开启作用域校验时直接抛异常)。
+        await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
+
         List<EventHandlerExecutor> executors = new();
 
-        // 作用域必须在解析时就建立: 处理器可能是 Scoped, 解析出来就要保证作用域生命周期覆盖调用
-        foreach (IEventHandler<TEvent> handler in serviceProvider.GetServices<IEventHandler<TEvent>>())
+        foreach (IEventHandler<TEvent> handler in scope.ServiceProvider.GetServices<IEventHandler<TEvent>>())
         {
-            executors.Add(new EventHandlerExecutor(handler, async (theEvent, theToken) =>
-            {
-                await handler.HandleAsync((TEvent)theEvent, theToken).ConfigureAwait(false);
-            }));
+            executors.Add(new EventHandlerExecutor(
+                handler,
+                (theEvent, theToken) => handler.HandleAsync((TEvent)theEvent, theToken)));
         }
 
         if (executors.Count == 0)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        return publishAsync(executors, @event, cancellationToken);
+        await publishAsync(executors, @event, cancellationToken);
     }
 }

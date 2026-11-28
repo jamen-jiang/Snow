@@ -1,6 +1,5 @@
 using Snow.Guids;
 using Snow.Modularity;
-using Snow.MultiTenancy;
 using Snow.Timing;
 
 namespace Snow.Domain;
@@ -11,7 +10,6 @@ namespace Snow.Domain;
 /// </summary>
 [DependsOn(typeof(SnowGuidsModule))]
 [DependsOn(typeof(SnowTimingModule))]
-[DependsOn(typeof(SnowMultiTenancyModule))]
 public sealed class SnowDomainModule : SnowModule
 {
 }

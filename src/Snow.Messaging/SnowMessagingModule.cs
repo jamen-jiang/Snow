@@ -1,15 +1,17 @@
-using Assembly = System.Reflection.Assembly;
 using Microsoft.Extensions.DependencyInjection;
 using Snow.DependencyInjection;
 using Snow.Messaging.Registration;
 using Snow.Modularity;
+using Snow.Uow;
 
 namespace Snow.Messaging;
 
 /// <summary>
-/// 消息派发模块: 取模块清单里的程序集, 扫描并注册命令/查询处理器与两条总线。
-/// 本程序集同时是约定注入的扫描锚点, <see cref="CommandBus"/> 与 <see cref="QueryBus"/> 靠生命周期标记自动登记
+/// 消息派发模块: 按 <see cref="SnowMessagingOptions.Assemblies"/> 扫描并注册命令/查询处理器、两条总线与管道行为(程序集为空即不注册任何处理器)。
+/// <para>处理器按 MediatR 方式登记为瞬态实现(无约定注册、无 Castle 代理);
+/// 工作单元由命令总线的 <c>UnitOfWorkBehavior</c> 统一包裹。</para>
 /// </summary>
+[DependsOn(typeof(SnowUowModule))]
 public sealed class SnowMessagingModule : SnowModule
 {
     /// <inheritdoc />
@@ -17,16 +19,24 @@ public sealed class SnowMessagingModule : SnowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        IModuleContainer container = context.Services.GetSingletonInstance<IModuleContainer>();
+        var services = context.Services;
 
-        Assembly[] assemblies = container.Modules
-            .SelectMany(module => module.AllAssemblies)
-            .Distinct()
-            .ToArray();
+        // 选项由宿主在 PreConfigureServices 里 Configure<SnowMessagingOptions>(...) 登记(Configure 内部已 AddOptions);
+        // 这里直接取结算快照。默认值写在 SnowMessagingOptions 的属性初始值里。
+        var options = services.GetOptions<SnowMessagingOptions>();
 
-        // 处理器登记器: 让处理器走约定注册管道, 模块挂的拦截器(如工作单元)才能作用到处理器上
-        context.Services.AddConventionalRegistrar(new CommandHandlerConventionalRegistrar());
+        ServiceRegistrar.AddMessagingClassesWithTimeout(services, options.Assemblies);
 
-        ServiceRegistrar.AddMessagingClassesWithTimeout(context.Services, assemblies);
+        // 工作单元行为先登记 -> 位于外层(先进入、后退出), 事务包住整条管道;
+        // 额外行为随后登记 -> 位于内层, 先于处理器执行、后于处理器退出。
+        if (options.AutoUnitOfWorkForCommands)
+        {
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
+        }
+
+        foreach (SnowMessagingBehavior behavior in options.Behaviors)
+        {
+            services.Add(new ServiceDescriptor(typeof(IPipelineBehavior<,>), behavior.Type, behavior.Lifetime));
+        }
     }
 }

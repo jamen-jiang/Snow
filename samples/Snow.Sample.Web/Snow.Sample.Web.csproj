@@ -17,7 +17,6 @@
     <ProjectReference Include="..\..\src\Snow.Castle\Snow.Castle.csproj" />
     <ProjectReference Include="..\..\src\Snow.Application\Snow.Application.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore\Snow.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\src\Snow.AspNetCore.MultiTenancy\Snow.AspNetCore.MultiTenancy.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.Mvc\Snow.AspNetCore.Mvc.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.RateLimiting\Snow.AspNetCore.RateLimiting.csproj" />
     <ProjectReference Include="..\..\src\Snow.AspNetCore.Serilog\Snow.AspNetCore.Serilog.csproj" />
@@ -48,7 +47,6 @@
     <ProjectReference Include="..\..\src\Snow.Json.Newtonsoft\Snow.Json.Newtonsoft.csproj" />
     <ProjectReference Include="..\..\src\Snow.Localization\Snow.Localization.csproj" />
     <ProjectReference Include="..\..\src\Snow.Messaging\Snow.Messaging.csproj" />
-    <ProjectReference Include="..\..\src\Snow.MultiTenancy\Snow.MultiTenancy.csproj" />
     <ProjectReference Include="..\..\src\Snow.ObjectMapping\Snow.ObjectMapping.csproj" />
     <ProjectReference Include="..\..\src\Snow.ObjectMapping.Mapster\Snow.ObjectMapping.Mapster.csproj" />
     <ProjectReference Include="..\..\src\Snow.OpenApi\Snow.OpenApi.csproj" />

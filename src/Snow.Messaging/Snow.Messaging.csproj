@@ -11,5 +11,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Snow.Core/Snow.Core.csproj" />
+    <ProjectReference Include="../Snow.Uow/Snow.Uow.csproj" />
   </ItemGroup>
 </Project>

@@ -3,7 +3,6 @@
     <Project Path="src/Snow/Snow.csproj" />
     <Project Path="src/Snow.Application/Snow.Application.csproj" />
     <Project Path="src/Snow.AspNetCore/Snow.AspNetCore.csproj" />
-    <Project Path="src/Snow.AspNetCore.MultiTenancy/Snow.AspNetCore.MultiTenancy.csproj" />
     <Project Path="src/Snow.AspNetCore.Mvc/Snow.AspNetCore.Mvc.csproj" />
     <Project Path="src/Snow.AspNetCore.RateLimiting/Snow.AspNetCore.RateLimiting.csproj" />
     <Project Path="src/Snow.AspNetCore.Serilog/Snow.AspNetCore.Serilog.csproj" />
@@ -38,7 +37,6 @@
     <Project Path="src/Snow.Json.Newtonsoft/Snow.Json.Newtonsoft.csproj" />
     <Project Path="src/Snow.Localization/Snow.Localization.csproj" />
     <Project Path="src/Snow.Messaging/Snow.Messaging.csproj" />
-    <Project Path="src/Snow.MultiTenancy/Snow.MultiTenancy.csproj" />
     <Project Path="src/Snow.ObjectMapping/Snow.ObjectMapping.csproj" />
     <Project Path="src/Snow.ObjectMapping.Mapster/Snow.ObjectMapping.Mapster.csproj" />
     <Project Path="src/Snow.OpenApi/Snow.OpenApi.csproj" />

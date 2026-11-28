@@ -159,7 +159,7 @@ public abstract class SnowModule :
     /// <summary>
     /// 应用初始化收尾段: 在全部模块跑完第一段、HTTP 管道骨架展开之后、端点映射之前执行。
     /// <para>这里写 <c>context.GetApplicationBuilder().UseXxx()</c>, 中间件落在"授权之后、端点之前",
-    /// 适合放要读已认证主体的东西(多租户、限流)。</para>
+    /// 适合放要读已认证主体的东西(限流)。</para>
     /// <para>同一阶段内的先后 = 模块依赖顺序(<see cref="DependsOnAttribute"/> 拓扑序); 需要固定先后就给模块加依赖。</para>
     /// <para>非 Web 宿主没有管道可写, 这一段照样会跑。</para>
     /// </summary>
